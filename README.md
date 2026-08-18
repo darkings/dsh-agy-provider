@@ -89,7 +89,8 @@ dsh-agy-provider/
 │  └─ index.ts
 ├─ scripts/
 │  ├─ benchmark.mjs  # 不调用 AGY 的本地性能基线
-│  └─ diagnose.mjs    # 只读 AGY 版本/Agent 诊断
+│  ├─ diagnose.mjs    # 只读 AGY 版本/Agent 诊断
+│  └─ dsh-smoke.mjs   # 隔离 DSH bundle/Mock runtime smoke test
 ├─ tests/
 ├─ task_plan.md
 ├─ findings.md
@@ -129,6 +130,18 @@ npm run diagnose
 
 也可以通过 `AGY_PATH`、`AGY_AGENT` 和 `AGY_MINIMUM_VERSION` 覆盖诊断命令的检查目标。
 
+### DSH 安装 smoke test
+
+V2-M1 的 DSH 验证需要一个已安装目标 profile 的隔离 `DSH_HOME`。在 PowerShell 中设置该目录和 DSH CLI 入口后执行：
+
+```powershell
+$env:DSH_HOME = '<isolated-dsh-home>'
+$env:DSH_BIN = '<dsh-project>\node_modules\.bin\dsh.cmd'
+npm run smoke:dsh
+```
+
+该命令只使用 `agy-mock`，成功结果会标记 `quotaUsed: false`，不会调用真实 AGY 或输出 token、Prompt 和用户路径。
+
 安装、升级和发布检查见 [安装文档](docs/installation.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
 
-详细里程碑、验收标准和风险见 [开发计划](docs/development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。
+详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md) 和 [0.2.0 开发计划](docs/v0.2.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

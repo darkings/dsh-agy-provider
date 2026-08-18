@@ -6,7 +6,7 @@
 
 ## 当前阶段
 
-阶段 4：Git 与 GitHub 发布
+项目初始化已完成；阶段 5 的 M1 待开始
 
 ## 各阶段
 
@@ -35,11 +35,11 @@
 
 ### 阶段 4：Git 与 GitHub 发布
 
-- [ ] 将暂存项目移动到目标目录
-- [ ] 初始化 Git 仓库并创建初始提交
-- [ ] 创建私有 GitHub 仓库 `darkings/dsh-agy-provider`
-- [ ] 推送默认分支并验证远程状态
-- **状态：** in_progress
+- [x] 将暂存项目移动到目标目录
+- [x] 初始化 Git 仓库并创建初始提交
+- [x] 创建私有 GitHub 仓库 `darkings/dsh-agy-provider`
+- [x] 推送默认分支并验证远程状态
+- **状态：** complete
 
 ### 阶段 5：产品开发
 
@@ -77,6 +77,7 @@
 | 错误 | 尝试次数 | 解决方案 |
 |------|---------|---------|
 | `agy agents --output-format json` 不被 1.1.13 支持 | 1 | 使用 `agy agents`；仅 print 模式使用 `--output-format` |
+| GitHub URL 专用 credential helper 指向已失效路径 | 1 | 仅在本仓库覆盖为 `D:/Applications/Scoop/shims/gh.exe` 并重新验证远程读取 |
 
 ## 备注
 

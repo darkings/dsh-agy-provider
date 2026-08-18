@@ -10,6 +10,7 @@
 ## 研究发现
 
 - GitHub CLI 已登录账号 `darkings`，具备 `repo` 权限。
+- 已创建私有仓库 `https://github.com/darkings/dsh-agy-provider`，默认分支为 `main`。
 - 本机 Git、Node.js、npm 和 AGY 均可执行。
 - `agy 1.1.13` 能识别 `deepseek-proxy`。
 - Node.js 可无 Shell 启动 `agy.exe` 并实时解析 `stream-json`。
@@ -34,6 +35,7 @@
 | DSH Provider API 未实机确认 | 将 API 契约验证设为 M1 架构闸门 |
 | AGY Agent 列表没有 JSON 输出 | 使用文本列表，并在代码中做兼容处理或仅用于诊断 |
 | DSH 与 AGY 都可能执行工具 | M6 建立能力矩阵，确保唯一执行所有者 |
+| 全局 GitHub URL credential helper 指向旧安装路径 | 在本仓库本地配置中覆盖为当前 Scoop `gh.exe`；未修改全局配置 |
 
 ## 资源
 
@@ -48,4 +50,3 @@
 ---
 *每执行2次查看/浏览器/搜索操作后更新此文件*
 *防止视觉信息丢失*
-

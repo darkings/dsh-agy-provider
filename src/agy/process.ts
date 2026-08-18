@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 
@@ -47,6 +47,32 @@ export interface AgyRequest extends Omit<ProcessRequest, 'executable' | 'args'> 
   conversation?: string
 }
 
+export function defaultAgyCommand(): 'agy.exe' | 'agy' {
+  return process.platform === 'win32' ? 'agy.exe' : 'agy'
+}
+
+function terminateProcessTree(child: ChildProcess): void {
+  const pid = child.pid
+  if (pid === undefined) {
+    child.kill()
+    return
+  }
+  if (process.platform === 'win32') {
+    const killer = spawn('taskkill', ['/pid', String(pid), '/t', '/f'], {
+      shell: false,
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    killer.once('error', () => child.kill())
+    return
+  }
+  try {
+    process.kill(-pid, 'SIGKILL')
+  } catch {
+    child.kill('SIGKILL')
+  }
+}
+
 /**
  * Resolve an explicit AGY path, AGY_PATH/AGY_EXECUTABLE, or an executable on
  * PATH. Returning the bare command in the final fallback lets spawn produce
@@ -58,7 +84,7 @@ export function resolveAgyExecutable(explicit?: string): string {
     || process.env.AGY_EXECUTABLE?.trim()
   if (configured !== undefined && configured.length > 0) return resolve(configured)
 
-  const command = process.platform === 'win32' ? 'agy.exe' : 'agy'
+  const command = defaultAgyCommand()
   const pathEntries = (process.env.PATH ?? '').split(delimiter).filter(Boolean)
   const suffixes = process.platform === 'win32'
     ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
@@ -116,6 +142,7 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
     cwd: request.cwd,
     env: request.env === undefined ? process.env : { ...process.env, ...request.env },
     shell: false,
+    detached: process.platform !== 'win32',
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -138,7 +165,7 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       } catch (error) {
         outputHandlerError = error
         termination = 'aborted'
-        child.kill()
+        terminateProcessTree(child)
       }
     }
 
@@ -150,7 +177,7 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
 
     const kill = (reason: Exclude<ProcessTermination, 'completed' | 'non-zero' | 'signaled'>): void => {
       if (termination === undefined) termination = reason
-      if (!child.killed) child.kill()
+      if (!child.killed) terminateProcessTree(child)
     }
 
     const abortListener = (): void => kill('aborted')
@@ -165,7 +192,7 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       stdoutBytes += byteLength(chunk)
       if (request.maxStdoutBytes !== undefined && stdoutBytes > request.maxStdoutBytes) {
         termination = 'output-limit'
-        child.kill()
+        terminateProcessTree(child)
         return
       }
       stdoutBuffer += chunk
@@ -178,7 +205,7 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       stderrBytes += byteLength(chunk)
       if (request.maxStderrBytes !== undefined && stderrBytes > request.maxStderrBytes) {
         termination = 'output-limit'
-        child.kill()
+        terminateProcessTree(child)
         return
       }
       stderr += chunk

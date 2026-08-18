@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildAgyArgs, resolveAgyExecutable, runProcess } from '../lib/agy/process.js'
+import { buildAgyArgs, defaultAgyCommand, resolveAgyExecutable, runProcess } from '../lib/agy/process.js'
 
 test('buildAgyArgs preserves prompt and conversation as separate argv items', () => {
   assert.deepEqual(
@@ -81,4 +81,59 @@ test('runProcess terminates a child when stdout exceeds the capture limit', asyn
 
 test('resolveAgyExecutable finds the configured local AGY executable', () => {
   assert.match(resolveAgyExecutable('C:\\Users\\Jie\\.local\\bin\\agy.exe'), /agy\.exe$/i)
+})
+
+test('defaultAgyCommand follows the host platform', () => {
+  assert.equal(defaultAgyCommand(), process.platform === 'win32' ? 'agy.exe' : 'agy')
+})
+
+async function assertTreeGone(pid) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      process.kill(pid, 0)
+    } catch {
+      return
+    }
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  assert.fail(`child process ${pid} survived tree termination`)
+}
+
+function parentWithChildScript() {
+  return [
+    '-e',
+    'const { spawn } = require("node:child_process"); const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], { stdio: ["ignore", "ignore", "ignore"] }); console.log(child.pid); setTimeout(() => {}, 5000)',
+  ]
+}
+
+test('runProcess timeout terminates the complete child process tree', async () => {
+  let childPid
+  const result = await runProcess({
+    executable: process.execPath,
+    args: parentWithChildScript(),
+    timeoutMs: 500,
+    onStdoutLine: line => { childPid = Number(line) },
+  })
+
+  assert.equal(result.termination, 'timeout')
+  assert.ok(Number.isInteger(childPid))
+  await assertTreeGone(childPid)
+})
+
+test('runProcess abort terminates the complete child process tree', async () => {
+  const controller = new AbortController()
+  let childPid
+  const run = runProcess({
+    executable: process.execPath,
+    args: parentWithChildScript(),
+    signal: controller.signal,
+    onStdoutLine: line => { childPid = Number(line) },
+  })
+  await new Promise(resolve => setTimeout(resolve, 250))
+  controller.abort()
+  const result = await run
+
+  assert.equal(result.termination, 'aborted')
+  assert.ok(Number.isInteger(childPid))
+  await assertTreeGone(childPid)
 })

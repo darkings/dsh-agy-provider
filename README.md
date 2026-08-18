@@ -11,7 +11,7 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 52 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 55 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 
 当前 M4 文本 MVP 支持：
 
@@ -55,6 +55,7 @@
 - 已覆盖 shell metacharacters 参数注入回归、配置边界、版本兼容、权限/工具事件和限流行为。
 - `npm run benchmark` 提供不调用 AGY 的 Parser、serializer 和 limiter 基线，结果记录在 [性能基线](docs/performance-baseline.md)。
 - AGY/DSH 的已验证组合记录在 [兼容性矩阵](docs/compatibility-matrix.md)。
+- V2-M4 CI 已覆盖 Windows、Ubuntu、macOS 与 Node.js 20/22/24；timeout/abort 使用父子 Node 进程 fixture 验证整棵进程树退出。
 
 当前明确不支持：
 

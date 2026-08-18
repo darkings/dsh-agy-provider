@@ -11,10 +11,10 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 66 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 72 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort` 和 V3-M3 显式 AGY-owned 工具策略已实施并通过跨平台 CI，等待后续里程碑完成后统一发布。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
+`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort`、V3-M3 显式 AGY-owned 工具策略和 V3-M4 fixture transport 闸门已完成；V3-M4 prototype 尚未接入默认 Provider，也未发起真实 AGY 模型请求。持久 stream transport 仅在真实协议、隔离和收益门槛全部通过后才可能作为显式实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md) 和 [V3-M4 实验报告](docs/experimental-stream-transport.md)。
 
 当前 M4 文本 MVP 支持：
 
@@ -72,11 +72,18 @@
 - `toolPolicy: agy-owned` 只改变 DSH schema 的入口策略，不建立 DSH ↔ AGY 双向工具桥；AGY 仍是唯一工具执行者。
 - 日志只保留 `toolPolicy` 和 `toolSchemaCount`，不会记录 schema 参数、Prompt、stderr 或凭据。
 
+当前 V3-M4 持久 stream transport 实验：
+
+- 已在隔离 fixture 中验证 worker-per-session、NDJSON framing、request/session correlation、最大 worker、idle TTL、crash recovery、abort/timeout/output-limit 和进程树回收。
+- prototype 不接入 `AgyAdapter`、`Config` 或默认 `sessionMode`；正式路径仍是 one-shot。
+- fixture gate 不消耗 AGY 额度；真实 3+3 对照和 AGY `--input-format stream-json` 协议验证尚未执行。
+
 当前明确不支持：
 
 - DSH tool-call bridge、图像内容、采样参数、`temperature`、`stop` 和 `maxTokens`；显式 `toolPolicy: agy-owned` 仅允许忽略 DSH schemas，不产生 DSH tool chunks。
 - 会跨插件进程重启持久化的 AGY Conversation 映射；重启后会使用完整 DSH 历史降级创建新会话。
 - `--continue` 自动选择的最近会话；为避免多个 DSH Session 串话，Provider 不使用它。
+- 生产级持久 stream transport；当前仅有隔离实验 prototype，未形成 public 配置或兼容性承诺。
 
 ## 目标架构
 
@@ -107,6 +114,7 @@ dsh-agy-provider/
 │  └─ verified-baseline.md
 ├─ src/
 │  ├─ agy/          # 子进程、参数、事件解析、模型发现、诊断、限流和脱敏
+│  │  └─ experimental-transport.ts # V3-M4 隔离持久 worker prototype
 │  ├─ diagnostics.ts # Provider/DSH/Node.js/AGY 聚合诊断
 │  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射

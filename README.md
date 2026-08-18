@@ -89,6 +89,7 @@
 - 当前 package version 保持 `0.2.0`，不会因为开发分支已有 0.3.0 代码而误报或提前发布；registry `latest` 仍为 `0.2.0`。
 - `.github/workflows/publish.yml` 要求 `v*.*.*` tag 与 `package.json` 版本完全匹配，并使用 npm Trusted Publishing，不在仓库保存长期 token。
 - 0.3.0 发布前必须完成账号级 2FA/Trusted Publisher 配置、版本 bump、tag、`npm run verify`、pack/registry/隔离 DSH Mock 复验；本阶段不自动执行 `npm publish`。
+- V3-M6 发布准备提交 `f863464` 的跨平台 CI run `32154087579` 已 9/9 成功。
 
 当前明确不支持：
 

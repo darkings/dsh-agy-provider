@@ -38,7 +38,7 @@
 ### 已完成
 
 - [x] V3-M1–V3-M5 代码、测试、迁移说明和兼容性矩阵完成；默认 one-shot 与 0.2.0 安全行为保持不变。
-- [x] Windows/Ubuntu/macOS × Node.js 20/22/24 CI 通过；最终 V3-M5 run 为 `32152814696`，9/9 success。
+- [x] Windows/Ubuntu/macOS × Node.js 20/22/24 CI 通过；V3-M5 最终 run 为 `32152814696`，V3-M6 发布准备 run 为 `32154087579`，均 9/9 success。
 - [x] `npm run verify`、`npm run benchmark`、`npm run diagnose -- --json` 和 `npm pack --dry-run` 本地通过。
 - [x] registry 确认 `dsh-agy-provider@0.2.0` 存在且 `latest=0.2.0`；确认 `0.3.0` 尚未占用。
 - [x] publish workflow 已检查 tag/package version 一致，并使用 `id-token: write` 的 npm Trusted Publishing，不保存 npm token。

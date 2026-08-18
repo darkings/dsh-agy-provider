@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`0.2.0` 已完成 V2-M0–V2-M5，并已发布到 npm（`latest=0.2.0`）；V2-M6 已完成 registry 复验。Trusted Publisher 和 `v0.2.0` tag 自动发布因 npm 账号级 2FA 暂不可用而延期：
+`0.2.0` 已完成 V2-M0–V2-M6，并已发布到 npm（`latest=0.2.0`），registry/DSH Mock 复验通过。Trusted Publisher 和 tag 自动发布因 npm 账号级 2FA 暂不可用而延期。
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
@@ -13,6 +13,8 @@
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
 - 当前自动化测试 55 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
+
+`0.3.0` 已进入规划，主线为 quota-free 动态模型发现、`reasoningEffort` 映射和显式 AGY-owned 工具策略；持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)。
 
 当前 M4 文本 MVP 支持：
 
@@ -178,4 +180,4 @@ npm run smoke:dsh
 
 安装、升级和发布检查见 [安装文档](docs/installation.md)、[迁移说明](docs/migration-0.2.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
 
-详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md) 和 [0.2.0 开发计划](docs/v0.2.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。
+详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md) 和 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

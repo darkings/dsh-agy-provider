@@ -25,6 +25,33 @@ export class AgyParserError extends Error {
   }
 }
 
+export type AgyEventCategory =
+  | 'init'
+  | 'step_update'
+  | 'checkpoint'
+  | 'agent_response'
+  | 'result'
+  | 'tool'
+  | 'permission'
+  | 'error'
+  | 'unknown'
+
+export type AgyEventCategoryCounts = Record<AgyEventCategory, number>
+
+export function emptyAgyEventCategoryCounts(): AgyEventCategoryCounts {
+  return {
+    init: 0,
+    step_update: 0,
+    checkpoint: 0,
+    agent_response: 0,
+    result: 0,
+    tool: 0,
+    permission: 0,
+    error: 0,
+    unknown: 0,
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -182,6 +209,51 @@ export function isPermissionEvent(event: AgyJsonEvent): boolean {
     || stepType === 'permission_request'
     || stepType === 'ask_permission'
     || toolNameOf(event) === 'ask_permission'
+}
+
+/** Classify only stable event categories; unknown event names remain forward-compatible. */
+export function eventCategoryOf(event: AgyJsonEvent): AgyEventCategory {
+  if (isPermissionEvent(event)) return 'permission'
+  if (isToolEvent(event)) return 'tool'
+  switch (event.event) {
+    case 'init':
+      return 'init'
+    case 'step_update':
+      return 'step_update'
+    case 'checkpoint':
+      return 'checkpoint'
+    case 'agent_response':
+      return 'agent_response'
+    case 'result':
+      return 'result'
+    case 'error':
+    case 'error_message':
+      return 'error'
+    default:
+      return 'unknown'
+  }
+}
+
+/** Extract bounded classification detail from AGY error events without exposing the payload. */
+export function errorDetailOf(event: AgyJsonEvent): string | undefined {
+  if (event.event !== 'error' && event.event !== 'error_message') return undefined
+  const values: string[] = []
+  const direct = event[event.event]
+  if (typeof direct === 'string' && direct.trim().length > 0) values.push(direct.trim())
+  const containers: Array<Record<string, unknown>> = [event]
+  if (isRecord(direct)) containers.push(direct)
+  const error = nestedRecord(event, 'error')
+  if (error !== undefined) containers.push(error)
+  const errorMessage = nestedRecord(event, 'error_message')
+  if (errorMessage !== undefined) containers.push(errorMessage)
+  for (const container of containers) {
+    for (const key of ['code', 'type', 'message', 'detail', 'reason', 'text', 'error']) {
+      const value = container[key]
+      if (typeof value === 'string' && value.trim().length > 0) values.push(value.trim())
+    }
+  }
+  const unique = [...new Set(values)]
+  return unique.length === 0 ? undefined : unique.join(' ').slice(0, 2_048)
 }
 
 /** Extract a text delta from the observed AGY step_update envelope. */

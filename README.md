@@ -11,7 +11,7 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 47 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 52 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 
 当前 M4 文本 MVP 支持：
 
@@ -40,7 +40,14 @@
 - 配置默认 `maxConcurrent: 4`、`maxQueue: 32`、`queueTimeoutMs: 30000`，超出后分别返回 `QUEUE_FULL` 或 `QUEUE_TIMEOUT`。
 - `npm run diagnose` 只执行 `agy --version` 和 `agy agents`，检查路径、最低版本和配置 Agent，不消耗模型额度，也不执行工具。
 - AGY 请求日志通过 Cordis `ctx.logger` 输出结构化 JSON 元数据，包含 request ID、conversation ID、耗时、退出码和事件计数。
+- V2-M3 日志增加固定事件类别计数和最终 AGY status；内部工具/权限只计数，不输出工具参数或原始事件 payload。
 - 日志采用白名单字段并再次脱敏，不包含 Prompt、stderr 原文、环境变量、可执行文件路径或凭据。
+
+当前 V2-M3 事件与错误兼容：
+
+- 已覆盖 `init`、`step_update`、`checkpoint`、`agent_response`、`result`、工具、权限、错误和未知事件 fixture；未知事件保留并归类为 `unknown`。
+- 认证、额度、速率限制、未知模型、Agent 缺失、上下文超限、权限、超时、取消、解析和输出上限映射为稳定 `LlmError.code`。
+- 未发现稳定的 AGY reasoning envelope，因此不把思考文本猜测性映射为 `reasoning-delta`。
 
 当前 M8 测试、兼容性和性能：
 

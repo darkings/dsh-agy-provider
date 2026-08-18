@@ -50,6 +50,18 @@ test('AgyAdapter emits redacted structured lifecycle metadata', async () => {
   assert.equal(completed.eventCount, 3)
   assert.equal(completed.toolEventCount, 1)
   assert.equal(completed.permissionEventCount, 0)
+  assert.deepEqual(completed.eventCategoryCounts, {
+    init: 1,
+    step_update: 0,
+    checkpoint: 0,
+    agent_response: 0,
+    result: 1,
+    tool: 1,
+    permission: 0,
+    error: 0,
+    unknown: 0,
+  })
+  assert.equal(completed.finalStatus, 'SUCCESS')
   assert.equal(typeof completed.requestId, 'string')
   assert.equal(typeof completed.durationMs, 'number')
   assert.equal(Object.hasOwn(completed, 'prompt'), false)

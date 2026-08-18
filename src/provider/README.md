@@ -11,3 +11,5 @@
 工具调用、图像、采样控制和会话恢复留到后续里程碑；文本 MVP 会对未支持能力显式报错，不静默丢弃。
 
 M7 增加了每个 Adapter 实例的 AGY 进程并发上限和有界等待队列。通过 DSH bundle 注册时，Adapter 使用 Cordis `ctx.logger('dsh-agy-provider')` 输出脱敏的 JSON 生命周期记录；日志失败不会影响请求。
+
+V2-M3 增加固定事件类别计数、最终 AGY status 和稳定错误分类。工具/权限事件只作为内部进度计数，不转换为 DSH tool call；reasoning-delta 仍未启用，避免依赖未验证的 AGY envelope。

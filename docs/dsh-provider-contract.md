@@ -121,4 +121,6 @@ Adapter 使用 `minimumAgyVersion`、`maxConcurrent`、`maxQueue` 和 `queueTime
 
 `Config.models` 提供显式模型目录，条目包含必填的精确 `id`，以及可选的 `name`、`description` 和 `contextWindow`。`Config.model` 仍兼容 0.1.0，并作为默认/回退条目；目录按 `id` 去重，未配置但由请求方明确传入的模型 ID 不会被静默改写。`diagnoseProvider()` 和 `npm run diagnose -- --json` 使用 `schemaVersion: 1` 返回插件、Node.js、DSH、AGY、Agent、配置和模型目录状态，并将诊断标记为 `quotaUsed: false`。
 
-请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间和 `eventCount`/工具/权限事件计数。日志发送前会脱敏字符串，并且不包含 Prompt、stderr、环境变量、AGY 路径或凭据。
+请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间、最终 AGY `status`、`eventCount`、固定类别计数以及工具/权限事件计数。日志发送前会脱敏字符串，并且不包含 Prompt、stderr、环境变量、AGY 路径、工具参数或凭据。
+
+V2-M3 使用稳定错误分类：认证 `AUTH`、额度 `QUOTA`、速率限制 `RATE_LIMIT`、未知模型 `MODEL_NOT_FOUND`、Agent 缺失 `AGY_AGENT_MISSING`、上下文超限 `CONTEXT_WINDOW_EXCEEDED`，以及现有的 `PERMISSION_REQUIRED`、`TIMEOUT`、`ABORTED`、`AGY_PARSE`、`AGY_OUTPUT_LIMIT`、`AGY_STATUS` 和 `AGY_EXIT`。分类只基于有界的 AGY status/stderr/error event detail；未知文本保留 fallback code。

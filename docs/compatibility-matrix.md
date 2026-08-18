@@ -25,8 +25,25 @@
 | `init` | 读取顶层或嵌套 `conversation_id` |
 | `step_update` | 读取 `text_delta`、usage、tool/permission 分类 |
 | `result` | 读取 `status`、最终 response 和 usage |
-| `checkpoint`、`agent_response`、未知事件 | 保留并计数，不静默转换为 DSH tool call |
+| `checkpoint`、`agent_response`、未知事件 | 保留并按固定类别计数，不静默转换为 DSH tool call |
+| `error`、`error_message` | 提取有界分类 detail；不记录原始 payload |
+| 工具事件 | 只累计 `tool` 类别和工具计数，不产生 DSH tool chunk |
 | permission event | 终止 headless 请求并返回 `PERMISSION_REQUIRED` |
+
+## 稳定错误分类
+
+| AGY detail/生命周期 | Provider code |
+|---------------------|---------------|
+| authentication/login/credential | `AUTH` |
+| quota/credit/balance/billing | `QUOTA` |
+| rate limit/429/throttling | `RATE_LIMIT` |
+| model not found/unavailable | `MODEL_NOT_FOUND` |
+| Agent/profile not found | `AGY_AGENT_MISSING` |
+| context/prompt/input too large | `CONTEXT_WINDOW_EXCEEDED` |
+| permission request | `PERMISSION_REQUIRED` |
+| timeout/abort/parse/output limit | `TIMEOUT`/`ABORTED`/`AGY_PARSE`/`AGY_OUTPUT_LIMIT` |
+
+无法分类的非零退出或非成功 status 保留 `AGY_EXIT` 或 `AGY_STATUS`。reasoning envelope 尚未验证，因此不映射为 `reasoning-delta`。
 
 ## 未覆盖环境
 

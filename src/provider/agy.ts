@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
+import {
+  EMPTY_RESPONSE_CODE,
+  LlmAdapter,
+  LlmError,
+} from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions,
   LlmModelInfo,
@@ -22,11 +26,14 @@ import {
   type AgyLogger,
   type AgyTelemetry,
 } from '../agy/log.js'
-import { redactText } from '../agy/redact.js'
+import { classifyAgyFailure, safeAgyFailureMessage } from '../agy/errors.js'
 import {
   AgyParserError,
   AgyStreamParser,
   conversationIdOf,
+  emptyAgyEventCategoryCounts,
+  errorDetailOf,
+  eventCategoryOf,
   isToolEvent,
   isPermissionEvent,
   responseOf,
@@ -176,12 +183,13 @@ function processFailure(result: ProcessResult): LlmError | undefined {
     return new LlmError('AGY output exceeded the configured capture limit', 'AGY_OUTPUT_LIMIT')
   }
   if (result.termination !== 'completed' || result.exitCode !== 0) {
-    const stderr = redactText(result.stderr.trim())
+    const stderr = result.stderr.trim()
+    const code = classifyAgyFailure(stderr, 'AGY_EXIT')
     return new LlmError(
       stderr.length === 0
         ? `AGY exited unsuccessfully (exit code ${result.exitCode ?? 'unknown'})`
-        : `AGY exited unsuccessfully: ${stderr}`,
-      'AGY_EXIT',
+        : safeAgyFailureMessage('AGY exited unsuccessfully', stderr),
+      code,
     )
   }
   return undefined
@@ -313,6 +321,8 @@ export class AgyAdapter extends LlmAdapter {
       eventCount: 0,
       toolEventCount: 0,
       permissionEventCount: 0,
+      eventCategoryCounts: emptyAgyEventCategoryCounts(),
+      finalStatus: undefined,
       conversationId: undefined,
       queueWaitMs: undefined,
       process: undefined,
@@ -405,6 +415,7 @@ export class AgyAdapter extends LlmAdapter {
     let resultSeen = false
     let finalResponse: string | undefined
     let finalStatus: string | undefined
+    let finalErrorDetail: string | undefined
     let finalUsage: Record<string, unknown> | undefined
     let conversationMismatch = false
     let permissionRequested = false
@@ -412,8 +423,11 @@ export class AgyAdapter extends LlmAdapter {
     try {
       for await (const event of queue) {
         telemetry.eventCount += 1
+        telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
         if (isToolEvent(event)) telemetry.toolEventCount += 1
         if (isPermissionEvent(event)) telemetry.permissionEventCount += 1
+        const errorDetail = errorDetailOf(event)
+        if (errorDetail !== undefined) finalErrorDetail = errorDetail
         const observedConversationId = conversationIdOf(event)
         if (observedConversationId !== undefined) {
           telemetry.conversationId = observedConversationId
@@ -445,6 +459,7 @@ export class AgyAdapter extends LlmAdapter {
           resultSeen = true
           finalResponse = responseOf(event)
           finalStatus = statusOf(event)
+          telemetry.finalStatus = finalStatus
           finalUsage = usageOf(event)
         } else {
           const usage = usageOf(event)
@@ -471,7 +486,13 @@ export class AgyAdapter extends LlmAdapter {
     const failure = result === undefined ? new LlmError('AGY process did not return a result', 'AGY_PROCESS') : processFailure(result)
     if (failure !== undefined) throw failure
     if (resultSeen && !isSuccessStatus(finalStatus)) {
-      throw new LlmError(`AGY returned status ${finalStatus}`, 'AGY_STATUS')
+      const detail = [finalStatus, finalErrorDetail].filter(value => value !== undefined).join(' ')
+      const code = classifyAgyFailure(detail, 'AGY_STATUS')
+      throw new LlmError(safeAgyFailureMessage(`AGY returned status ${finalStatus}`, detail), code)
+    }
+    if (!resultSeen && finalErrorDetail !== undefined) {
+      const code = classifyAgyFailure(finalErrorDetail, 'AGY_STATUS')
+      throw new LlmError(safeAgyFailureMessage('AGY reported a failure', finalErrorDetail), code)
     }
 
     if (finalResponse !== undefined) {
@@ -489,7 +510,7 @@ export class AgyAdapter extends LlmAdapter {
     }
 
     if (!blockStarted) {
-      throw new LlmError('AGY completed without a text response', 'EMPTY_RESPONSE')
+      throw new LlmError('AGY completed without a text response', EMPTY_RESPONSE_CODE)
     }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: visibleText } }
     if (finalUsage !== undefined) yield { type: 'usage', usage: mapAgyUsage(finalUsage) }

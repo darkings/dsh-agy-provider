@@ -1,5 +1,6 @@
 import type { ProcessResult, ProcessTermination } from './process.js'
 import { redactText } from './redact.js'
+import type { AgyEventCategoryCounts } from './parser.js'
 
 export type AgyLogEvent =
   | 'agy.request.started'
@@ -16,6 +17,8 @@ export interface AgyLogRecord {
   eventCount: number
   toolEventCount: number
   permissionEventCount: number
+  eventCategoryCounts: Readonly<AgyEventCategoryCounts>
+  finalStatus?: string
   sessionId?: string
   conversationId?: string
   durationMs?: number
@@ -40,6 +43,8 @@ export interface AgyTelemetry {
   eventCount: number
   toolEventCount: number
   permissionEventCount: number
+  eventCategoryCounts: AgyEventCategoryCounts
+  finalStatus: string | undefined
   conversationId: string | undefined
   queueWaitMs: number | undefined
   process: ProcessResult | undefined
@@ -56,6 +61,7 @@ function baseRecord(telemetry: AgyTelemetry): AgyLogRecord {
     eventCount: telemetry.eventCount,
     toolEventCount: telemetry.toolEventCount,
     permissionEventCount: telemetry.permissionEventCount,
+    eventCategoryCounts: { ...telemetry.eventCategoryCounts },
   }
 }
 
@@ -72,6 +78,7 @@ export function buildAgyLogRecord(
     ...(telemetry.sessionId === undefined ? {} : { sessionId: telemetry.sessionId }),
     ...(telemetry.conversationId === undefined ? {} : { conversationId: telemetry.conversationId }),
     ...(telemetry.queueWaitMs === undefined ? {} : { queueWaitMs: telemetry.queueWaitMs }),
+    ...(telemetry.finalStatus === undefined ? {} : { finalStatus: telemetry.finalStatus }),
     ...(process === undefined ? {} : {
       exitCode: process.exitCode,
       termination: process.termination,
@@ -94,6 +101,7 @@ export function sanitizeAgyLogRecord(record: AgyLogRecord): AgyLogRecord {
     ...(record.sessionId === undefined ? {} : { sessionId: redactText(record.sessionId, 256) }),
     ...(record.conversationId === undefined ? {} : { conversationId: redactText(record.conversationId, 256) }),
     ...(record.errorCode === undefined ? {} : { errorCode: redactText(record.errorCode, 128) }),
+    ...(record.finalStatus === undefined ? {} : { finalStatus: redactText(record.finalStatus, 128) }),
   }
 }
 

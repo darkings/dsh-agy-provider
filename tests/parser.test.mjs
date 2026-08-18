@@ -4,6 +4,9 @@ import {
   AgyParserError,
   AgyStreamParser,
   conversationIdOf,
+  emptyAgyEventCategoryCounts,
+  errorDetailOf,
+  eventCategoryOf,
   isPermissionEvent,
   isToolEvent,
   parseAgyChunks,
@@ -12,6 +15,7 @@ import {
   textDeltaOf,
   usageOf,
 } from '../lib/agy/parser.js'
+import { AGY_EVENT_FIXTURES } from './fixtures/agy-events.mjs'
 
 test('AgyStreamParser handles arbitrary chunks, CRLF, and a trailing line', () => {
   const parser = new AgyStreamParser()
@@ -45,6 +49,35 @@ test('parser classifies internal tool and permission lifecycle events', () => {
   assert.equal(isToolEvent(events[0]), true)
   assert.equal(isPermissionEvent(events[0]), false)
   assert.equal(isPermissionEvent(events[1]), true)
+})
+
+test('parser categorizes observed lifecycle fixtures and preserves unknown events', () => {
+  const categories = Object.values(AGY_EVENT_FIXTURES).map(event => eventCategoryOf(event))
+  assert.deepEqual(categories, [
+    'init',
+    'step_update',
+    'tool',
+    'tool',
+    'checkpoint',
+    'agent_response',
+    'permission',
+    'error',
+    'result',
+    'result',
+    'unknown',
+  ])
+  assert.equal(errorDetailOf(AGY_EVENT_FIXTURES.errorMessage), 'AUTH_REQUIRED login required')
+  assert.deepEqual(emptyAgyEventCategoryCounts(), {
+    init: 0,
+    step_update: 0,
+    checkpoint: 0,
+    agent_response: 0,
+    result: 0,
+    tool: 0,
+    permission: 0,
+    error: 0,
+    unknown: 0,
+  })
 })
 
 test('parser preserves unknown event types for forward compatibility', () => {

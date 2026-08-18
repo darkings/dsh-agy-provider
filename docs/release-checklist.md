@@ -26,9 +26,9 @@
 - [x] 添加 `.github/workflows/publish.yml`，仅响应匹配 package version 的 `v*.*.*` tag。
 - [x] 发布 workflow 使用 GitHub-hosted Node.js 24、`id-token: write` 和无 token 的 npm publish 命令。
 - [x] 因账号级 2FA 暂不可用，使用本机已配置的 bypass-2FA granular token 直接发布 `dsh-agy-provider@0.2.0`；凭据未写入仓库或 workflow。
-- [ ] 在 npm package settings 配置 Trusted Publisher：`darkings/dsh-agy-provider` + `publish.yml` + `npm publish`（等待账号级 2FA）。
-- [ ] 推送 `v0.2.0` tag，确认 publish workflow 成功（等待 Trusted Publisher，避免触发未认证 workflow 或重复发布）。
+- [ ] 在 npm package settings 配置 Trusted Publisher：`darkings/dsh-agy-provider` + `publish.yml` + `npm publish`（等待账号级 2FA；用于下一个可发布版本）。
+- [ ] 用下一个可发布版本 tag 验证 publish workflow；不要用已经发布的 `v0.2.0` 再次触发 `npm publish`。
 - [x] 用 `npm view dsh-agy-provider@0.2.0`、干净 registry 安装和 DSH Mock smoke 复验产物；`latest=0.2.0`、`version=0.2.0`、`quotaUsed=false`。
 - [x] 确认 private GitHub repo 的 provenance 限制已在发布说明中明确。
 
-> 当前发布已完成，但 Trusted Publisher 和 release tag 保留为后续 2FA 恢复后的加固工作；在此之前不要推送 `v0.2.0`，以免触发尚未认证的 tag workflow。
+> 当前发布已完成，但 Trusted Publisher 和 release tag 保留为后续 2FA 恢复后的加固工作；`v0.2.0` 已存在于 registry，不应再次触发其 publish workflow。

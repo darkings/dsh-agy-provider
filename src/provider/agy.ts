@@ -51,6 +51,11 @@ import {
   type AgyJsonEvent,
 } from '../agy/parser.js'
 import { configuredModels, DEFAULT_MODEL, type Config, type ModelConfig, type ToolPolicy } from './config.js'
+import {
+  PERMISSION_REQUIRED_CODE,
+  UNSUPPORTED_REASONING_EFFORT_CODE,
+  UNSUPPORTED_TOOLS_CODE,
+} from './error-codes.js'
 import { SessionRegistry, type SessionRecord } from '../session/store.js'
 import { AgyPromptError, serializeAgyPrompt, serializeAgyTurnPrompt } from './serialize.js'
 
@@ -232,7 +237,7 @@ function normalizeReasoningEffort(value: unknown): AgyReasoningEffort | undefine
   if (isAgyReasoningEffort(value)) return value
   throw new LlmError(
     'AGY supports reasoning efforts: low, medium, high',
-    'UNSUPPORTED_REASONING_EFFORT',
+    UNSUPPORTED_REASONING_EFFORT_CODE,
   )
 }
 
@@ -329,10 +334,10 @@ export class AgyAdapter extends LlmAdapter {
   }
 
   /** Expose safe discovery state for diagnostics and integration tests. */
-  getModelDiscoveryStatus(): AgyModelDiscoveryResult | { source: 'configured'; stale: false; models: readonly ModelConfig[] } {
+  getModelDiscoveryStatus(): AgyModelDiscoveryResult | { source: 'static'; stale: false; models: readonly ModelConfig[] } {
     return this.modelDiscoveryResult ?? {
       models: this.currentModels,
-      source: 'configured',
+      source: 'static',
       stale: false,
     }
   }
@@ -376,7 +381,7 @@ export class AgyAdapter extends LlmAdapter {
     if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
       throw new LlmError(
         'AGY text MVP does not accept DSH tool schemas; AGY owns tool execution in this phase',
-        'UNSUPPORTED_TOOLS',
+        UNSUPPORTED_TOOLS_CODE,
       )
     }
     const reasoningEffort = normalizeReasoningEffort(options.reasoningEffort)
@@ -395,6 +400,17 @@ export class AgyAdapter extends LlmAdapter {
       agent: this.agent,
       toolPolicy: this.toolPolicy,
       toolSchemaCount,
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      ...(this.discovery === undefined
+        ? { modelDiscoverySource: 'static' as const }
+        : this.modelDiscoveryResult === undefined
+          ? {}
+          : {
+              modelDiscoverySource: this.modelDiscoveryResult.source,
+              ...(this.modelDiscoveryResult.warningCode === undefined
+                ? {}
+                : { modelDiscoveryWarningCode: this.modelDiscoveryResult.warningCode }),
+            }),
       sessionId: sessionKey,
       startedAt: Date.now(),
       attempt: 1,
@@ -567,7 +583,7 @@ export class AgyAdapter extends LlmAdapter {
     if (permissionRequested) {
       throw new LlmError(
         'AGY requested interactive permission; headless Provider cannot approve it',
-        'PERMISSION_REQUIRED',
+        PERMISSION_REQUIRED_CODE,
       )
     }
 

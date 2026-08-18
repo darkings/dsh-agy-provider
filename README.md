@@ -11,10 +11,10 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 72 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 76 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort`、V3-M3 显式 AGY-owned 工具策略和 V3-M4 fixture transport 闸门已完成；V3-M4 prototype 尚未接入默认 Provider，也未发起真实 AGY 模型请求。持久 stream transport 仅在真实协议、隔离和收益门槛全部通过后才可能作为显式实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md) 和 [V3-M4 实验报告](docs/experimental-stream-transport.md)。
+`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort`、V3-M3 显式 AGY-owned 工具策略、V3-M4 fixture transport 闸门和 V3-M5 诊断/安全加固已完成本地验证；V3-M4 prototype 尚未接入默认 Provider，也未发起真实 AGY 模型请求。持久 stream transport 仅在真实协议、隔离和收益门槛全部通过后才可能作为显式实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md) 和 [V3-M4 实验报告](docs/experimental-stream-transport.md)。
 
 当前 M4 文本 MVP 支持：
 
@@ -78,6 +78,12 @@
 - prototype 不接入 `AgyAdapter`、`Config` 或默认 `sessionMode`；正式路径仍是 one-shot。
 - fixture gate 不消耗 AGY 额度；真实 3+3 对照和 AGY `--input-format stream-json` 协议验证尚未执行。
 
+当前 V3-M5 诊断与安全加固：
+
+- `modelCatalog.source` 区分 `static`、`discovered`、`merged`、`cache` 和 `fallback`，发现失败提供稳定 `warningCode`，`quotaUsed` 始终为 `false`。
+- reasoning effort、tool policy 和 model discovery 的日志字段只允许白名单枚举；日志 sanitizer 不会转发运行时附加字段。
+- 完整用户路径、spawn 失败 executable path、Prompt、stderr 和凭据不会进入诊断或结构化日志。
+
 当前明确不支持：
 
 - DSH tool-call bridge、图像内容、采样参数、`temperature`、`stop` 和 `maxTokens`；显式 `toolPolicy: agy-owned` 仅允许忽略 DSH schemas，不产生 DSH tool chunks。
@@ -114,7 +120,8 @@ dsh-agy-provider/
 │  └─ verified-baseline.md
 ├─ src/
 │  ├─ agy/          # 子进程、参数、事件解析、模型发现、诊断、限流和脱敏
-│  │  └─ experimental-transport.ts # V3-M4 隔离持久 worker prototype
+│  │  ├─ experimental-transport.ts # V3-M4 隔离持久 worker prototype
+│  │  └─ redact.ts / log.ts / models.ts # V3-M5 脱敏、日志和目录诊断边界
 │  ├─ diagnostics.ts # Provider/DSH/Node.js/AGY 聚合诊断
 │  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射
@@ -186,7 +193,7 @@ npm run diagnose
 npm run diagnose -- --json
 ```
 
-诊断只执行 `agy --version`、`agy agents` 和 `agy models`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。JSON 输出中的 `modelCatalog.source` 会标记 `configured`、`discovered`、`cache` 或 `fallback`，`stale` 与 `warning` 用于说明是否使用了过期缓存或静态回退。也可以通过 `AGY_PATH`、`AGY_AGENT`、`AGY_MODEL`、`AGY_MODELS` 和 `AGY_MINIMUM_VERSION` 覆盖检查目标；`AGY_MODELS` 必须是 JSON 数组，例如：
+诊断只执行 `agy --version`、`agy agents` 和 `agy models`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。JSON 输出中的 `modelCatalog.source` 会标记 `static`、`discovered`、`merged`、`cache` 或 `fallback`，`stale`、`warning` 和 `warningCode` 用于说明是否使用了过期缓存、静态回退或发现失败原因。也可以通过 `AGY_PATH`、`AGY_AGENT`、`AGY_MODEL`、`AGY_MODELS` 和 `AGY_MINIMUM_VERSION` 覆盖检查目标；`AGY_MODELS` 必须是 JSON 数组，例如：
 
 ```powershell
 $env:AGY_AGENT = 'deepseek-proxy'

@@ -34,9 +34,10 @@ modelDiscovery: off
 `npm run diagnose -- --json` 现在会额外执行 quota-free 的 `agy models`，仍然不发送 Prompt、不调用模型、不执行工具，并保持 `quotaUsed: false`。输出增加：
 
 - `configuration.modelDiscovery`
-- `modelCatalog.source`：`configured`、`discovered`、`cache` 或 `fallback`
+- `modelCatalog.source`：`static`、`discovered`、`merged`、`cache` 或 `fallback`
 - `modelCatalog.stale`
 - `modelCatalog.warning`
+- `modelCatalog.warningCode`：`MODEL_DISCOVERY_FAILED`、`MODEL_DISCOVERY_EMPTY`、`MODEL_DISCOVERY_TIMEOUT` 或 `MODEL_DISCOVERY_OUTPUT_LIMIT`
 
 warning 只返回稳定的通用错误描述，不包含本机路径、环境变量、Prompt、stderr 或凭据。
 
@@ -84,3 +85,17 @@ toolPolicy: reject       # 默认；非空 DSH tools 返回 UNSUPPORTED_TOOLS
 V3-M4 已通过无额度 fixture gate，验证 100 轮串行、8 Session 并发、worker/session 隔离、故障 reset、崩溃恢复、idle TTL、abort/timeout 和进程树回收。实现只位于隔离实验模块，默认 one-shot、`sessionMode: full` 和 0.2.0 兼容行为均不变。
 
 当前没有 `transport: persistent` 等 public 配置，也没有真实 AGY `--input-format stream-json` 对照结果。不要从内部 prototype 路径导入并用于生产；真实协议与 3+3 收益门槛通过后，才会另行发布显式 experimental 配置。完整边界和复验结果见 [V3-M4 实验报告](experimental-stream-transport.md)。
+
+## 诊断与安全加固（V3-M5）
+
+机器诊断仍使用 `schemaVersion: 1`，但 `modelCatalog` 现在明确区分：
+
+- `static`：关闭动态发现，只使用配置目录。
+- `discovered`：没有静态目录，本次 `agy models` 成功。
+- `merged`：静态目录与本次动态目录合并。
+- `cache`：发现失败，使用最近成功的内存缓存。
+- `fallback`：没有缓存，使用静态配置回退。
+
+发现失败时提供 `warningCode`：`MODEL_DISCOVERY_FAILED`、`MODEL_DISCOVERY_EMPTY`、`MODEL_DISCOVERY_TIMEOUT` 或 `MODEL_DISCOVERY_OUTPUT_LIMIT`。这些失败不会阻断静态模型调用路径，`quotaUsed` 仍固定为 `false`。
+
+结构化日志仅保留白名单的 `reasoningEffort`、`toolPolicy`、`toolSchemaCount`、`modelDiscoverySource` 和 `modelDiscoveryWarningCode` 等元数据；不会记录 Prompt、完整用户路径、stderr、Token 或凭据。

@@ -35,6 +35,7 @@ test('redactText removes credentials, environment values, and user paths', () =>
     'access_token=query-secret',
   ].join(' '))
   assert.doesNotMatch(redacted, /super-secret-token|query-secret|C:\\Users\\Jie/)
+  assert.doesNotMatch(redacted, /Documents|prompt\.txt/)
   assert.match(redacted, /\[REDACTED\]/)
   assert.match(redacted, /<user-path>/)
 })
@@ -115,6 +116,7 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
   assert.equal(resultValue.modelCatalog.source, 'fallback')
   assert.equal(resultValue.modelCatalog.stale, true)
   assert.equal(resultValue.modelCatalog.warning, 'AGY model discovery returned no usable models')
+  assert.equal(resultValue.modelCatalog.warningCode, 'MODEL_DISCOVERY_EMPTY')
   assert.equal(resultValue.models[0]?.contextWindow, 1_000_000)
   assert.equal(resultValue.agy.executable, 'explicit')
   assert.equal(resultValue.agy.executableSource, 'explicit')
@@ -141,4 +143,20 @@ test('diagnoseProvider reports component issues without invoking a model', async
     'AGY_AGENT_MISSING',
   ])
   assert.equal(resultValue.modelCatalog.source, 'fallback')
+})
+
+test('diagnoseProvider reports static catalog mode without discovery', async () => {
+  const resultValue = await diagnoseProvider({
+    config: { model: 'static-model', modelDiscovery: 'off' },
+    bundlePatchPresent: true,
+    runCommand: async request => request.args[0] === '--version'
+      ? result(['agy 1.1.14'])
+      : result(['deepseek-proxy']),
+  })
+
+  assert.equal(resultValue.ok, true)
+  assert.equal(resultValue.quotaUsed, false)
+  assert.equal(resultValue.modelCatalog.source, 'static')
+  assert.equal(resultValue.modelCatalog.stale, false)
+  assert.equal(resultValue.modelCatalog.warningCode, null)
 })

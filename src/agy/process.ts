@@ -231,7 +231,7 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       if (timeout !== undefined) clearTimeout(timeout)
       request.signal?.removeEventListener('abort', abortListener)
       rejectResult(new AgyProcessError(
-        `Unable to start AGY executable "${request.executable}": ${error.message}`,
+        `Unable to start AGY executable (${error.code ?? 'unknown'})`,
         'SPAWN_FAILED',
         { cause: error },
       ))

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { AgyAdapter } from '../lib/provider/agy.js'
+import { sanitizeAgyLogRecord } from '../lib/agy/log.js'
 
 function result() {
   return {
@@ -20,6 +21,7 @@ test('AgyAdapter emits redacted structured lifecycle metadata', async () => {
     model: 'gemini-test',
     agent: 'deepseek-proxy',
     toolPolicy: 'agy-owned',
+    modelDiscovery: 'off',
   }, {
     logger: record => logs.push(record),
     runAgyProcess: async request => {
@@ -43,6 +45,7 @@ test('AgyAdapter emits redacted structured lifecycle metadata', async () => {
     system: promptSecret,
     messages: [{ role: 'user', content: [{ type: 'text', text: promptSecret }] }],
     tools: [{ name: 'fixture', description: 'fixture', parameters: { secret: promptSecret } }],
+    reasoningEffort: 'high',
   })) {}
 
   assert.deepEqual(logs.map(log => log.event), ['agy.request.started', 'agy.request.completed'])
@@ -50,6 +53,8 @@ test('AgyAdapter emits redacted structured lifecycle metadata', async () => {
   assert.equal(completed.provider, 'agy-test')
   assert.equal(completed.toolPolicy, 'agy-owned')
   assert.equal(completed.toolSchemaCount, 1)
+  assert.equal(completed.reasoningEffort, 'high')
+  assert.equal(completed.modelDiscoverySource, 'static')
   assert.equal(completed.conversationId, 'conversation-safe')
   assert.equal(completed.eventCount, 3)
   assert.equal(completed.toolEventCount, 1)
@@ -70,6 +75,39 @@ test('AgyAdapter emits redacted structured lifecycle metadata', async () => {
   assert.equal(typeof completed.durationMs, 'number')
   assert.equal(Object.hasOwn(completed, 'prompt'), false)
   assert.equal(JSON.stringify(logs).includes(promptSecret), false)
+})
+
+test('log sanitizer drops runtime fields outside the whitelist', () => {
+  const safe = sanitizeAgyLogRecord({
+    event: 'agy.request.failed',
+    requestId: 'request-1',
+    provider: 'agy',
+    model: 'gemini-test',
+    agent: 'deepseek-proxy',
+    toolPolicy: 'reject',
+    toolSchemaCount: 0,
+    attempt: 1,
+    eventCount: 0,
+    toolEventCount: 0,
+    permissionEventCount: 0,
+    eventCategoryCounts: {
+      init: 0,
+      step_update: 0,
+      checkpoint: 0,
+      agent_response: 0,
+      result: 0,
+      tool: 0,
+      permission: 0,
+      error: 0,
+      unknown: 0,
+    },
+    prompt: 'secret prompt',
+    stderr: 'secret stderr',
+  })
+
+  assert.equal(Object.hasOwn(safe, 'prompt'), false)
+  assert.equal(Object.hasOwn(safe, 'stderr'), false)
+  assert.equal(JSON.stringify(safe).includes('secret'), false)
 })
 
 test('AgyAdapter limits active AGY processes across separate sessions', async () => {

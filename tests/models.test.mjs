@@ -67,8 +67,13 @@ test('AgyModelDiscovery uses TTL cache and single-flight refreshes', async () =>
   assert.equal(calls, 1)
   release()
   const [firstResult, secondResult] = await Promise.all([first, second])
-  assert.equal(firstResult.source, 'discovered')
-  assert.equal(secondResult.source, 'discovered')
+  assert.equal(firstResult.source, 'merged')
+  assert.equal(secondResult.source, 'merged')
+
+  const discoveredOnly = new AgyModelDiscovery({
+    runCommand: async () => result(['gemini-live\tGemini Live']),
+  })
+  assert.equal((await discoveredOnly.discover([])).source, 'discovered')
 
   now = 500
   const cached = await discovery.discover([{ id: 'configured' }])
@@ -93,12 +98,13 @@ test('AgyModelDiscovery fails open to static catalog and stale cache', async () 
   const configured = [{ id: 'configured' }]
 
   const discovered = await discovery.discover(configured)
-  assert.equal(discovered.source, 'discovered')
+  assert.equal(discovered.source, 'merged')
   now = 101
   const stale = await discovery.discover(configured)
   assert.equal(stale.source, 'cache')
   assert.equal(stale.stale, true)
   assert.equal(stale.warning, 'AGY model discovery command failed')
+  assert.equal(stale.warningCode, 'MODEL_DISCOVERY_FAILED')
   assert.deepEqual(stale.models.map(model => model.id), ['configured', 'gemini-live'])
 
   const fallback = new AgyModelDiscovery({
@@ -107,5 +113,32 @@ test('AgyModelDiscovery fails open to static catalog and stale cache', async () 
   const fallbackResult = await fallback.discover(configured)
   assert.equal(fallbackResult.source, 'fallback')
   assert.equal(fallbackResult.stale, true)
+  assert.equal(fallbackResult.warningCode, 'MODEL_DISCOVERY_FAILED')
   assert.deepEqual(fallbackResult.models, configured)
+})
+
+test('AgyModelDiscovery exposes stable timeout and output-limit warning codes', async () => {
+  const timeout = new AgyModelDiscovery({
+    runCommand: async () => ({
+      exitCode: null,
+      signal: null,
+      termination: 'timeout',
+      stdoutLines: [],
+      stderr: '',
+      durationMs: 1,
+    }),
+  })
+  const outputLimit = new AgyModelDiscovery({
+    runCommand: async () => ({
+      exitCode: null,
+      signal: null,
+      termination: 'output-limit',
+      stdoutLines: [],
+      stderr: '',
+      durationMs: 1,
+    }),
+  })
+
+  assert.equal((await timeout.discover([])).warningCode, 'MODEL_DISCOVERY_TIMEOUT')
+  assert.equal((await outputLimit.discover([])).warningCode, 'MODEL_DISCOVERY_OUTPUT_LIMIT')
 })

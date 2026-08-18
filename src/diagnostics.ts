@@ -12,6 +12,7 @@ import {
   type AgyModelDiscoveryCommand,
   type ModelDiscoverySource,
 } from './agy/models.js'
+import type { ModelDiscoveryErrorCode } from './provider/error-codes.js'
 import { redactText } from './agy/redact.js'
 import {
   Config as ConfigSchema,
@@ -99,9 +100,10 @@ export interface ProviderDiagnosticResult {
   }
   models: readonly DiagnosticModel[]
   modelCatalog: {
-    source: 'configured' | ModelDiscoverySource
+    source: 'static' | ModelDiscoverySource
     stale: boolean
     warning: string | null
+    warningCode: ModelDiscoveryErrorCode | null
   }
   agy: AgyDiagnosticResult
   errors: readonly DiagnosticIssue[]
@@ -161,11 +163,12 @@ export async function diagnoseProvider(
     })
   const modelCatalog: {
     models: readonly ModelConfig[]
-    source: 'configured' | ModelDiscoverySource
+    source: 'static' | ModelDiscoverySource
     stale: boolean
     warning?: string
+    warningCode?: ModelDiscoveryErrorCode
   } = discovery === undefined
-    ? { models: configuredCatalog, source: 'configured' as const, stale: false }
+    ? { models: configuredCatalog, source: 'static' as const, stale: false }
     : await discovery.discover(configuredCatalog)
   const models = modelCatalog.models.map(modelDiagnostic)
   const agyOptions: AgyDiagnosticOptions = {
@@ -245,6 +248,7 @@ export async function diagnoseProvider(
       source: modelCatalog.source,
       stale: modelCatalog.stale,
       warning: modelCatalog.warning ?? null,
+      warningCode: modelCatalog.warningCode ?? null,
     },
     agy,
     errors,

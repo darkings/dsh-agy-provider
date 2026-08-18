@@ -14,6 +14,7 @@
 | AGY | `1.1.14` | 通过诊断与动态目录发现 | `npm run diagnose -- --json`；版本、Agent 和 `agy models` 检查通过，实测发现 14 个模型 |
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
 | AGY models | `agy models` plain text | 通过 | V3-M1 解析、去重、显式目录合并和 fallback 测试通过 |
+| Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
 
 ## 版本策略
 
@@ -48,7 +49,7 @@
 | permission request | `PERMISSION_REQUIRED` |
 | timeout/abort/parse/output limit | `TIMEOUT`/`ABORTED`/`AGY_PARSE`/`AGY_OUTPUT_LIMIT` |
 
-无法分类的非零退出或非成功 status 保留 `AGY_EXIT` 或 `AGY_STATUS`。V3-M2 已支持 `reasoningEffort=low|medium|high` 到 `--effort` 的控制映射；AGY 输出 reasoning envelope 尚未验证，因此不映射为 `reasoning-delta`。
+无法分类的非零退出或非成功 status 保留 `AGY_EXIT` 或 `AGY_STATUS`。V3-M2 已支持 `reasoningEffort=low|medium|high` 到 `--effort` 的控制映射，非法值稳定返回 `UNSUPPORTED_REASONING_EFFORT`；DSH tools 默认拒绝返回 `UNSUPPORTED_TOOLS`，AGY 权限事件返回 `PERMISSION_REQUIRED`。模型发现失败使用 `MODEL_DISCOVERY_FAILED`、`MODEL_DISCOVERY_EMPTY`、`MODEL_DISCOVERY_TIMEOUT` 或 `MODEL_DISCOVERY_OUTPUT_LIMIT` warning code。AGY 输出 reasoning envelope 尚未验证，因此不映射为 `reasoning-delta`。
 
 ## 未覆盖环境
 

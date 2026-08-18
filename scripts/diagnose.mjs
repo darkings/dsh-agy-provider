@@ -51,6 +51,7 @@ function printHuman(result) {
     console.log(`dsh: cli=${result.dsh.cliVersion ?? 'unknown'}; llm=${result.dsh.llmContractVersion ?? 'unknown'}; bundle=${result.dsh.bundlePatchPresent ? 'present' : 'missing'}`)
     console.log(`provider: ${result.configuration.provider}; agent=${result.configuration.agent}; defaultModel=${result.configuration.defaultModel}`)
     console.log(`models: ${result.models.map(model => `${model.id} (${model.name})`).join(', ') || 'none'}`)
+    console.log(`modelCatalog: source=${result.modelCatalog.source}; stale=${result.modelCatalog.stale}; warningCode=${result.modelCatalog.warningCode ?? 'none'}`)
     console.log(`agy: version=${result.agy.version ?? 'unknown'}; agents=${result.agy.agents.join(', ') || 'none'}; executableSource=${result.agy.executableSource}`)
   }
   if (result.errors.length > 0) {

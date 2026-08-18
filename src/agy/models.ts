@@ -1,5 +1,14 @@
 import { resolveAgyExecutable, runProcess, type ProcessRequest, type ProcessResult } from './process.js'
 import type { ModelConfig } from '../provider/config.js'
+import {
+  MODEL_DISCOVERY_EMPTY_CODE,
+  MODEL_DISCOVERY_FAILED_CODE,
+  MODEL_DISCOVERY_OUTPUT_LIMIT_CODE,
+  MODEL_DISCOVERY_TIMEOUT_CODE,
+  type ModelDiscoveryErrorCode,
+} from '../provider/error-codes.js'
+
+export type { ModelDiscoveryErrorCode } from '../provider/error-codes.js'
 
 export const DEFAULT_MODEL_DISCOVERY_TTL_MS = 5 * 60_000
 export const DEFAULT_MODEL_DISCOVERY_TIMEOUT_MS = 10_000
@@ -8,13 +17,14 @@ export const MAX_MODEL_DISCOVERY_OUTPUT_BYTES = 1 * 1024 * 1024
 const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:+@/-]{0,255}$/
 const MAX_MODEL_DISPLAY_LENGTH = 512
 
-export type ModelDiscoverySource = 'discovered' | 'cache' | 'fallback'
+export type ModelDiscoverySource = 'discovered' | 'merged' | 'cache' | 'fallback'
 
 export interface AgyModelDiscoveryResult {
   models: readonly ModelConfig[]
   source: ModelDiscoverySource
   stale: boolean
   warning?: string
+  warningCode?: ModelDiscoveryErrorCode
 }
 
 export type AgyModelDiscoveryCommand = (request: ProcessRequest) => Promise<ProcessResult>
@@ -34,7 +44,7 @@ interface CachedModels {
 }
 
 class ModelDiscoveryFailure extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly code: ModelDiscoveryErrorCode) {
     super(message)
     this.name = 'ModelDiscoveryFailure'
   }
@@ -44,9 +54,9 @@ function isSuccessful(result: ProcessResult): boolean {
   return result.termination === 'completed' && result.exitCode === 0
 }
 
-function warningOf(error: unknown): string {
-  if (error instanceof ModelDiscoveryFailure) return error.message
-  return 'AGY model discovery failed'
+function warningOf(error: unknown): { message: string; code: ModelDiscoveryErrorCode } {
+  if (error instanceof ModelDiscoveryFailure) return { message: error.message, code: error.code }
+  return { message: 'AGY model discovery failed', code: MODEL_DISCOVERY_FAILED_CODE }
 }
 
 function metadataValue<T extends keyof ModelConfig>(
@@ -160,24 +170,53 @@ export class AgyModelDiscovery {
       }
       const result = await this.runCommand(request)
       if (!isSuccessful(result)) {
-        throw new ModelDiscoveryFailure('AGY model discovery command failed')
+        const code = result.termination === 'timeout'
+          ? MODEL_DISCOVERY_TIMEOUT_CODE
+          : result.termination === 'output-limit'
+            ? MODEL_DISCOVERY_OUTPUT_LIMIT_CODE
+            : MODEL_DISCOVERY_FAILED_CODE
+        throw new ModelDiscoveryFailure(
+          code === MODEL_DISCOVERY_TIMEOUT_CODE
+            ? 'AGY model discovery command timed out'
+            : code === MODEL_DISCOVERY_OUTPUT_LIMIT_CODE
+              ? 'AGY model discovery output exceeded its limit'
+              : 'AGY model discovery command failed',
+          code,
+        )
       }
       const discovered = parseAgyModels(result.stdoutLines.join('\n'))
-      if (discovered.length === 0) {
-        throw new ModelDiscoveryFailure('AGY model discovery returned no usable models')
-      }
+      if (discovered.length === 0) throw new ModelDiscoveryFailure(
+        'AGY model discovery returned no usable models',
+        MODEL_DISCOVERY_EMPTY_CODE,
+      )
       const models = mergeModelCatalog(configured, discovered)
       this.cache = {
         models,
         expiresAt: this.now() + this.ttlMs,
       }
-      return { models, source: 'discovered', stale: false }
+      return {
+        models,
+        source: configured.length === 0 ? 'discovered' : 'merged',
+        stale: false,
+      }
     } catch (error) {
       const warning = warningOf(error)
       if (this.cache !== undefined) {
-        return { models: this.cache.models, source: 'cache', stale: true, warning }
+        return {
+          models: this.cache.models,
+          source: 'cache',
+          stale: true,
+          warning: warning.message,
+          warningCode: warning.code,
+        }
       }
-      return { models: configured, source: 'fallback', stale: true, warning }
+      return {
+        models: configured,
+        source: 'fallback',
+        stale: true,
+        warning: warning.message,
+        warningCode: warning.code,
+      }
     }
   }
 }

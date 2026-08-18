@@ -189,7 +189,7 @@ test('AgyAdapter merges quota-free AGY model discovery with static metadata', as
 
   const resolved = await adapter.resolveModel('agy-test', 'gemini-live')
   assert.equal(resolved.name, 'Gemini Live')
-  assert.equal(adapter.getModelDiscoveryStatus().source, 'discovered')
+  assert.equal(adapter.getModelDiscoveryStatus().source, 'merged')
 })
 
 test('AgyAdapter rejects DSH tools in the text-only MVP', async () => {

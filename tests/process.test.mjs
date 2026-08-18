@@ -104,6 +104,18 @@ test('runProcess terminates a child when stdout exceeds the capture limit', asyn
   assert.equal(result.termination, 'output-limit')
 })
 
+test('runProcess does not expose the executable path on spawn failure', async () => {
+  const executable = process.platform === 'win32'
+    ? 'C:\\Users\\Jie\\private\\agy.exe'
+    : '/home/jie/private/agy'
+  await assert.rejects(
+    runProcess({ executable, args: [] }),
+    error => error.code === 'SPAWN_FAILED'
+      && !error.message.includes(executable)
+      && !error.message.includes('private'),
+  )
+})
+
 test('resolveAgyExecutable finds the configured local AGY executable', () => {
   assert.match(resolveAgyExecutable('C:\\Users\\Jie\\.local\\bin\\agy.exe'), /agy\.exe$/i)
 })

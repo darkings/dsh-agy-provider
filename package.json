@@ -1,0 +1,20 @@
+{
+  "name": "dsh-agy-provider",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Expose the locally authenticated AGY CLI as a DSH model provider.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
+

@@ -14,7 +14,7 @@
 - 当前自动化测试 66 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort` 和 V3-M3 显式 AGY-owned 工具策略已进入实现与验证阶段，等待后续里程碑完成后统一发布。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
+`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort` 和 V3-M3 显式 AGY-owned 工具策略已实施并通过跨平台 CI，等待后续里程碑完成后统一发布。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
 
 当前 M4 文本 MVP 支持：
 

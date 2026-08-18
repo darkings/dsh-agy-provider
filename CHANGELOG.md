@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased] - 0.3.0 development
+
+### Added
+
+- V3-M1 quota-free 动态模型发现：通过 `agy models` 枚举可用模型，并将结果接入 DSH `listModels()`。
+- 动态模型目录的显式配置合并、TTL 缓存、single-flight、最近成功缓存和静态 fallback。
+- 诊断 JSON 增加 `configuration.modelDiscovery` 与 `modelCatalog` 来源/过期/警告状态。
+- `modelDiscovery`、`modelDiscoveryTtlMs` 和 `modelDiscoveryTimeoutMs` 配置。
+
+### Security
+
+- 模型发现继续使用无 Shell 子进程，不发送 Prompt、不执行工具、不读取或持久化 Token，并保持 `quotaUsed: false`。
+
 ## [0.2.0] - 2026-08-18
 
 面向真实 DSH 安装、诊断、跨平台运行和安全发布的产品化版本。

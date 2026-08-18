@@ -9,6 +9,12 @@ export interface Config {
   model?: string
   /** Explicit model catalog; legacy `model` remains the default/fallback entry. */
   models?: ModelConfig[]
+  /** Discover additional models with `agy models`; `off` keeps static-only behavior. */
+  modelDiscovery?: 'auto' | 'off'
+  /** In-memory model discovery cache lifetime. */
+  modelDiscoveryTtlMs?: number
+  /** Timeout for the quota-free `agy models` command. */
+  modelDiscoveryTimeoutMs?: number
   /** AGY agent profile, for example `deepseek-proxy`. */
   agent?: string
   /** Explicit AGY executable path; empty means discover from environment/PATH. */
@@ -60,6 +66,9 @@ export const Config: z<Config> = z.object({
   provider: z.string().default('agy'),
   model: z.string().default(DEFAULT_MODEL),
   models: z.array(ModelConfig).default([]),
+  modelDiscovery: z.union(['auto', 'off'] as const).default('auto'),
+  modelDiscoveryTtlMs: z.number().min(1_000).max(3_600_000).default(300_000),
+  modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000),
   agent: z.string().default('deepseek-proxy'),
   agyPath: z.string().default(''),
   timeoutMs: z.number().min(1).max(3_600_000).default(120_000),

@@ -15,6 +15,17 @@ function result(exitCode = 0) {
   }
 }
 
+function modelDiscoveryResult(stdoutLines, exitCode = 0) {
+  return {
+    exitCode,
+    signal: null,
+    termination: exitCode === 0 ? 'completed' : 'non-zero',
+    stdoutLines,
+    stderr: exitCode === 0 ? '' : 'simulated discovery failure',
+    durationMs: 1,
+  }
+}
+
 function fakeRunner(events, captured) {
   return async request => {
     captured.push(request)
@@ -72,6 +83,7 @@ test('AgyAdapter uses result.response when AGY emits no text delta', async () =>
 test('AgyAdapter advertises a deduplicated model catalog and resolves metadata', async () => {
   const adapter = new AgyAdapter({
     model: 'gemini-default',
+    modelDiscovery: 'off',
     models: [
       { id: 'gemini-flash', name: 'Flash', contextWindow: 1_000_000 },
       { id: 'gemini-flash', name: 'Duplicate' },
@@ -92,6 +104,33 @@ test('AgyAdapter advertises a deduplicated model catalog and resolves metadata',
   const unknown = await adapter.resolveModel('agy-test', 'gemini-not-in-catalog')
   assert.equal(unknown.id, 'gemini-not-in-catalog')
   assert.equal(unknown.name, 'gemini-not-in-catalog')
+})
+
+test('AgyAdapter merges quota-free AGY model discovery with static metadata', async () => {
+  const captured = []
+  const adapter = new AgyAdapter({
+    model: 'gemini-default',
+    models: [{ id: 'gemini-static', name: 'Configured Static' }],
+    modelDiscovery: 'auto',
+  }, {
+    runModelDiscovery: async requestValue => {
+      captured.push(requestValue)
+      return modelDiscoveryResult([
+        'gemini-static\tAGY Static Label',
+        'gemini-live\tGemini Live',
+      ])
+    },
+  })
+
+  const models = await adapter.listModels('agy-test')
+  assert.deepEqual(models.map(model => model.id), ['gemini-static', 'gemini-default', 'gemini-live'])
+  assert.equal(models[0]?.name, 'Configured Static')
+  assert.equal(models[2]?.name, 'Gemini Live')
+  assert.deepEqual(captured[0]?.args, ['models'])
+
+  const resolved = await adapter.resolveModel('agy-test', 'gemini-live')
+  assert.equal(resolved.name, 'Gemini Live')
+  assert.equal(adapter.getModelDiscoveryStatus().source, 'discovered')
 })
 
 test('AgyAdapter rejects DSH tools in the text-only MVP', async () => {

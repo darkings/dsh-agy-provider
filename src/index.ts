@@ -15,6 +15,7 @@ export const inject = ['llm']
 
 export const Config = ConfigSchema
 export { AgyAdapter, MockAdapter }
+export { AgyModelDiscovery, mergeModelCatalog, parseAgyModels } from './agy/models.js'
 export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
 export type { ConfigType, ModelConfig }

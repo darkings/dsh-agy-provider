@@ -18,6 +18,11 @@ import {
   type AgyRequest,
   type ProcessResult,
 } from '../agy/process.js'
+import {
+  AgyModelDiscovery,
+  type AgyModelDiscoveryCommand,
+  type AgyModelDiscoveryResult,
+} from '../agy/models.js'
 import { diagnoseAgy, type AgyDiagnosticResult } from '../agy/diagnostics.js'
 import { AgyConcurrencyLimiter, AgyQueueError } from '../agy/limiter.js'
 import {
@@ -51,6 +56,8 @@ export type AgyProcessRunner = (request: AgyRequest) => Promise<ProcessResult>
 export interface AgyAdapterDependencies {
   /** Injectable seam for deterministic tests; production uses `runAgyProcess`. */
   runAgyProcess?: AgyProcessRunner
+  /** Injectable quota-free `agy models` command for deterministic tests. */
+  runModelDiscovery?: AgyModelDiscoveryCommand
   /** Injectable session mapping for tests or a future persistent store. */
   sessionRegistry?: SessionRegistry
   /** Optional structured logger; logging failures never affect the request. */
@@ -214,6 +221,9 @@ export class AgyAdapter extends LlmAdapter {
   private readonly logger: AgyLogger | undefined
   private readonly maxOutputBytes: number
   private readonly maxEventLineLength: number
+  private readonly discovery: AgyModelDiscovery | undefined
+  private currentModels: readonly ModelConfig[]
+  private modelDiscoveryResult: AgyModelDiscoveryResult | undefined
 
   constructor(config: Config = {}, dependencies: AgyAdapterDependencies = {}) {
     super()
@@ -234,6 +244,16 @@ export class AgyAdapter extends LlmAdapter {
     this.logger = dependencies.logger
     this.maxOutputBytes = config.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES
     this.maxEventLineLength = config.maxEventLineLength ?? DEFAULT_MAX_EVENT_LINE_LENGTH
+    this.currentModels = this.models
+    this.discovery = config.modelDiscovery === 'off'
+      ? undefined
+      : new AgyModelDiscovery({
+        ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
+        ...(config.modelDiscoveryTtlMs === undefined ? {} : { ttlMs: config.modelDiscoveryTtlMs }),
+        ...(config.modelDiscoveryTimeoutMs === undefined ? {} : { timeoutMs: config.modelDiscoveryTimeoutMs }),
+        maxOutputBytes: this.maxOutputBytes,
+        ...(dependencies.runModelDiscovery === undefined ? {} : { runCommand: dependencies.runModelDiscovery }),
+      })
   }
 
   /** Remove the in-memory AGY mapping; the next call sends complete DSH history. */
@@ -265,14 +285,24 @@ export class AgyAdapter extends LlmAdapter {
     return { id: provider, name: 'AGY' }
   }
 
-  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    return Promise.resolve(this.models.map(model => ({
+  override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    const models = await this.effectiveModels()
+    return models.map(model => ({
       provider,
       id: model.id,
       name: model.name ?? model.id,
       description: model.description ?? `AGY agent ${this.agent}; uses the local AGY account quota.`,
       inputModalities: ['text'] as const,
-    })))
+    }))
+  }
+
+  /** Expose safe discovery state for diagnostics and integration tests. */
+  getModelDiscoveryStatus(): AgyModelDiscoveryResult | { source: 'configured'; stale: false; models: readonly ModelConfig[] } {
+    return this.modelDiscoveryResult ?? {
+      models: this.currentModels,
+      source: 'configured',
+      stale: false,
+    }
   }
 
   override resolveModel(
@@ -280,7 +310,7 @@ export class AgyAdapter extends LlmAdapter {
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    const configured = this.models.find(entry => entry.id === model)
+    const configured = this.currentModels.find(entry => entry.id === model)
     return Promise.resolve({
       provider,
       id: model,
@@ -291,6 +321,18 @@ export class AgyAdapter extends LlmAdapter {
         ? {}
         : { context: { contextWindow: configured.contextWindow } }),
     })
+  }
+
+  private async effectiveModels(): Promise<readonly ModelConfig[]> {
+    if (this.discovery === undefined) {
+      this.currentModels = this.models
+      this.modelDiscoveryResult = undefined
+      return this.currentModels
+    }
+    const result = await this.discovery.discover(this.models)
+    this.currentModels = result.models
+    this.modelDiscoveryResult = result
+    return this.currentModels
   }
 
   override async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk, void, void> {

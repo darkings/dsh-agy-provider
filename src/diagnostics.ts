@@ -7,6 +7,11 @@ import {
   type AgyDiagnosticOptions,
   type AgyDiagnosticResult,
 } from './agy/diagnostics.js'
+import {
+  AgyModelDiscovery,
+  type AgyModelDiscoveryCommand,
+  type ModelDiscoverySource,
+} from './agy/models.js'
 import { redactText } from './agy/redact.js'
 import { Config as ConfigSchema, configuredModels, type Config, type ModelConfig } from './provider/config.js'
 
@@ -50,6 +55,7 @@ export interface ProviderDiagnosticOptions {
   executable?: string
   timeoutMs?: number
   runCommand?: AgyDiagnosticCommand
+  runModelDiscovery?: AgyModelDiscoveryCommand
   pluginVersion?: string | null
   dshCliVersion?: string | null
   dshLlmVersion?: string | null
@@ -80,10 +86,16 @@ export interface ProviderDiagnosticResult {
     provider: string
     agent: string
     defaultModel: string
+    modelDiscovery: 'auto' | 'off'
     sessionMode: 'resume' | 'full'
     enabled: boolean
   }
   models: readonly DiagnosticModel[]
+  modelCatalog: {
+    source: 'configured' | ModelDiscoverySource
+    stale: boolean
+    warning: string | null
+  }
   agy: AgyDiagnosticResult
   errors: readonly DiagnosticIssue[]
 }
@@ -128,8 +140,27 @@ export async function diagnoseProvider(
   const nodeSupported = nodeMajor !== null && nodeMajor >= 20
   const bundlePatchPresent = options.bundlePatchPresent
     ?? existsSync(fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)))
-  const models = configuredModels(config).map(modelDiagnostic)
   const executable = options.executable ?? config.agyPath
+  const configuredCatalog = configuredModels(config)
+  const modelDiscoveryCommand = options.runModelDiscovery ?? options.runCommand
+  const discovery = config.modelDiscovery === 'off'
+    ? undefined
+    : new AgyModelDiscovery({
+      ...(executable === undefined || executable.trim().length === 0 ? {} : { executable }),
+      ...(config.modelDiscoveryTtlMs === undefined ? {} : { ttlMs: config.modelDiscoveryTtlMs }),
+      ...(config.modelDiscoveryTimeoutMs === undefined ? {} : { timeoutMs: config.modelDiscoveryTimeoutMs }),
+      ...(config.maxOutputBytes === undefined ? {} : { maxOutputBytes: config.maxOutputBytes }),
+      ...(modelDiscoveryCommand === undefined ? {} : { runCommand: modelDiscoveryCommand }),
+    })
+  const modelCatalog: {
+    models: readonly ModelConfig[]
+    source: 'configured' | ModelDiscoverySource
+    stale: boolean
+    warning?: string
+  } = discovery === undefined
+    ? { models: configuredCatalog, source: 'configured' as const, stale: false }
+    : await discovery.discover(configuredCatalog)
+  const models = modelCatalog.models.map(modelDiagnostic)
   const agyOptions: AgyDiagnosticOptions = {
     ...(executable === undefined || executable.trim().length === 0 ? {} : { executable }),
     expectedAgent: config.agent ?? 'deepseek-proxy',
@@ -197,10 +228,16 @@ export async function diagnoseProvider(
       provider: config.provider ?? 'agy',
       agent: config.agent ?? 'deepseek-proxy',
       defaultModel: config.model ?? models[0]?.id ?? 'unknown',
+      modelDiscovery: config.modelDiscovery === 'off' ? 'off' : 'auto',
       sessionMode: config.sessionMode === 'resume' ? 'resume' : 'full',
       enabled: config.enabled === true,
     },
     models,
+    modelCatalog: {
+      source: modelCatalog.source,
+      stale: modelCatalog.stale,
+      warning: modelCatalog.warning ?? null,
+    },
     agy,
     errors,
   }

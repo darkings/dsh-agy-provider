@@ -11,14 +11,14 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 55 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 60 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 已进入规划，主线为 quota-free 动态模型发现、`reasoningEffort` 映射和显式 AGY-owned 工具策略；持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)。
+`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现已经落地：默认调用 `agy models`，使用进程内 TTL 缓存，并在失败时回退到最近成功缓存或静态配置；`reasoningEffort` 映射和显式 AGY-owned 工具策略仍待后续里程碑。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
 
 当前 M4 文本 MVP 支持：
 
-- `agyPath`、`agent`、`model`/`models`、`timeoutMs` 配置；模型目录按 `id` 去重，并保留旧版 `model` 作为 fallback。
+- `agyPath`、`agent`、`model`/`models`、`timeoutMs` 配置；模型目录按 `id` 去重，并保留旧版 `model` 作为 fallback。默认开启 quota-free 动态发现，显式目录的顺序与 metadata 优先。
 - DSH 文本消息确定性序列化为 AGY Prompt。
 - `step_update.text_delta` 实时映射为 `text-delta`。
 - `result.response`、`result.usage`、退出码、超时和取消映射。
@@ -41,7 +41,7 @@
 当前 M7 配置、安全和可观测性：
 
 - 配置默认 `maxConcurrent: 4`、`maxQueue: 32`、`queueTimeoutMs: 30000`，超出后分别返回 `QUEUE_FULL` 或 `QUEUE_TIMEOUT`。
-- `npm run diagnose` 只执行 `agy --version` 和 `agy agents`，检查路径、最低版本和配置 Agent，不消耗模型额度，也不执行工具。
+- `npm run diagnose` 只执行 `agy --version`、`agy agents` 和 `agy models`，检查路径、最低版本、配置 Agent 和模型目录，不消耗模型额度，也不执行工具。
 - AGY 请求日志通过 Cordis `ctx.logger` 输出结构化 JSON 元数据，包含 request ID、conversation ID、耗时、退出码和事件计数。
 - V2-M3 日志增加固定事件类别计数和最终 AGY status；内部工具/权限只计数，不输出工具参数或原始事件 payload。
 - 日志采用白名单字段并再次脱敏，不包含 Prompt、stderr 原文、环境变量、可执行文件路径或凭据。
@@ -94,7 +94,7 @@ dsh-agy-provider/
 │  ├─ performance-baseline.md
 │  └─ verified-baseline.md
 ├─ src/
-│  ├─ agy/          # 子进程、参数、事件解析、诊断、限流和脱敏
+│  ├─ agy/          # 子进程、参数、事件解析、模型发现、诊断、限流和脱敏
 │  ├─ diagnostics.ts # Provider/DSH/Node.js/AGY 聚合诊断
 │  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射
@@ -140,9 +140,14 @@ maxQueue: 32
 queueTimeoutMs: 30000
 maxOutputBytes: 8388608
 maxEventLineLength: 1048576
+modelDiscovery: auto
+modelDiscoveryTtlMs: 300000
+modelDiscoveryTimeoutMs: 10000
 ```
 
 `model` 仍表示默认请求模型，并兼容 0.1.0 配置。`models` 是可选的显式目录；目录按 `id` 去重，若默认 `model` 未列出会自动补入。未配置但由请求方明确传入的模型 ID 会原样保留，不会被静默改写成默认模型。
+
+`modelDiscovery: auto` 是默认值。Provider 会以无 Shell 的方式执行 `agy models`，将动态目录中未配置的模型补到显式目录之后；显式 `models` 的顺序、名称和其他 metadata 优先。发现结果只保存在进程内，默认 TTL 为 5 分钟，单次命令默认超时为 10 秒。设置 `modelDiscovery: off` 可完全恢复 0.2.0 的静态目录行为。
 
 在项目目录执行：
 
@@ -156,7 +161,7 @@ npm run diagnose
 npm run diagnose -- --json
 ```
 
-诊断只执行 `agy --version` 和 `agy agents`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。也可以通过 `AGY_PATH`、`AGY_AGENT`、`AGY_MODEL`、`AGY_MODELS` 和 `AGY_MINIMUM_VERSION` 覆盖检查目标；`AGY_MODELS` 必须是 JSON 数组，例如：
+诊断只执行 `agy --version`、`agy agents` 和 `agy models`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。JSON 输出中的 `modelCatalog.source` 会标记 `configured`、`discovered`、`cache` 或 `fallback`，`stale` 与 `warning` 用于说明是否使用了过期缓存或静态回退。也可以通过 `AGY_PATH`、`AGY_AGENT`、`AGY_MODEL`、`AGY_MODELS` 和 `AGY_MINIMUM_VERSION` 覆盖检查目标；`AGY_MODELS` 必须是 JSON 数组，例如：
 
 ```powershell
 $env:AGY_AGENT = 'deepseek-proxy'
@@ -178,6 +183,6 @@ npm run smoke:dsh
 
 该命令只使用 `agy-mock`，成功结果会标记 `quotaUsed: false`，不会调用真实 AGY 或输出 token、Prompt 和用户路径。
 
-安装、升级和发布检查见 [安装文档](docs/installation.md)、[迁移说明](docs/migration-0.2.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
+安装、升级和发布检查见 [安装文档](docs/installation.md)、[0.2.0 迁移说明](docs/migration-0.2.0.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
 
 详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md) 和 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

@@ -10,8 +10,9 @@
 | Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | V2-M4 GitHub Actions 矩阵 |
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
 | AGY | `1.1.13` | 通过 | M0–M6 真实文本、会话和工具采样 |
-| AGY | `1.1.14` | 通过诊断 | `npm run diagnose`；版本与 Agent 检查通过 |
+| AGY | `1.1.14` | 通过诊断与动态目录发现 | `npm run diagnose -- --json`；版本、Agent 和 `agy models` 检查通过，实测发现 14 个模型 |
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
+| AGY models | `agy models` plain text | 通过 | V3-M1 解析、去重、显式目录合并和 fallback 测试通过 |
 
 ## 版本策略
 

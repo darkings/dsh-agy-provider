@@ -40,9 +40,14 @@ models:
     contextWindow: 1000000
   - id: gemini-3.6-flash
     name: Gemini 3.6 Flash
+modelDiscovery: auto
+modelDiscoveryTtlMs: 300000
+modelDiscoveryTimeoutMs: 10000
 ```
 
 `model` 继续兼容 0.1.0，并作为默认/回退模型；`models` 是可选的显式模型目录，按 `id` 去重。请求方明确传入的未知模型 ID 会原样交给 AGY，不会被 Provider 静默替换。
+
+默认 `modelDiscovery: auto` 会以无 Shell 的方式执行 `agy models`，并将发现到的模型追加到显式目录之后。显式目录的顺序和 metadata 优先；发现结果只缓存在当前 Provider 进程内，默认 TTL 为 5 分钟，单次发现命令默认超时为 10 秒。设置 `modelDiscovery: off` 可恢复 0.2.0 的静态目录行为。
 
 推荐的资源边界：
 
@@ -54,6 +59,9 @@ queueTimeoutMs: 30000
 maxOutputBytes: 8388608
 maxEventLineLength: 1048576
 sessionMode: full
+modelDiscovery: auto
+modelDiscoveryTtlMs: 300000
+modelDiscoveryTimeoutMs: 10000
 ```
 
 `sessionMode: full` 是默认值。它每轮发送 DSH 完整 history，不依赖 AGY 会话映射跨进程持久化；`resume` 仅在明确测量过 quota 成本后启用。
@@ -66,7 +74,7 @@ sessionMode: full
 npm run diagnose
 ```
 
-诊断只执行 `agy --version` 和 `agy agents`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力和稳定错误码：
+诊断只执行 `agy --version`、`agy agents` 和 `agy models`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力、`modelCatalog.source`、`modelCatalog.stale`、`modelCatalog.warning` 和稳定错误码：
 
 ```powershell
 npm run diagnose -- --json
@@ -83,6 +91,8 @@ npm run diagnose
 ```
 
 诊断结果不会返回 `AGY_PATH` 的完整路径，也不会包含 Prompt、凭据或 Token；`quotaUsed` 固定为 `false`。
+
+`modelCatalog.source` 的含义为：`configured` 表示关闭动态发现，`discovered` 表示本次命令成功，`cache` 表示发现失败但使用了最近成功目录，`fallback` 表示没有可用缓存而使用静态配置。发现命令失败不会阻断基础文本请求；运行中的目录变化会在下一次 `listModels()` 触发刷新，DSH UI 若已缓存目录则需要重新加载 profile。
 
 ## 开发验证
 

@@ -68,7 +68,9 @@ test('diagnoseAgy reports incompatible version and missing Agent', async () => {
     minimumVersion: '1.1.13',
     runCommand: async request => request.args[0] === '--version'
       ? result(['agy 1.0.0'])
-      : result(['other-agent']),
+      : request.args[0] === 'models'
+        ? result([])
+        : result(['other-agent']),
   })
 
   assert.equal(resultValue.ok, false)
@@ -97,7 +99,9 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
     bundlePatchPresent: true,
     runCommand: async request => request.args[0] === '--version'
       ? result(['agy 1.1.14'])
-      : result(['deepseek-proxy']),
+      : request.args[0] === 'models'
+        ? result([])
+        : result(['deepseek-proxy']),
   })
 
   assert.equal(resultValue.schemaVersion, 1)
@@ -106,6 +110,10 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
   assert.equal(resultValue.plugin.version, '0.2.0-test')
   assert.equal(resultValue.dsh.llmContractVersion, '0.1.0-rc.7')
   assert.deepEqual(resultValue.models.map(model => model.id), ['gemini-flash', 'gemini-default'])
+  assert.equal(resultValue.configuration.modelDiscovery, 'auto')
+  assert.equal(resultValue.modelCatalog.source, 'fallback')
+  assert.equal(resultValue.modelCatalog.stale, true)
+  assert.equal(resultValue.modelCatalog.warning, 'AGY model discovery returned no usable models')
   assert.equal(resultValue.models[0]?.contextWindow, 1_000_000)
   assert.equal(resultValue.agy.executable, 'explicit')
   assert.equal(resultValue.agy.executableSource, 'explicit')
@@ -117,7 +125,11 @@ test('diagnoseProvider reports component issues without invoking a model', async
     config: { agent: 'deepseek-proxy' },
     nodeVersion: '18.20.0',
     bundlePatchPresent: false,
-    runCommand: async request => result(request.args[0] === '--version' ? ['agy 1.0.0'] : ['other-agent']),
+    runCommand: async request => request.args[0] === '--version'
+      ? result(['agy 1.0.0'])
+      : request.args[0] === 'models'
+        ? result([])
+        : result(['other-agent']),
   })
 
   assert.equal(resultValue.ok, false)
@@ -127,4 +139,5 @@ test('diagnoseProvider reports component issues without invoking a model', async
     'AGY_VERSION_UNSUPPORTED',
     'AGY_AGENT_MISSING',
   ])
+  assert.equal(resultValue.modelCatalog.source, 'fallback')
 })

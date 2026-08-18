@@ -45,7 +45,7 @@ test('Mock Provider exposes a configured multi-model catalog through the officia
     apply(ctx) {
       apply(ctx, {
         enabled: true,
-        provider: 'agy-mock-catalog',
+        provider: 'agy-mock',
         model: 'agy-mock-default',
         models: [
           { id: 'agy-mock-fast', name: 'Fast Mock' },
@@ -55,7 +55,7 @@ test('Mock Provider exposes a configured multi-model catalog through the officia
     },
   })
 
-  const models = await root.llm.listModels('agy-mock-catalog')
+  const models = await root.llm.listModels('agy-mock')
   assert.deepEqual(models.map(model => model.id), ['agy-mock-fast', 'agy-mock-default'])
   assert.equal(models[0]?.name, 'Fast Mock')
   await root.fiber.dispose()

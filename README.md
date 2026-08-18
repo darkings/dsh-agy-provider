@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-项目已完成 M1–M8 的最小闭环，M0 基线为 Windows 11、AGY `1.1.13`；M7/M8 复测时本机 AGY 已升级为 `1.1.14`：
+`0.2.0` 已完成 V2-M0–V2-M5，基线为 Windows 11、AGY `1.1.14`；发布前仍需完成 V2-M6 registry 复验：
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
@@ -12,6 +12,7 @@
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
 - 当前自动化测试 55 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
 当前 M4 文本 MVP 支持：
 
@@ -99,7 +100,8 @@ dsh-agy-provider/
 ├─ scripts/
 │  ├─ benchmark.mjs  # 不调用 AGY 的本地性能基线
 │  ├─ diagnose.mjs    # 只读 AGY 版本/Agent 诊断
-│  └─ dsh-smoke.mjs   # 隔离 DSH bundle/Mock runtime smoke test
+│  ├─ dsh-smoke.mjs   # 隔离 DSH bundle/Mock runtime smoke test
+│  └─ quota-experiment.mjs # 人工触发的 full/resume quota 对照
 ├─ tests/
 ├─ task_plan.md
 ├─ findings.md
@@ -174,6 +176,6 @@ npm run smoke:dsh
 
 该命令只使用 `agy-mock`，成功结果会标记 `quotaUsed: false`，不会调用真实 AGY 或输出 token、Prompt 和用户路径。
 
-安装、升级和发布检查见 [安装文档](docs/installation.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
+安装、升级和发布检查见 [安装文档](docs/installation.md)、[迁移说明](docs/migration-0.2.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
 
 详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md) 和 [0.2.0 开发计划](docs/v0.2.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

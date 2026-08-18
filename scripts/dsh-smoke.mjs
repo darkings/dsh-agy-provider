@@ -9,6 +9,9 @@ if (dshHome === undefined || dshHome.length === 0) {
   throw new Error('DSH_HOME must point to an isolated DSH home with the target profile installed')
 }
 
+const packageMetadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+const expectedPackageVersion = process.env.DSH_PROVIDER_EXPECTED_VERSION?.trim() || packageMetadata.version
+
 const dshExecutable = process.env.DSH_BIN?.trim()
   || (process.platform === 'win32' ? 'dsh.cmd' : 'dsh')
 const expectedResponse = 'V2-M1 mock smoke passed'
@@ -89,8 +92,8 @@ try {
 
   const packagePath = join(dshHome, 'profiles', 'headless', 'node_modules', 'dsh-agy-provider', 'package.json')
   const installedPackage = JSON.parse(await readFile(packagePath, 'utf8'))
-  if (installedPackage.name !== 'dsh-agy-provider' || installedPackage.version !== '0.1.0') {
-    throw new Error('The DSH profile does not contain dsh-agy-provider@0.1.0')
+  if (installedPackage.name !== 'dsh-agy-provider' || installedPackage.version !== expectedPackageVersion) {
+    throw new Error(`The DSH profile does not contain dsh-agy-provider@${expectedPackageVersion}`)
   }
 
   process.stdout.write(JSON.stringify({

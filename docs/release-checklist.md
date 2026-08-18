@@ -1,4 +1,6 @@
-# 0.1.0 发布检查清单
+# 发布检查清单
+
+## `0.1.0` 历史记录
 
 ## 已完成
 
@@ -15,3 +17,15 @@
 - [ ] 在目标 DSH 版本安装 npm 包并确认 bundle loader 能激活插件。
 - [ ] 在干净 Windows 用户环境运行 `npm run diagnose`。
 - [ ] 用测试账号/额度窗口完成最小文本端到端请求和取消回归。
+
+## `0.2.0` 当前检查
+
+- [x] `package.json` 和 `package-lock.json` 版本更新为 `0.2.0`。
+- [x] `CHANGELOG.md`、README、安装文档、迁移说明和兼容性矩阵已更新。
+- [x] 添加 MIT `LICENSE`，保持 package license metadata 一致。
+- [x] 添加 `.github/workflows/publish.yml`，仅响应匹配 package version 的 `v*.*.*` tag。
+- [x] 发布 workflow 使用 GitHub-hosted Node.js 24、`id-token: write` 和无 token 的 npm publish 命令。
+- [ ] 在 npm package settings 配置 Trusted Publisher：`darkings/dsh-agy-provider` + `publish.yml` + `npm publish`。
+- [ ] 推送 `v0.2.0` tag，确认 publish workflow 成功。
+- [ ] 用 `npm view dsh-agy-provider@0.2.0`、干净安装和 DSH Mock smoke 复验 registry 产物。
+- [ ] 确认 private GitHub repo 的 provenance 限制已在发布说明中明确。

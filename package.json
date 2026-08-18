@@ -1,6 +1,6 @@
 {
   "name": "dsh-agy-provider",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -71,5 +71,16 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1"
-  }
+  },
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "tests"
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/darkings/dsh-agy-provider/issues"
+  },
+  "homepage": "https://github.com/darkings/dsh-agy-provider#readme"
 }

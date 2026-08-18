@@ -122,6 +122,14 @@ npm run diagnose -- --json
 npm pack --dry-run
 ```
 
+不依赖预先配置的 `DSH_HOME`/`DSH_BIN` 时，运行自包含 DSH Mock smoke：
+
+```powershell
+npm run smoke:dsh:self-contained
+```
+
+该脚本在临时目录安装固定 `@deepseek-ai/dsh@0.1.0-rc.7`，安装当前 Provider tarball，追加 Provider bundle 到临时 `headless` profile，执行 `--dump-config` 和 `agy-mock` 文本请求后自动清理。它不会调用 AGY，结果固定标记 `quotaUsed: false`。
+
 这些命令不会发送模型 Prompt；`diagnose` 只读取 AGY 版本、Agent 和模型目录，`benchmark` 与测试使用本地数据或 fake runner。完整的版本 bump、tag、Trusted Publisher 和 registry 复验步骤见 [发布检查清单](release-checklist.md)。
 
 真实 AGY 请求会消耗已登录账号额度；自动化测试和 benchmark 使用 fake runner/本地数据，不需要 AGY 请求。

@@ -222,6 +222,14 @@ npm run smoke:dsh
 
 该命令只使用 `agy-mock`，成功结果会标记 `quotaUsed: false`，不会调用真实 AGY 或输出 token、Prompt 和用户路径。
 
+不依赖已有 `DSH_HOME`/`DSH_BIN` 时，可运行自包含版本。它会在临时目录安装固定的 `@deepseek-ai/dsh@0.1.0-rc.7`、打包并安装当前 Provider、创建隔离 `headless` profile，验证 bundle/config/Mock 响应后自动清理：
+
+```powershell
+npm run smoke:dsh:self-contained
+```
+
+输出包含 DSH/Provider 版本、模型、`toolPolicy`、bundle inventory 和 `quotaUsed: false`；该流程不登录、不调用 AGY、不使用模型额度。
+
 安装、升级和发布检查见 [安装文档](docs/installation.md)、[0.2.0 迁移说明](docs/migration-0.2.0.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
 
-详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md) 和 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。
+详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md)、[0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.4.0 开发计划](docs/v0.4.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

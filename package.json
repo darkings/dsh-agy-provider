@@ -42,6 +42,8 @@
     "test": "npm run build && node scripts/run-tests.mjs",
     "diagnose": "npm run build && node scripts/diagnose.mjs",
     "smoke:dsh": "node scripts/dsh-smoke.mjs",
+    "smoke:dsh:self-contained": "npm run build && node scripts/dsh-smoke-self-contained.mjs",
+    "agy:protocol": "npm run build && node scripts/agy-protocol-experiment.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
     "quota:experiment": "npm run build && node scripts/quota-experiment.mjs",
     "verify": "npm run typecheck && npm test && npm pack --dry-run",

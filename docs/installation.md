@@ -25,6 +25,12 @@ npm install dsh-agy-provider
 npm install github:darkings/dsh-agy-provider
 ```
 
+## 版本与发布状态
+
+当前 npm registry 的 `latest` 为 `0.2.0`。仓库 `main` 已包含 0.3.0 的开发中能力，但 `0.3.0` 尚未发布；需要稳定版本时请安装 npm 包，需要验证未发布代码时才从 GitHub 安装。
+
+0.3.0 发布必须先完成 npm 账号级 2FA 和 Trusted Publisher 配置，再使用匹配的 `v0.3.0` tag 触发 `.github/workflows/publish.yml`。开发阶段不要手动修改已发布版本，也不要执行未经授权的 `npm publish`。
+
 ## 配置
 
 最小配置：
@@ -106,6 +112,17 @@ npm ci
 npm run verify
 npm run benchmark
 ```
+
+发布前的无额度预检至少应包含：
+
+```powershell
+npm run verify
+npm run benchmark
+npm run diagnose -- --json
+npm pack --dry-run
+```
+
+这些命令不会发送模型 Prompt；`diagnose` 只读取 AGY 版本、Agent 和模型目录，`benchmark` 与测试使用本地数据或 fake runner。完整的版本 bump、tag、Trusted Publisher 和 registry 复验步骤见 [发布检查清单](release-checklist.md)。
 
 真实 AGY 请求会消耗已登录账号额度；自动化测试和 benchmark 使用 fake runner/本地数据，不需要 AGY 请求。
 

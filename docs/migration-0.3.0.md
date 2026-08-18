@@ -1,6 +1,6 @@
 # 0.3.0 迁移说明
 
-当前仓库正在实施 0.3.0，npm `latest` 仍为 `0.2.0`。本页记录已经落地的 V3-M1/V3-M2 行为、V3-M3 工具策略和 V3-M4 fixture transport 闸门；后续里程碑完成后会继续补充。
+当前仓库正在进行 0.3.0 发布准备，npm `latest` 仍为 `0.2.0`，`0.3.0` 尚未发布。本页记录已经落地的 V3-M1–V3-M5 行为、V3-M4 fixture transport 闸门和发布边界；V3-M6 的 registry 发布需等待 2FA/Trusted Publisher 条件满足。
 
 ## 动态模型发现
 
@@ -99,3 +99,17 @@ V3-M4 已通过无额度 fixture gate，验证 100 轮串行、8 Session 并发�
 发现失败时提供 `warningCode`：`MODEL_DISCOVERY_FAILED`、`MODEL_DISCOVERY_EMPTY`、`MODEL_DISCOVERY_TIMEOUT` 或 `MODEL_DISCOVERY_OUTPUT_LIMIT`。这些失败不会阻断静态模型调用路径，`quotaUsed` 仍固定为 `false`。
 
 结构化日志仅保留白名单的 `reasoningEffort`、`toolPolicy`、`toolSchemaCount`、`modelDiscoverySource` 和 `modelDiscoveryWarningCode` 等元数据；不会记录 Prompt、完整用户路径、stderr、Token 或凭据。
+
+## 发布准备（V3-M6）
+
+当前开发分支的 package version 仍是 `0.2.0`，这是有意的：避免在账号级 2FA 和 Trusted Publisher 尚未完成时误触发发布。registry 复验结果为 `dsh-agy-provider@0.2.0` 存在且 `latest=0.2.0`，`0.3.0` 尚未占用。
+
+正式发布 0.3.0 时应按以下顺序执行：
+
+1. 完成 npm 账号级 2FA，并在 npm package settings 配置 GitHub repository、workflow file 和 environment（如启用）的 Trusted Publisher。
+2. 将 `package.json` 与 `package-lock.json` 更新到 `0.3.0`，同步 CHANGELOG 和发布清单。
+3. 运行 `npm run verify`、`npm run benchmark`、`npm run diagnose -- --json` 和 `npm pack --dry-run`，确认 `quotaUsed=false` 且 tarball 无测试、规划文件、日志、凭据或本机路径。
+4. 提交版本 bump，创建并推送与 package version 完全匹配的 `v0.3.0` tag，让 publish workflow 执行 npm Trusted Publishing。
+5. 从 registry 全新安装 `dsh-agy-provider@0.3.0`，运行隔离 DSH Mock smoke；真实 AGY 请求只有在用户明确授权并确认额度预算后才执行。
+
+本阶段未执行版本 bump、tag、`npm publish` 或真实模型请求。

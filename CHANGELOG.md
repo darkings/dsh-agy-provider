@@ -10,12 +10,20 @@
 - `modelDiscovery`、`modelDiscoveryTtlMs` 和 `modelDiscoveryTimeoutMs` 配置。
 - V3-M2 reasoning metadata：为模型公开 `low`、`medium`、`high`，并将请求级 `reasoningEffort` 映射为独立 `--effort` argv。
 - V3-M3 `toolPolicy: reject | agy-owned`：默认保持 DSH tools 拒绝；显式 `agy-owned` 忽略 DSH schemas，保持 AGY 为唯一工具执行者。
+- V3-M4 隔离 persistent stream transport fixture gate：覆盖 worker/session 隔离、请求关联、故障恢复、TTL、取消/超时和进程树回收；prototype 未接入正式 Provider。
+- V3-M5 诊断与安全加固：模型目录来源、稳定 warning code、reasoning/tool/discovery 白名单日志，以及 Windows/Unix 用户路径和 spawn 错误脱敏。
 
 ### Security
 
 - 模型发现继续使用无 Shell 子进程，不发送 Prompt、不执行工具、不读取或持久化 Token，并保持 `quotaUsed: false`。
 - effort 只接受固定白名单；非法值在 spawn 前返回 `UNSUPPORTED_REASONING_EFFORT`，不会进入 shell 或 Prompt。
 - 工具策略日志只记录策略和值数量，不记录 schema 参数；两种策略都保持权限请求 `PERMISSION_REQUIRED` fail-fast，且不自动加入 `--dangerously-skip-permissions`。
+- 结构化日志改为显式白名单重建，不转发运行时附加字段；诊断保持 `schemaVersion: 1` 和 `quotaUsed: false`。
+
+### Release readiness
+
+- 当前源码包含 0.3.0 V3-M1–V3-M5 实现，但 package version 仍为 `0.2.0`，npm `latest` 仍为 `0.2.0`；`0.3.0` 尚未发布。
+- 0.3.0 发布必须使用与 package version 匹配的 `v0.3.0` tag，并通过 GitHub Actions 的 npm Trusted Publishing；账号级 2FA/Trusted Publisher 未完成前不执行 publish。
 
 ## [0.2.0] - 2026-08-18
 

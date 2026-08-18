@@ -32,3 +32,25 @@
 - [x] 确认 private GitHub repo 的 provenance 限制已在发布说明中明确。
 
 > 当前发布已完成，但 Trusted Publisher 和 release tag 保留为后续 2FA 恢复后的加固工作；`v0.2.0` 已存在于 registry，不应再次触发其 publish workflow。
+
+## `0.3.0` 发布准备
+
+### 已完成
+
+- [x] V3-M1–V3-M5 代码、测试、迁移说明和兼容性矩阵完成；默认 one-shot 与 0.2.0 安全行为保持不变。
+- [x] Windows/Ubuntu/macOS × Node.js 20/22/24 CI 通过；最终 V3-M5 run 为 `32152814696`，9/9 success。
+- [x] `npm run verify`、`npm run benchmark`、`npm run diagnose -- --json` 和 `npm pack --dry-run` 本地通过。
+- [x] registry 确认 `dsh-agy-provider@0.2.0` 存在且 `latest=0.2.0`；确认 `0.3.0` 尚未占用。
+- [x] publish workflow 已检查 tag/package version 一致，并使用 `id-token: write` 的 npm Trusted Publishing，不保存 npm token。
+- [x] 当前 package version 保持 `0.2.0`，未创建 `v0.3.0` tag，未执行 `npm publish`。
+
+### 发布前仍需人工/账号条件
+
+- [ ] npm 账号级 2FA 恢复并完成 Trusted Publisher：`darkings/dsh-agy-provider`、`.github/workflows/publish.yml`、npm publish。
+- [ ] 在独立 release commit 中将 `package.json`/`package-lock.json` bump 到 `0.3.0`，同步 CHANGELOG、README 和迁移说明。
+- [ ] 运行完整 `npm run verify`、pack dry-run 和诊断，确认没有测试会话、规划文件、日志、凭据或本机路径进入 tarball。
+- [ ] 创建并推送精确匹配的 `v0.3.0` tag；只在用户明确授权后触发 publish workflow。
+- [ ] 从 npm registry 全新安装 `dsh-agy-provider@0.3.0`，完成隔离 DSH Mock smoke。
+- [ ] 如需真实 AGY 最小请求，单独确认请求数/token 预算和终止条件；公共 CI 不得调用 AGY。
+
+> 当前 V3-M6 只完成发布准备和无额度复验；不改变已发布 `0.2.0`，不占用 `0.3.0` registry 版本，也不绕过账号级 2FA。

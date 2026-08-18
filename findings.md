@@ -62,6 +62,7 @@
 - M9 将版本固定为 `0.1.0`，包仍为 `private: true`；`npm pack --dry-run` 只显示 `lib`、`cordis.patch.yml`、README 和 package metadata。
 - M9 CI 使用 Windows runner 和 Node.js 20/24，只执行本地 typecheck/test/pack/benchmark，不依赖 AGY 登录，也不会消耗用户额度。
 - 真正 npm publish 需要额外确认包名、可见性和账号权限，因此本阶段只完成 GitHub 源码安装与预览包准备。
+- GitHub Actions 首次失败不是代码问题，而是 CI 的干净 npm 环境正确暴露了 peer 依赖漂移：`@deepseek-ai/dsh-llm@0.1.0-rc.7` 要求 timeout `^0.1.0-rc.7`，项目原先锁定了 `0.0.1-rc.1`。已补齐 `dsh-attachment`、`dsh-brand`、`dsh-invariants` 和新 timeout 版本，干净 `npm ci` 已通过。
 
 ## 技术决策
 

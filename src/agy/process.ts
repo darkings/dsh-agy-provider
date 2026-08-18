@@ -2,12 +2,12 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 
-export type ProcessTermination = 'completed' | 'non-zero' | 'signaled' | 'aborted' | 'timeout'
+export type ProcessTermination = 'completed' | 'non-zero' | 'signaled' | 'aborted' | 'timeout' | 'output-limit'
 
 export class AgyProcessError extends Error {
   constructor(
     message: string,
-    readonly code: 'ABORTED' | 'SPAWN_FAILED' | 'OUTPUT_HANDLER_FAILED',
+    readonly code: 'ABORTED' | 'SPAWN_FAILED' | 'OUTPUT_HANDLER_FAILED' | 'OUTPUT_LIMIT',
     options?: ErrorOptions,
   ) {
     super(message, options)
@@ -21,6 +21,10 @@ export interface ProcessRequest {
   cwd?: string
   env?: NodeJS.ProcessEnv
   timeoutMs?: number
+  /** Maximum captured stdout bytes; omitted means unlimited. */
+  maxStdoutBytes?: number
+  /** Maximum captured stderr bytes; omitted means unlimited. */
+  maxStderrBytes?: number
   signal?: AbortSignal
   /** Called synchronously for each complete stdout line as it arrives. */
   onStdoutLine?: (line: string) => void
@@ -93,6 +97,10 @@ function splitLines(buffer: string, final: boolean): { lines: string[]; remainde
   return { lines: parts, remainder }
 }
 
+function byteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8')
+}
+
 /**
  * Run a process with piped output and deterministic lifecycle handling.
  * stdout is delivered line-by-line while the process is running; the result
@@ -115,6 +123,8 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
   return new Promise<ProcessResult>((resolveResult, rejectResult) => {
     let stdoutBuffer = ''
     let stderr = ''
+    let stdoutBytes = 0
+    let stderrBytes = 0
     const stdoutLines: string[] = []
     let termination: ProcessTermination | undefined
     let outputHandlerError: unknown
@@ -152,11 +162,27 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => {
+      stdoutBytes += byteLength(chunk)
+      if (request.maxStdoutBytes !== undefined && stdoutBytes > request.maxStdoutBytes) {
+        termination = 'output-limit'
+        child.kill()
+        return
+      }
       stdoutBuffer += chunk
       flushStdout(false)
     })
-    child.stdout.on('end', () => flushStdout(true))
-    child.stderr.on('data', (chunk: string) => { stderr += chunk })
+    child.stdout.on('end', () => {
+      if (termination !== 'output-limit') flushStdout(true)
+    })
+    child.stderr.on('data', (chunk: string) => {
+      stderrBytes += byteLength(chunk)
+      if (request.maxStderrBytes !== undefined && stderrBytes > request.maxStderrBytes) {
+        termination = 'output-limit'
+        child.kill()
+        return
+      }
+      stderr += chunk
+    })
     child.once('error', (error: NodeJS.ErrnoException) => {
       if (settled) return
       settled = true
@@ -173,7 +199,7 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       settled = true
       if (timeout !== undefined) clearTimeout(timeout)
       request.signal?.removeEventListener('abort', abortListener)
-      flushStdout(true)
+      if (termination !== 'output-limit') flushStdout(true)
       if (outputHandlerError !== undefined) {
         rejectResult(new AgyProcessError(
           'AGY stdout handler failed',

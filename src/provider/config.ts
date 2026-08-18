@@ -23,6 +23,10 @@ export interface Config {
   maxQueue?: number
   /** Maximum queue wait in milliseconds; `0` disables the queue timeout. */
   queueTimeoutMs?: number
+  /** Maximum stdout/stderr bytes captured from one AGY process. */
+  maxOutputBytes?: number
+  /** Maximum length of one AGY stream-json line. */
+  maxEventLineLength?: number
   /** Deterministic response used only by the M1 mock route. */
   response?: string
   /** Optional delay used only by the M1 mock route. */
@@ -41,6 +45,8 @@ export const Config: z<Config> = z.object({
   maxConcurrent: z.natural().min(1).max(64).default(4),
   maxQueue: z.natural().max(256).default(32),
   queueTimeoutMs: z.natural().max(3_600_000).default(30_000),
+  maxOutputBytes: z.natural().min(1_024).max(64 * 1024 * 1024).default(8 * 1024 * 1024),
+  maxEventLineLength: z.natural().min(1_024).max(8 * 1024 * 1024).default(1_048_576),
   response: z.string().default('AGY mock provider is ready.'),
   delayMs: z.number().min(0).max(60_000).default(0),
 })

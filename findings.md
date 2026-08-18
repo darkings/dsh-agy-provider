@@ -54,6 +54,14 @@
 - M7 日志采用白名单字段，包含 request ID、conversation ID、duration、exit code、queue wait 和事件计数；Prompt、stderr、环境变量、AGY 路径和凭据不进入日志。
 - Cordis `ctx.logger('dsh-agy-provider')` 可接收脱敏 JSON 生命周期记录，logger 自身抛错不会影响 Provider 请求。
 - M7 自动化验证共 38 个测试，覆盖配置默认值/校验、版本解析、Agent 检查、脱敏、并发队列、Provider 计数和回归场景。
+- M8 为 Parser 增加单行长度上限和截断错误原文，为 Process Adapter 增加 stdout/stderr 捕获上限；超长 NDJSON 返回 `LINE_TOO_LONG`，进程输出超限返回 `AGY_OUTPUT_LIMIT`。
+- M8 使用 shell metacharacters 作为 Prompt fixture 验证参数仍保持单独 argv，不经过 Shell；真实 Node 子进程的超限终止测试通过。
+- M8 当前兼容性矩阵确认 Windows 11、Node.js `v24.18.0`、DSH SDK `0.1.0-rc.7`、AGY `1.1.13/1.1.14` 诊断和 `deepseek-proxy`。
+- M8 无额度 benchmark 结果：20,000 个 Parser 事件约 26.047 ms（约 767,852 events/s），5,000 次 serializer 约 2.034 ms，5,000 次 limiter acquire/release 约 1.076 ms；该数据只用于本机趋势比较。
+- M8 自动化验证共 42 个测试，全部通过。
+- M9 将版本固定为 `0.1.0`，包仍为 `private: true`；`npm pack --dry-run` 只显示 `lib`、`cordis.patch.yml`、README 和 package metadata。
+- M9 CI 使用 Windows runner 和 Node.js 20/24，只执行本地 typecheck/test/pack/benchmark，不依赖 AGY 登录，也不会消耗用户额度。
+- 真正 npm publish 需要额外确认包名、可见性和账号权限，因此本阶段只完成 GitHub 源码安装与预览包准备。
 
 ## 技术决策
 

@@ -4,14 +4,14 @@
 
 ## 当前状态
 
-项目已完成 M1–M7 的最小闭环，M0 基线为 Windows 11、AGY `1.1.13`；M7 复测时本机 AGY 已升级为 `1.1.14`：
+项目已完成 M1–M8 的最小闭环，M0 基线为 Windows 11、AGY `1.1.13`；M7/M8 复测时本机 AGY 已升级为 `1.1.14`：
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 38 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 42 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 
 当前 M4 文本 MVP 支持：
 
@@ -41,6 +41,13 @@
 - `npm run diagnose` 只执行 `agy --version` 和 `agy agents`，检查路径、最低版本和配置 Agent，不消耗模型额度，也不执行工具。
 - AGY 请求日志通过 Cordis `ctx.logger` 输出结构化 JSON 元数据，包含 request ID、conversation ID、耗时、退出码和事件计数。
 - 日志采用白名单字段并再次脱敏，不包含 Prompt、stderr 原文、环境变量、可执行文件路径或凭据。
+
+当前 M8 测试、兼容性和性能：
+
+- Parser 和 Process Adapter 有单条事件/总输出上限，恶意超长输出返回 `LINE_TOO_LONG` 或 `AGY_OUTPUT_LIMIT`。
+- 已覆盖 shell metacharacters 参数注入回归、配置边界、版本兼容、权限/工具事件和限流行为。
+- `npm run benchmark` 提供不调用 AGY 的 Parser、serializer 和 limiter 基线，结果记录在 [性能基线](docs/performance-baseline.md)。
+- AGY/DSH 的已验证组合记录在 [兼容性矩阵](docs/compatibility-matrix.md)。
 
 当前明确不支持：
 
@@ -72,6 +79,8 @@ AGY 账号额度与模型
 dsh-agy-provider/
 ├─ docs/
 │  ├─ development-plan.md
+│  ├─ compatibility-matrix.md
+│  ├─ performance-baseline.md
 │  └─ verified-baseline.md
 ├─ src/
 │  ├─ agy/          # 子进程、参数、事件解析、诊断、限流和脱敏
@@ -79,7 +88,8 @@ dsh-agy-provider/
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射
 │  └─ index.ts
 ├─ scripts/
-│  └─ diagnose.mjs  # 只读 AGY 版本/Agent 诊断
+│  ├─ benchmark.mjs  # 不调用 AGY 的本地性能基线
+│  └─ diagnose.mjs    # 只读 AGY 版本/Agent 诊断
 ├─ tests/
 ├─ task_plan.md
 ├─ findings.md
@@ -107,6 +117,8 @@ minimumAgyVersion: 1.1.13
 maxConcurrent: 4
 maxQueue: 32
 queueTimeoutMs: 30000
+maxOutputBytes: 8388608
+maxEventLineLength: 1048576
 ```
 
 在项目目录执行：
@@ -117,4 +129,6 @@ npm run diagnose
 
 也可以通过 `AGY_PATH`、`AGY_AGENT` 和 `AGY_MINIMUM_VERSION` 覆盖诊断命令的检查目标。
 
-详细里程碑、验收标准和风险见 [开发计划](docs/development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。
+安装、升级和发布前检查见 [安装文档](docs/installation.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。当前包保持 `private: true`，仅准备 GitHub 源码安装与预览包验证，不自动发布到 npm。
+
+详细里程碑、验收标准和风险见 [开发计划](docs/development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

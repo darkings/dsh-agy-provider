@@ -64,6 +64,16 @@ test('parser reports malformed JSON with a physical line number', () => {
   )
 })
 
+test('AgyStreamParser rejects an overlong NDJSON line with bounded diagnostics', () => {
+  const parser = new AgyStreamParser({ maxLineLength: 32 })
+  assert.throws(
+    () => parser.push(`${'x'.repeat(40)}\n`),
+    error => error instanceof AgyParserError
+      && error.code === 'LINE_TOO_LONG'
+      && error.rawLine.length <= 4_096,
+  )
+})
+
 test('parser rejects JSON values without an event envelope', () => {
   const parser = new AgyStreamParser()
   assert.throws(

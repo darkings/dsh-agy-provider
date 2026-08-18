@@ -215,7 +215,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - 日志通过白名单字段输出 request ID、conversation ID、耗时、退出码、队列等待时间和事件计数；Prompt、stderr、环境变量、可执行路径和凭据不进入日志记录。
 - M7 诊断不执行最小模型请求，避免启动检查消耗 AGY 额度；“最小调用”保留为后续集成测试项。
 
-### M8：测试、兼容性和性能（预计 2 个开发日）
+### M8：测试、兼容性和性能（已完成）
 
 测试矩阵：
 
@@ -235,7 +235,14 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - 取消、超时、异常退出均可重复验证。
 - 与 `deepseek-proxy` 的 Token 基线有对比记录。
 
-### M9：打包与首个发布（预计 1 个开发日）
+当前实现与验收结果：
+
+- Parser 拒绝超过 `maxEventLineLength` 的 NDJSON 行；Process Adapter 拒绝超过 `maxOutputBytes` 的 stdout/stderr，并映射为稳定错误。
+- 增加 shell metacharacters、恶意超长输出、配置边界、版本诊断、并发和日志安全回归。
+- 兼容性矩阵见 `docs/compatibility-matrix.md`；当前确认 Windows 11、Node.js `v24.18.0`、DSH SDK `0.1.0-rc.7`、AGY `1.1.13/1.1.14` 诊断和 `deepseek-proxy`。
+- `npm run benchmark` 建立 Parser、serializer、limiter 的无额度性能基线，结果见 `docs/performance-baseline.md`。
+
+### M9：打包与首个发布（发布准备完成，实际 publish 待确认）
 
 任务：
 
@@ -248,6 +255,12 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 
 - 全新 Windows 环境按 README 可完成安装和最小调用。
 - 发布包不包含本机路径、日志、凭据或测试会话数据。
+
+当前实现与发布边界：
+
+- 已将 package version 固定为 `0.1.0`，新增 `CHANGELOG.md`、安装文档、发布检查清单和 GitHub Actions CI。
+- CI 在 Windows runner 的 Node.js 20/24 上执行 typecheck、测试、打包预览和本地 benchmark；CI 不执行 AGY 真实请求，不消耗用户额度。
+- `package.json` 仍保持 `private: true`，因此本阶段完成 GitHub 源码安装和预览包准备，不执行 npm publish；去掉 private 和真正发布需要用户明确确认 npm 权限、包名和可见性。
 
 ## 5. 风险与应对
 

@@ -108,6 +108,8 @@ const DEFAULT_MINIMUM_AGY_VERSION = '1.1.13'
 const DEFAULT_MAX_CONCURRENT = 4
 const DEFAULT_MAX_QUEUE = 32
 const DEFAULT_QUEUE_TIMEOUT_MS = 30_000
+const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+const DEFAULT_MAX_EVENT_LINE_LENGTH = 1_048_576
 
 function abortError(): LlmError {
   return new LlmError('AGY request aborted by caller', 'ABORTED')
@@ -171,6 +173,9 @@ function processFailure(result: ProcessResult): LlmError | undefined {
   if (result.termination === 'timeout') {
     return new LlmError('AGY request exceeded the configured timeout', 'TIMEOUT')
   }
+  if (result.termination === 'output-limit') {
+    return new LlmError('AGY output exceeded the configured capture limit', 'AGY_OUTPUT_LIMIT')
+  }
   if (result.termination !== 'completed' || result.exitCode !== 0) {
     const stderr = redactText(result.stderr.trim())
     return new LlmError(
@@ -199,6 +204,8 @@ export class AgyAdapter extends LlmAdapter {
   private readonly minimumAgyVersion: string
   private readonly limiter: AgyConcurrencyLimiter
   private readonly logger: AgyLogger | undefined
+  private readonly maxOutputBytes: number
+  private readonly maxEventLineLength: number
 
   constructor(config: Config = {}, dependencies: AgyAdapterDependencies = {}) {
     super()
@@ -216,6 +223,8 @@ export class AgyAdapter extends LlmAdapter {
       queueTimeoutMs: config.queueTimeoutMs ?? DEFAULT_QUEUE_TIMEOUT_MS,
     })
     this.logger = dependencies.logger
+    this.maxOutputBytes = config.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES
+    this.maxEventLineLength = config.maxEventLineLength ?? DEFAULT_MAX_EVENT_LINE_LENGTH
   }
 
   /** Remove the in-memory AGY mapping; the next call sends complete DSH history. */
@@ -353,7 +362,7 @@ export class AgyAdapter extends LlmAdapter {
       ? serializeAgyPrompt(options)
       : serializeAgyTurnPrompt(options)
     const queue = new AsyncQueue<AgyJsonEvent>()
-    const parser = new AgyStreamParser()
+    const parser = new AgyStreamParser({ maxLineLength: this.maxEventLineLength })
     const controller = new AbortController()
     const forwardAbort = (): void => controller.abort()
     options.signal?.addEventListener('abort', forwardAbort, { once: true })
@@ -365,6 +374,8 @@ export class AgyAdapter extends LlmAdapter {
       agent: this.agent,
       model: options.model || this.model,
       timeoutMs: this.timeoutMs,
+      maxStdoutBytes: this.maxOutputBytes,
+      maxStderrBytes: this.maxOutputBytes,
       signal: controller.signal,
       onStdoutLine: line => {
         for (const event of parser.push(`${line}\n`)) queue.push(event)

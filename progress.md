@@ -205,10 +205,32 @@
   - `tests/observability.test.mjs`
   - M7 文档与进度记录
 
-### 下一阶段：M8 测试、兼容性和性能
+### 阶段 12：M8 测试、兼容性和性能
 
-- **状态：** pending
-- 计划：补齐版本矩阵、恶意输出/超长行安全测试、真实取消和残留进程检查，并记录性能基线。
+- **状态：** complete
+- 执行的操作：
+  - 为 Parser 增加 `maxLineLength` 和有界错误原文；超长 NDJSON 行返回 `LINE_TOO_LONG`。
+  - 为 Process Adapter 增加 stdout/stderr 捕获上限；超限返回 `output-limit`，Provider 映射为 `AGY_OUTPUT_LIMIT`。
+  - 增加 shell metacharacters 参数注入、恶意超长输出、配置边界和进程生命周期回归测试。
+  - 建立 `docs/compatibility-matrix.md`，记录 Windows、Node.js、DSH SDK、AGY 1.1.13/1.1.14 和事件处理范围。
+  - 增加 `npm run benchmark`，记录 Parser、serializer 和 limiter 的无额度性能基线。
+- 创建/修改的文件：
+  - `src/agy/parser.ts`
+  - `src/agy/process.ts`
+  - `src/provider/agy.ts`
+  - `src/provider/config.ts`
+  - `scripts/benchmark.mjs`
+  - `docs/compatibility-matrix.md`
+  - `docs/performance-baseline.md`
+  - `tests/parser.test.mjs`
+  - `tests/process.test.mjs`
+  - `tests/agy-provider.test.mjs`
+
+### 下一阶段：M9 打包并发布 `0.1.0`
+
+- **状态：** in_progress
+- 已完成：版本号、changelog、安装/诊断/升级文档、发布检查清单、Windows Node.js 20/24 CI 和包内容预览。
+- 待用户确认：npm 包名、公开/私有可见性及 publish 权限；在确认前不执行 npm publish。
 
 ## 测试结果
 
@@ -221,6 +243,10 @@
 | M7 配置 Schema | `Config({})` 与非法 `maxConcurrent` | 默认值生效、非法值拒绝 | 默认 `1.1.13/4/32/30000`，非法值抛 `ValidationError` | 通过 |
 | M7 诊断命令 | `npm run diagnose` | 只读检查 AGY 版本和 Agent | AGY `1.1.14`、`deepseek-proxy`、最低版本满足 | 通过 |
 | M7 并发与日志 | 38 个自动化测试 | 队列、取消、脱敏和计数稳定 | `npm test` 全部通过 | 通过 |
+| M8 安全回归 | 超长 NDJSON、stdout 上限、shell metacharacters | 有界失败且不改变 argv 结构 | `npm test` 42 个测试通过 | 通过 |
+| M8 性能基线 | `npm run benchmark` | 不消耗额度并输出可复测指标 | Parser 约 768k events/s；serializer/limiter 基线已记录 | 通过 |
+| M9 包预览 | `npm pack --dry-run` | 仅包含发布所需文件 | `lib`、`cordis.patch.yml`、README 和 package metadata 可见 | 通过 |
+| M9 CI 配置 | `.github/workflows/ci.yml` | Node.js 20/24 Windows 验证 | 已创建 workflow；CI 不触发真实 AGY 请求 | 待远端运行 |
 | GitHub 发布 | 创建并推送仓库 | 远程默认分支可访问 | 私有仓库已创建，默认分支为 `main` | 通过 |
 | 远端 ref | `git ls-remote --heads origin main` | 与本地提交一致 | 已返回远端 `main` commit | 通过 |
 | 官方 DSH 源码 | `deepseek-ai/deepseek-harness` | 找到 Provider 与 bundle 契约 | revision `99f6f02` 已读取 | 通过 |
@@ -256,11 +282,11 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 产品阶段 M7 已完成，配置、安全和可观测性已固化 |
-| 我要去哪里？ | 进入 M8，补齐兼容性、性能和安全回归矩阵 |
+| 我在哪里？ | M9 发布准备已完成，npm publish 仍等待包名/权限确认 |
+| 我要去哪里？ | 在用户确认发布边界后执行 npm 发布或保持 GitHub 私有预览 |
 | 目标是什么？ | 建立本地与 GitHub 的 `dsh-agy-provider` 项目并固化开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
-| 我做了什么？ | 完成 M1–M7 的实现、真实验证、工具边界和诊断安全记录，见上方记录 |
+| 我做了什么？ | 完成 M1–M9 发布准备、实现、真实验证、工具边界、诊断安全和性能记录，见上方记录 |
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

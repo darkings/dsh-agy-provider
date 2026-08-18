@@ -3,7 +3,14 @@ export interface AgyJsonEvent {
   [key: string]: unknown
 }
 
-export type AgyParserErrorCode = 'INVALID_JSON_LINE' | 'INVALID_EVENT'
+export type AgyParserErrorCode = 'INVALID_JSON_LINE' | 'INVALID_EVENT' | 'LINE_TOO_LONG'
+
+export const DEFAULT_MAX_LINE_LENGTH = 1_048_576
+
+export interface AgyParserOptions {
+  /** Maximum UTF-16 code units accepted for one NDJSON line. */
+  maxLineLength?: number
+}
 
 export class AgyParserError extends Error {
   constructor(
@@ -22,8 +29,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function diagnosticLine(value: string): string {
+  return value.length <= 4_096 ? value : `${value.slice(0, 4_096)}…`
+}
+
 /** Parse one complete NDJSON line and require only the stable event envelope. */
 export function parseAgyJsonLine(rawLine: string, lineNumber = 1): AgyJsonEvent {
+  if (rawLine.length > DEFAULT_MAX_LINE_LENGTH) {
+    throw new AgyParserError(
+      `AGY event line ${lineNumber} exceeds the maximum length`,
+      'LINE_TOO_LONG',
+      lineNumber,
+      diagnosticLine(rawLine),
+    )
+  }
   let value: unknown
   try {
     value = JSON.parse(rawLine)
@@ -32,7 +51,7 @@ export function parseAgyJsonLine(rawLine: string, lineNumber = 1): AgyJsonEvent 
       `Invalid AGY JSON at line ${lineNumber}`,
       'INVALID_JSON_LINE',
       lineNumber,
-      rawLine,
+      diagnosticLine(rawLine),
       { cause: error },
     )
   }
@@ -41,7 +60,7 @@ export function parseAgyJsonLine(rawLine: string, lineNumber = 1): AgyJsonEvent 
       `AGY event at line ${lineNumber} must be an object with a non-empty event field`,
       'INVALID_EVENT',
       lineNumber,
-      rawLine,
+      diagnosticLine(rawLine),
     )
   }
   return value as AgyJsonEvent
@@ -51,9 +70,28 @@ export function parseAgyJsonLine(rawLine: string, lineNumber = 1): AgyJsonEvent 
 export class AgyStreamParser {
   private buffer = ''
   private lineNumber = 0
+  private readonly maxLineLength: number
+
+  constructor(options: AgyParserOptions = {}) {
+    this.maxLineLength = options.maxLineLength ?? DEFAULT_MAX_LINE_LENGTH
+    if (!Number.isSafeInteger(this.maxLineLength) || this.maxLineLength < 1) {
+      throw new RangeError('maxLineLength must be a positive safe integer')
+    }
+  }
 
   push(chunk: string): AgyJsonEvent[] {
     this.buffer += chunk
+    if (this.buffer.length > this.maxLineLength && !this.buffer.includes('\n')) {
+      this.lineNumber += 1
+      const rawLine = diagnosticLine(this.buffer)
+      this.buffer = ''
+      throw new AgyParserError(
+        `AGY event line ${this.lineNumber} exceeds the maximum length`,
+        'LINE_TOO_LONG',
+        this.lineNumber,
+        rawLine,
+      )
+    }
     const lines = this.buffer.split('\n')
     this.buffer = lines.pop() ?? ''
     return lines.flatMap(line => this.parseLine(line.replace(/\r$/, '')))
@@ -68,6 +106,14 @@ export class AgyStreamParser {
 
   private parseLine(line: string): AgyJsonEvent[] {
     this.lineNumber += 1
+    if (line.length > this.maxLineLength) {
+      throw new AgyParserError(
+        `AGY event line ${this.lineNumber} exceeds the maximum length`,
+        'LINE_TOO_LONG',
+        this.lineNumber,
+        diagnosticLine(line),
+      )
+    }
     if (line.trim().length === 0) return []
     return [parseAgyJsonLine(line, this.lineNumber)]
   }

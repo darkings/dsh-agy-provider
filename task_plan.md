@@ -6,7 +6,7 @@
 
 ## 当前阶段
 
-阶段 5：M7 配置、安全和可观测性
+阶段 5：M9 打包并发布 `0.1.0`
 
 ## 各阶段
 
@@ -84,8 +84,15 @@
   - [x] 增加有界 FIFO 队列、AbortSignal 取消和稳定错误码
   - [x] 增加 request ID、conversation ID、耗时、退出码和事件计数日志
   - [x] 增加凭据、环境变量、用户路径和 Prompt 白名单脱敏防线
-- [ ] M8：测试、兼容性和性能
+- [x] M8：测试、兼容性和性能
+  - [x] 增加恶意输出、超长行、参数注入和进程生命周期回归
+  - [x] 增加版本/事件兼容性矩阵
+  - [x] 建立不消耗 AGY 额度的解析、序列化和限流性能基线
 - [ ] M9：打包并发布 `0.1.0`
+  - [x] 固定 package version 为 `0.1.0`并补齐 changelog/安装/发布文档
+  - [x] 增加 Windows Node.js 20/24 GitHub Actions CI
+  - [x] 验证 `npm pack --dry-run` 不包含本机敏感数据
+  - [ ] 获得 npm 包名、可见性和 publish 权限确认后再执行 npm publish
 - **状态：** in_progress
 
 ## 关键问题

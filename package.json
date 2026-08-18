@@ -1,6 +1,6 @@
 {
   "name": "dsh-agy-provider",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Expose the locally authenticated AGY CLI as a DSH model provider.",
   "type": "module",
@@ -38,6 +38,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
     "diagnose": "npm run build && node scripts/diagnose.mjs",
+    "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "verify": "npm run typecheck && npm test && npm pack --dry-run",
     "prepare": "npm run build"
   },
   "engines": {

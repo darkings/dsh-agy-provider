@@ -11,6 +11,7 @@
 - `AgyConcurrencyLimiter` 提供有界 FIFO 队列、排队超时和 AbortSignal 取消。
 - `diagnoseAgy()` 只执行 `--version` 与 `agents`，不触发模型调用或工具执行。
 - `redactText()` 和白名单日志记录避免输出 Prompt、凭据、环境变量和用户路径。
+- Process Adapter 默认限制单次 stdout/stderr 捕获规模；超限以 `output-limit` 结束，避免异常输出无限占用内存。
 
 Process Adapter 负责可靠地产生原始 stdout 行，Parser 负责将其转换为带
 `event` envelope 的结构化事件；后续 Provider 层再做 DSH `StreamChunk` 映射。

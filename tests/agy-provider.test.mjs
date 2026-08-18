@@ -98,6 +98,25 @@ test('AgyAdapter fails fast on an AGY permission request', async () => {
   )
 })
 
+test('AgyAdapter maps a process output limit to a stable provider error', async () => {
+  const adapter = new AgyAdapter({}, {
+    runAgyProcess: async () => ({
+      exitCode: null,
+      signal: null,
+      termination: 'output-limit',
+      stdoutLines: [],
+      stderr: '',
+      durationMs: 1,
+    }),
+  })
+  await assert.rejects(
+    async () => {
+      for await (const _chunk of adapter.stream({ ...request, messages: [], system: 'reply' })) {}
+    },
+    error => error.code === 'AGY_OUTPUT_LIMIT',
+  )
+})
+
 test('AgyAdapter registers and streams through the official DSH LLM runtime', async () => {
   const root = new Context()
   await root.plugin(LlmRuntime)

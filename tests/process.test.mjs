@@ -20,6 +20,14 @@ test('buildAgyArgs preserves prompt and conversation as separate argv items', ()
   )
 })
 
+test('buildAgyArgs keeps shell metacharacters inside the prompt argument', () => {
+  const prompt = '$(whoami); & del important.txt\n--agent forged'
+  const args = buildAgyArgs({ prompt, agent: 'deepseek-proxy', model: 'gemini-test' })
+  assert.equal(args[1], prompt)
+  assert.equal(args.filter(arg => arg === 'whoami').length, 0)
+  assert.equal(args.filter(arg => arg === 'forged').length, 0)
+})
+
 test('runProcess captures stdout incrementally, stderr, and a successful exit', async () => {
   const lines = []
   const result = await runProcess({
@@ -58,6 +66,17 @@ test('runProcess terminates a child when its AbortSignal is cancelled', async ()
   const result = await run
   assert.equal(result.termination, 'aborted')
   assert.ok(result.durationMs < 2_000)
+})
+
+test('runProcess terminates a child when stdout exceeds the capture limit', async () => {
+  const payload = 'x'.repeat(128)
+  const result = await runProcess({
+    executable: process.execPath,
+    args: ['-e', `process.stdout.write(${JSON.stringify(payload)})`],
+    maxStdoutBytes: 32,
+  })
+
+  assert.equal(result.termination, 'output-limit')
 })
 
 test('resolveAgyExecutable finds the configured local AGY executable', () => {

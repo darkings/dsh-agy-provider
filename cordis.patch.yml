@@ -1,0 +1,9 @@
+# Bundle entry is inert by default; users enable it after configuring AGY.
+- insert:
+    - id: dsh-agy-provider
+      name: dsh-agy-provider
+      config:
+        enabled: false
+        provider: agy
+        model: gemini-3.1-pro-high
+        agent: deepseek-proxy

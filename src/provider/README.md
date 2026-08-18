@@ -1,9 +1,11 @@
 # DSH Provider adapter
 
-本目录将在 M1 确认真实 DSH Provider 契约后实现：
+当前已实现 M4 文本 Provider MVP：
 
 - 插件注册与配置 Schema。
-- 模型枚举。
-- DSH request/response 与内部标准事件的转换。
-- 流式、usage、finish reason 和错误映射。
+- `AgyAdapter extends LlmAdapter` 与 `ctx.llm.registerAdapter()`。
+- AGY 模型枚举和精确模型元数据。
+- DSH messages 到 AGY Prompt 的确定性序列化。
+- `step_update.text_delta`、最终 response、usage、finish reason 和错误映射。
 
+工具调用、图像、采样控制和会话恢复留到后续里程碑；文本 MVP 会对未支持能力显式报错，不静默丢弃。

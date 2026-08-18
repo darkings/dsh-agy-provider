@@ -4,12 +4,26 @@
 
 ## 当前状态
 
-项目处于初始化与接口验证阶段。已在 Windows 11、AGY `1.1.13` 上完成以下基线验证：
+项目已完成 M1–M4 的最小闭环，当前以 Windows 11、AGY `1.1.13` 为开发基线：
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
+- 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
+- 当前自动化测试 19 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+
+当前 M4 文本 MVP 支持：
+
+- `agyPath`、`agent`、`model`、`timeoutMs` 配置。
+- DSH 文本消息确定性序列化为 AGY Prompt。
+- `step_update.text_delta` 实时映射为 `text-delta`。
+- `result.response`、`result.usage`、退出码、超时和取消映射。
+
+当前明确不支持：
+
+- DSH `tools`、图像内容、采样参数、`reasoningEffort`、`stop` 和 `maxTokens`。
+- DSH Session 到 AGY Conversation 的恢复映射。
 
 ## 目标架构
 
@@ -38,7 +52,7 @@ dsh-agy-provider/
 │  └─ verified-baseline.md
 ├─ src/
 │  ├─ agy/          # 子进程、参数、事件解析
-│  ├─ provider/     # DSH Provider 适配
+│  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射
 │  └─ index.ts
 ├─ tests/
@@ -55,5 +69,4 @@ dsh-agy-provider/
 - 第一版先完成文本流、取消、超时和错误映射，再扩展工具调用与会话恢复。
 - 不记录凭据、Token、完整用户 Prompt 或敏感环境变量。
 
-详细里程碑、验收标准和风险见 [开发计划](docs/development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。
-
+详细里程碑、验收标准和风险见 [开发计划](docs/development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。

@@ -72,7 +72,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - GitHub 存在同名仓库并包含默认分支。
 - 文档明确目标架构和已知风险。
 
-### M1：确认 DSH Provider 契约（预计 1–2 个开发日）
+### M1：确认 DSH Provider 契约（已完成；预计 1–2 个开发日）
 
 任务：
 
@@ -94,7 +94,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - Mock Provider 能完成一轮文本流。
 - 不存在未经验证的 Provider API 名称。
 
-### M2：AGY Process Adapter（预计 1 个开发日）
+### M2：AGY Process Adapter（已完成；预计 1 个开发日）
 
 任务：
 
@@ -114,7 +114,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - 正常完成、超时、取消、路径不存在和非零退出码均有确定结果。
 - Prompt 中包含空格、引号、换行时不会改变命令结构。
 
-### M3：stream-json 增量解析器（预计 1–2 个开发日）
+### M3：stream-json 增量解析器（已完成；预计 1–2 个开发日）
 
 任务：
 
@@ -136,7 +136,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - 最终 `result.usage` 不与 checkpoint usage 重复累计。
 - 未知事件不会导致整个流静默崩溃。
 
-### M4：DSH 文本 Provider MVP（预计 2 个开发日）
+### M4：DSH 文本 Provider MVP（已完成；预计 2 个开发日）
 
 任务：
 
@@ -266,4 +266,3 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - 工具能力边界明确且不会重复执行副作用。
 - 文档能够让新环境独立完成安装和诊断。
 - 无凭据、敏感日志或本机专属数据进入 Git 仓库和发布包。
-

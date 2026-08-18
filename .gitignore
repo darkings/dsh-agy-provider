@@ -1,4 +1,5 @@
 node_modules/
+lib/
 dist/
 coverage/
 *.log
@@ -9,4 +10,3 @@ coverage/
 Thumbs.db
 .idea/
 .vscode/
-

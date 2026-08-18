@@ -1,0 +1,101 @@
+# DSH Provider 契约（M1）
+
+验证基线：
+
+- 官方仓库：<https://github.com/deepseek-ai/deepseek-harness>
+- 读取 revision：`99f6f02fecdb7dff40c3fbc9470f5907c29f74ca`
+- 参考文档：`docs/user/develop/practice/llm-adapter.zh.md`
+- 参考实现：`packages/llm/llm-deepseek/`
+
+## 插件入口
+
+插件是 Cordis 模块，导出：
+
+```ts
+export const name = 'dsh-agy-provider'
+export const inject = ['llm']
+export function apply(ctx: Context, config: Config) {}
+```
+
+`apply()` 通过 `ctx.llm.registerAdapter()` 将 Provider 路由注册到 LLM runtime。此前计划中的 `ctx.models.registerProvider()` 不是当前官方契约，已废弃该假设。
+
+## Adapter 接口
+
+实现类继承 `LlmAdapter`：
+
+```ts
+class ProviderAdapter extends LlmAdapter {
+  async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {}
+}
+```
+
+必须实现 `stream()`，可选覆写：
+
+- `providerInfo(provider)`：提供方展示元数据。
+- `listModels(provider)`：供选择器使用的 advisory model catalog。
+- `resolveModel(provider, model, signal?)`：返回精确模型能力、上下文窗口和 reasoning 元数据。
+- `providerRetryPolicy(provider)`：提供方级重试策略。
+
+## Request
+
+`GenerateOptions` 是 DSH 已组装的无提供方请求，包含：
+
+- `provider`、`model`
+- `messages`、`system`
+- `tools`
+- `temperature`、`maxTokens`、`stop`
+- `reasoningEffort`
+- `signal`
+- `sessionId`、`purpose`
+
+适配器必须尊重 `options.signal`。不支持的字段不能静默丢弃，应抛出带稳定 code 的 `LlmError`。
+
+## StreamChunk
+
+最小文本流顺序：
+
+```text
+block-start(text)
+text-delta*
+block-end(text)
+usage?
+finish(stop|...)
+```
+
+工具调用使用 `tool-call-delta` 和 `block-end(tool-call)`；`finish` 必须是最后一个分片，`usage` 必须位于 `finish` 之前。
+
+## Package / Bundle
+
+可安装插件不是裸源码文件，而是 npm bundle：
+
+```json
+{
+  "main": "lib/index.js",
+  "files": ["lib/**/*.js", "lib/**/*.d.ts", "cordis.patch.yml"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}
+```
+
+`cordis.patch.yml` 通过包名插入插件行。GitHub 源码安装必须提供自包含 `prepare` 构建脚本；pnpm 10+ 还会要求用户明确允许该构建脚本。
+
+## M1 结论
+
+当前实现提供一个默认关闭的 `MockAdapter`，用于验证：
+
+1. 包 manifest 能被 DSH bundle loader 识别。
+2. `inject: ['llm']` 能获得 LLM runtime。
+3. `ctx.llm.registerAdapter()` 能注册路由。
+4. Mock stream 能输出完整 `StreamChunk` 生命周期。
+
+Mock 默认关闭，实际 bundle route 为 `agy`；`agy-mock` 仅作为测试注入路由。
+
+## M4 文本 Provider 约束
+
+当前 `AgyAdapter` 已实现：
+
+- 将 `system` 和 text/reasoning message blocks 按固定 role marker 序列化为 `-p` Prompt。
+- 将 `step_update.step_update.text_delta` 实时发为 `text-delta`，并以 `result.response` 补齐没有增量的输出。
+- 以最终 `result.usage` 为准发出一次 usage；仅有 `totalTokens` 时暂按输入压力保守计入。
+- 将 AGY 非零退出、超时、取消、解析失败和非 `SUCCESS` 状态映射为稳定 `LlmError.code`。
+
+MVP 显式拒绝 DSH tools、image blocks、temperature、maxTokens、stop 和 reasoning effort，避免把 DSH 的工具/采样语义静默丢给 AGY。

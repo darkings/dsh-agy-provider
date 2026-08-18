@@ -6,7 +6,7 @@
 
 ## 当前阶段
 
-项目初始化已完成；阶段 5 的 M1 待开始
+阶段 5：M5 会话与上下文策略
 
 ## 各阶段
 
@@ -43,16 +43,35 @@
 
 ### 阶段 5：产品开发
 
-- [ ] M1：确认 DSH Provider 契约
-- [ ] M2：实现 AGY Process Adapter
-- [ ] M3：实现 stream-json 增量解析器
-- [ ] M4：完成 DSH 文本 Provider MVP
+- [x] M1：确认 DSH Provider 契约
+  - [x] 找到官方仓库与当前基线 revision
+  - [x] 确认 `LlmAdapter`、`GenerateOptions` 和 `StreamChunk`
+  - [x] 确认 bundle/package/`cordis.patch.yml` 发布形态
+  - [x] 创建并加载 Mock Provider
+  - [x] 用官方运行时完成 Mock Provider smoke test
+- **状态：** complete
+- [x] M2：实现 AGY Process Adapter
+  - [x] 实现路径发现和参数构造
+  - [x] 实现 stdout/stderr、退出码和超时
+  - [x] 实现 AbortSignal 取消与 Windows 隐藏窗口
+  - [x] 增加 Fake process 测试
+- **状态：** complete
+- [x] M3：实现 stream-json 增量解析器
+  - [x] 处理任意 chunk 边界和 CRLF
+  - [x] 验证 JSON 对象与 `event` 字段
+  - [x] 识别已知事件并容忍未知事件
+  - [x] 增加 malformed line 和 fixture 测试
+- [x] M4：完成 DSH 文本 Provider MVP
+  - [x] 将 DSH system/messages 确定性序列化为 AGY Prompt
+  - [x] 将 `text_delta` 和 `result.response` 映射为 DSH 文本流
+  - [x] 映射 usage、退出码、超时、取消、解析错误和 AGY 状态
+  - [x] 完成 Fake runner、官方 runtime 和真实 AGY 端到端测试
 - [ ] M5：实现会话和上下文策略
 - [ ] M6：确认并实现工具能力边界
 - [ ] M7：配置、安全和可观测性
 - [ ] M8：测试、兼容性和性能
 - [ ] M9：打包并发布 `0.1.0`
-- **状态：** pending
+- **状态：** in_progress
 
 ## 关键问题
 
@@ -71,6 +90,8 @@
 | 默认创建私有 GitHub 仓库 | 用户未指定可见性，优先避免意外公开 |
 | 先确认 DSH API 再写适配代码 | 避免把伪 API 固化进项目 |
 | 文本 MVP 先于工具桥接 | 降低双 Agent loop 的副作用风险 |
+| Provider 适配基于 `@deepseek-ai/dsh-llm` 的 `LlmAdapter` | 官方契约明确要求适配器输出 `StreamChunk` |
+| 插件按 bundle 发布 | 官方 `dsh plugin` 只会激活声明 `dsh.bundle` 的 npm 包 |
 
 ## 遇到的错误
 

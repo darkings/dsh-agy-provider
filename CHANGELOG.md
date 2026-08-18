@@ -11,7 +11,7 @@
 - AGY 生命周期事件分类、稳定错误码和脱敏可观测性。
 - Windows/Ubuntu/macOS × Node.js 20/22/24 CI，以及跨平台父子进程树清理测试。
 - 可复测的 `full/resume` quota 实验入口和报告。
-- GitHub Actions tag 发布 workflow，使用 npm Trusted Publishing/OIDC，不保存长期 npm publish token。
+- 预置 GitHub Actions tag 发布 workflow，目标使用 npm Trusted Publishing/OIDC，不在 workflow 中保存 npm publish token。
 - MIT `LICENSE` 和 `0.2.0` 迁移说明。
 
 ### Changed
@@ -23,6 +23,10 @@
 
 - 仍为文本 Provider；不桥接 DSH tools、图像、多模态或完整采样参数。
 - GitHub 仓库继续为 private，因此 npm provenance 受 registry 限制不会生成；后续若公开仓库可重新启用 provenance 验证。
+
+### Release note
+
+- `0.2.0` 已发布到 npm，`latest` 指向 `0.2.0`；由于 npm 账号级 2FA 暂不可用，首次发布使用本机已配置的 bypass-2FA granular token 完成直接发布，GitHub Actions Trusted Publisher 连接待后续配置。
 
 ## [0.1.0] - 2026-08-18
 

@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`0.2.0` 已完成 V2-M0–V2-M5，基线为 Windows 11、AGY `1.1.14`；发布前仍需完成 V2-M6 registry 复验：
+`0.2.0` 已完成 V2-M0–V2-M5，并已发布到 npm（`latest=0.2.0`）；V2-M6 已完成 registry 复验。Trusted Publisher 和 `v0.2.0` tag 自动发布因 npm 账号级 2FA 暂不可用而延期：
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。

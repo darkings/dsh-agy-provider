@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions,
@@ -13,10 +14,20 @@ import {
   type AgyRequest,
   type ProcessResult,
 } from '../agy/process.js'
+import { diagnoseAgy, type AgyDiagnosticResult } from '../agy/diagnostics.js'
+import { AgyConcurrencyLimiter, AgyQueueError } from '../agy/limiter.js'
+import {
+  buildAgyLogRecord,
+  emitAgyLog,
+  type AgyLogger,
+  type AgyTelemetry,
+} from '../agy/log.js'
+import { redactText } from '../agy/redact.js'
 import {
   AgyParserError,
   AgyStreamParser,
   conversationIdOf,
+  isToolEvent,
   isPermissionEvent,
   responseOf,
   statusOf,
@@ -35,6 +46,10 @@ export interface AgyAdapterDependencies {
   runAgyProcess?: AgyProcessRunner
   /** Injectable session mapping for tests or a future persistent store. */
   sessionRegistry?: SessionRegistry
+  /** Optional structured logger; logging failures never affect the request. */
+  logger?: AgyLogger
+  /** Injectable process limiter for deterministic concurrency tests. */
+  concurrencyLimiter?: AgyConcurrencyLimiter
 }
 
 interface AttemptOutcome {
@@ -89,6 +104,10 @@ class AsyncQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
 
 const DEFAULT_MODEL = 'gemini-3.1-pro-high'
 const DEFAULT_AGENT = 'deepseek-proxy'
+const DEFAULT_MINIMUM_AGY_VERSION = '1.1.13'
+const DEFAULT_MAX_CONCURRENT = 4
+const DEFAULT_MAX_QUEUE = 32
+const DEFAULT_QUEUE_TIMEOUT_MS = 30_000
 
 function abortError(): LlmError {
   return new LlmError('AGY request aborted by caller', 'ABORTED')
@@ -128,12 +147,6 @@ export function mapAgyUsage(raw: Record<string, unknown>): TokenUsage {
   }
 }
 
-function diagnosticText(value: string): string {
-  return value
-    .replace(/(authorization|bearer|token|api[_-]?key|password)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
-    .slice(0, 1_000)
-}
-
 function asLlmError(error: unknown): LlmError {
   if (error instanceof LlmError) return error
   if (error instanceof AgyPromptError) {
@@ -141,6 +154,9 @@ function asLlmError(error: unknown): LlmError {
   }
   if (error instanceof AgyParserError) {
     return new LlmError(`AGY stream-json parse failed at line ${error.lineNumber}`, 'AGY_PARSE', { cause: error })
+  }
+  if (error instanceof AgyQueueError) {
+    return new LlmError(error.message, error.code, { cause: error })
   }
   if (error instanceof AgyProcessError) {
     return new LlmError(error.message, `AGY_${error.code}`, { cause: error })
@@ -156,7 +172,7 @@ function processFailure(result: ProcessResult): LlmError | undefined {
     return new LlmError('AGY request exceeded the configured timeout', 'TIMEOUT')
   }
   if (result.termination !== 'completed' || result.exitCode !== 0) {
-    const stderr = diagnosticText(result.stderr.trim())
+    const stderr = redactText(result.stderr.trim())
     return new LlmError(
       stderr.length === 0
         ? `AGY exited unsuccessfully (exit code ${result.exitCode ?? 'unknown'})`
@@ -180,6 +196,9 @@ export class AgyAdapter extends LlmAdapter {
   private readonly run: AgyProcessRunner
   private readonly sessionMode: 'resume' | 'full'
   private readonly sessions: SessionRegistry
+  private readonly minimumAgyVersion: string
+  private readonly limiter: AgyConcurrencyLimiter
+  private readonly logger: AgyLogger | undefined
 
   constructor(config: Config = {}, dependencies: AgyAdapterDependencies = {}) {
     super()
@@ -190,6 +209,13 @@ export class AgyAdapter extends LlmAdapter {
     this.run = dependencies.runAgyProcess ?? runAgyProcess
     this.sessionMode = config.sessionMode === 'resume' ? 'resume' : 'full'
     this.sessions = dependencies.sessionRegistry ?? new SessionRegistry()
+    this.minimumAgyVersion = config.minimumAgyVersion?.trim() || DEFAULT_MINIMUM_AGY_VERSION
+    this.limiter = dependencies.concurrencyLimiter ?? new AgyConcurrencyLimiter({
+      maxConcurrent: config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT,
+      maxQueue: config.maxQueue ?? DEFAULT_MAX_QUEUE,
+      queueTimeoutMs: config.queueTimeoutMs ?? DEFAULT_QUEUE_TIMEOUT_MS,
+    })
+    this.logger = dependencies.logger
   }
 
   /** Remove the in-memory AGY mapping; the next call sends complete DSH history. */
@@ -200,6 +226,21 @@ export class AgyAdapter extends LlmAdapter {
   /** Inspect the detached mapping for diagnostics and tests. */
   getSession(sessionId: string): SessionRecord | undefined {
     return this.sessions.get(sessionId)
+  }
+
+  /** Return process-slot state without exposing prompts, paths, or credentials. */
+  getConcurrencyStats() {
+    return this.limiter.getStats()
+  }
+
+  /** Check AGY path, version, and configured Agent without spending model quota. */
+  diagnose(): Promise<AgyDiagnosticResult> {
+    return diagnoseAgy({
+      ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
+      expectedAgent: this.agent,
+      minimumVersion: this.minimumAgyVersion,
+      timeoutMs: Math.min(this.timeoutMs, 10_000),
+    })
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
@@ -246,23 +287,59 @@ export class AgyAdapter extends LlmAdapter {
     }
 
     const sessionKey = options.sessionId === undefined ? undefined : String(options.sessionId)
-    const release = sessionKey === undefined ? undefined : await this.sessions.acquire(sessionKey)
+    const telemetry: AgyTelemetry = {
+      requestId: randomUUID(),
+      provider: options.provider,
+      model: options.model || this.model,
+      agent: this.agent,
+      sessionId: sessionKey,
+      startedAt: Date.now(),
+      attempt: 1,
+      eventCount: 0,
+      toolEventCount: 0,
+      permissionEventCount: 0,
+      conversationId: undefined,
+      queueWaitMs: undefined,
+      process: undefined,
+      durationMs: undefined,
+    }
+    emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.started'))
+
+    let releaseSession: (() => void) | undefined
+    let releaseProcess: (() => void) | undefined
     try {
+      releaseSession = sessionKey === undefined ? undefined : await this.sessions.acquire(sessionKey)
+      const queueStartedAt = Date.now()
+      releaseProcess = await this.limiter.acquire(options.signal)
+      telemetry.queueWaitMs = Date.now() - queueStartedAt
+
       let requestedConversationId = sessionKey === undefined || this.sessionMode === 'full'
         ? undefined
         : this.sessions.get(sessionKey)?.conversationId
 
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const outcome = yield* this.streamAttempt(options, sessionKey, requestedConversationId)
-        if (!outcome.retryWithFullPrompt) return
+        telemetry.attempt = attempt + 1
+        const outcome = yield* this.streamAttempt(options, sessionKey, requestedConversationId, telemetry)
+        if (!outcome.retryWithFullPrompt) {
+          telemetry.durationMs = Date.now() - telemetry.startedAt
+          emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.completed'))
+          return
+        }
         requestedConversationId = undefined
       }
       throw new LlmError(
         'AGY conversation could not be resumed; full DSH history retry failed',
         'SESSION_RESUME_FAILED',
       )
+    } catch (error) {
+      const mapped = asLlmError(error)
+      telemetry.durationMs = Date.now() - telemetry.startedAt
+      emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.failed', mapped.code))
+      throw mapped
     } finally {
-      release?.()
+      telemetry.durationMs ??= Date.now() - telemetry.startedAt
+      releaseProcess?.()
+      releaseSession?.()
     }
   }
 
@@ -270,6 +347,7 @@ export class AgyAdapter extends LlmAdapter {
     options: GenerateOptions,
     sessionKey: string | undefined,
     requestedConversationId: string | undefined,
+    telemetry: AgyTelemetry,
   ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
     const prompt = requestedConversationId === undefined
       ? serializeAgyPrompt(options)
@@ -296,6 +374,7 @@ export class AgyAdapter extends LlmAdapter {
     }
     const processPromise = this.run(request).then(processResultValue => {
       result = processResultValue
+      telemetry.process = processResultValue
       settled = true
       for (const event of parser.end()) queue.push(event)
       queue.end()
@@ -315,8 +394,12 @@ export class AgyAdapter extends LlmAdapter {
 
     try {
       for await (const event of queue) {
+        telemetry.eventCount += 1
+        if (isToolEvent(event)) telemetry.toolEventCount += 1
+        if (isPermissionEvent(event)) telemetry.permissionEventCount += 1
         const observedConversationId = conversationIdOf(event)
         if (observedConversationId !== undefined) {
+          telemetry.conversationId = observedConversationId
           if (requestedConversationId !== undefined && observedConversationId !== requestedConversationId) {
             conversationMismatch = true
             controller.abort()

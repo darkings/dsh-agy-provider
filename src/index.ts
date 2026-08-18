@@ -14,6 +14,7 @@ export const inject = ['llm']
 
 export const Config = ConfigSchema
 export { AgyAdapter, MockAdapter }
+export { diagnoseAgy } from './agy/diagnostics.js'
 export type { ConfigType }
 export interface Config extends ConfigType {}
 
@@ -24,5 +25,8 @@ export function apply(ctx: Context, config: ConfigType): void {
     ctx.llm.registerAdapter([provider], new MockAdapter(config))
     return
   }
-  ctx.llm.registerAdapter([provider], new AgyAdapter(config))
+  const logger = ctx.logger('dsh-agy-provider')
+  ctx.llm.registerAdapter([provider], new AgyAdapter(config, {
+    logger: record => logger.info('%s', JSON.stringify(record)),
+  }))
 }

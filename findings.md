@@ -48,6 +48,12 @@
 - 另一只读工具采样在默认权限模式下只输出 user step 后等待到超时，证明 headless 模式不能依赖交互式权限流程自行完成。
 - M6 决定 V1 由 AGY 独占工具执行：Provider 拒绝 DSH `tools`，只解析并忽略 AGY 内部 tool lifecycle，不生成 DSH `tool-call-delta`。
 - M6 增加 `isToolEvent()`、`isPermissionEvent()` 和 `PERMISSION_REQUIRED` 快速失败路径；当前自动化测试共 28 个。
+- M7 复测发现本机 AGY 已从 M0 记录的 `1.1.13` 更新为 `1.1.14`；`deepseek-proxy` Agent 仍可通过 `agy agents` 发现，最低兼容版本默认保留为 `1.1.13`。
+- `diagnoseAgy()` 只需要 `agy --version` 和 `agy agents`，可以在不消耗模型额度的前提下完成路径、版本和 Agent 检查；`npm run diagnose` 已在本机通过。
+- `AgyConcurrencyLimiter` 为每个 Adapter 实例默认限制 4 个活动 AGY 进程、32 个排队请求和 30 秒排队超时；满队列、排队超时和排队取消分别映射为 `QUEUE_FULL`、`QUEUE_TIMEOUT` 和 `ABORTED`。
+- M7 日志采用白名单字段，包含 request ID、conversation ID、duration、exit code、queue wait 和事件计数；Prompt、stderr、环境变量、AGY 路径和凭据不进入日志。
+- Cordis `ctx.logger('dsh-agy-provider')` 可接收脱敏 JSON 生命周期记录，logger 自身抛错不会影响 Provider 请求。
+- M7 自动化验证共 38 个测试，覆盖配置默认值/校验、版本解析、Agent 检查、脱敏、并发队列、Provider 计数和回归场景。
 
 ## 技术决策
 

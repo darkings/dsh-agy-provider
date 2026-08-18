@@ -181,10 +181,34 @@
   - `README.md`
   - `docs/dsh-provider-contract.md`
 
-### 下一阶段：M7 配置、安全和可观测性
+### 阶段 11：M7 配置、安全和可观测性
+
+- **状态：** complete
+- 执行的操作：
+  - 增加 `minimumAgyVersion`、`maxConcurrent`、`maxQueue` 和 `queueTimeoutMs` 配置及 Schemastery 校验默认值。
+  - 实现 `npm run diagnose`，使用 `agy --version` 和 `agy agents` 检查本机路径、版本和 Agent；不触发模型或工具。
+  - 实现 `AgyConcurrencyLimiter`，提供 FIFO 排队、队列上限、排队超时和 AbortSignal 取消。
+  - 通过 Cordis logger 输出 request ID、conversation ID、耗时、退出码、队列等待时间和事件计数。
+  - 使用日志白名单和 `redactText()`，不输出 Prompt、stderr、环境变量、AGY 路径或凭据。
+- 创建/修改的文件：
+  - `src/agy/diagnostics.ts`
+  - `src/agy/limiter.ts`
+  - `src/agy/log.ts`
+  - `src/agy/redact.ts`
+  - `src/provider/agy.ts`
+  - `src/provider/config.ts`
+  - `src/index.ts`
+  - `scripts/diagnose.mjs`
+  - `tests/config.test.mjs`
+  - `tests/diagnostics.test.mjs`
+  - `tests/limiter.test.mjs`
+  - `tests/observability.test.mjs`
+  - M7 文档与进度记录
+
+### 下一阶段：M8 测试、兼容性和性能
 
 - **状态：** pending
-- 计划：增加配置诊断、版本检查、脱敏日志、并发上限和可观测事件计数。
+- 计划：补齐版本矩阵、恶意输出/超长行安全测试、真实取消和残留进程检查，并记录性能基线。
 
 ## 测试结果
 
@@ -194,6 +218,9 @@
 | AGY stream-json | 最小 `123` Prompt | 逐行 JSON 并成功结束 | `SUCCESS`，返回 `123` | 通过 |
 | Node.js spawn | 直接启动 `agy.exe` | 退出码 0、无解析错误 | 5 个事件、0 个解析错误 | 通过 |
 | 项目配置 | `npm run typecheck && npm run build && npm test` | 配置有效 | 全部退出码 0，28 个测试通过 | 通过 |
+| M7 配置 Schema | `Config({})` 与非法 `maxConcurrent` | 默认值生效、非法值拒绝 | 默认 `1.1.13/4/32/30000`，非法值抛 `ValidationError` | 通过 |
+| M7 诊断命令 | `npm run diagnose` | 只读检查 AGY 版本和 Agent | AGY `1.1.14`、`deepseek-proxy`、最低版本满足 | 通过 |
+| M7 并发与日志 | 38 个自动化测试 | 队列、取消、脱敏和计数稳定 | `npm test` 全部通过 | 通过 |
 | GitHub 发布 | 创建并推送仓库 | 远程默认分支可访问 | 私有仓库已创建，默认分支为 `main` | 通过 |
 | 远端 ref | `git ls-remote --heads origin main` | 与本地提交一致 | 已返回远端 `main` commit | 通过 |
 | 官方 DSH 源码 | `deepseek-ai/deepseek-harness` | 找到 Provider 与 bundle 契约 | revision `99f6f02` 已读取 | 通过 |
@@ -229,11 +256,11 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 产品阶段 M6 已完成，工具所有权已确定 |
-| 我要去哪里？ | 进入 M7，完善配置、安全和可观测性 |
+| 我在哪里？ | 产品阶段 M7 已完成，配置、安全和可观测性已固化 |
+| 我要去哪里？ | 进入 M8，补齐兼容性、性能和安全回归矩阵 |
 | 目标是什么？ | 建立本地与 GitHub 的 `dsh-agy-provider` 项目并固化开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
-| 我做了什么？ | 完成 M1–M6 的实现、真实验证和工具边界记录，见上方记录 |
+| 我做了什么？ | 完成 M1–M7 的实现、真实验证、工具边界和诊断安全记录，见上方记录 |
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

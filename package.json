@@ -37,6 +37,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
+    "diagnose": "npm run build && node scripts/diagnose.mjs",
     "prepare": "npm run build"
   },
   "engines": {

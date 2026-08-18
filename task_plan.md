@@ -78,7 +78,12 @@
   - [x] 决定 V1 采用 AGY 自治 Agent + DSH 文本外壳
   - [x] 防止 DSH 与 AGY 重复执行工具
   - [x] 对 headless 权限请求返回稳定错误并终止子进程
-- [ ] M7：配置、安全和可观测性
+- [x] M7：配置、安全和可观测性
+  - [x] 增加最低 AGY 版本、并发、队列和超时配置默认值
+  - [x] 增加 `npm run diagnose` 只读版本/Agent 检查
+  - [x] 增加有界 FIFO 队列、AbortSignal 取消和稳定错误码
+  - [x] 增加 request ID、conversation ID、耗时、退出码和事件计数日志
+  - [x] 增加凭据、环境变量、用户路径和 Prompt 白名单脱敏防线
 - [ ] M8：测试、兼容性和性能
 - [ ] M9：打包并发布 `0.1.0`
 - **状态：** in_progress
@@ -106,6 +111,8 @@
 | `sessionMode: resume` 保留为显式选项 | AGY conversation 能保留上下文，但 `--continue` 会按最近会话选择，不适合多 Session |
 | V1 由 AGY 独占工具执行 | DSH `tools` 与 AGY 内置工具可能形成双 Agent loop；Provider 拒绝 DSH tools，AGY 工具事件不转换为 DSH tool call |
 | headless 权限请求快速失败 | 没有可交互审批 UI 时等待会造成无限挂起；返回 `PERMISSION_REQUIRED` 并终止 AGY |
+| M7 诊断不消耗额度 | 启动检查只读取 `--version` 与 `agents`；模型最小调用留给后续集成测试 |
+| M7 默认有界并发 | 每个 Adapter 默认最多 4 个活动 AGY 进程，最多排队 32 个请求，排队超时 30 秒 |
 
 ## 遇到的错误
 

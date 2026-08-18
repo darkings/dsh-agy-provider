@@ -4,14 +4,14 @@
 
 ## 当前状态
 
-项目已完成 M1–M6 的最小闭环，当前以 Windows 11、AGY `1.1.13` 为开发基线：
+项目已完成 M1–M7 的最小闭环，M0 基线为 Windows 11、AGY `1.1.13`；M7 复测时本机 AGY 已升级为 `1.1.14`：
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 28 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 38 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 
 当前 M4 文本 MVP 支持：
 
@@ -34,6 +34,13 @@
 - DSH 传入非空 `tools` 时立即返回 `UNSUPPORTED_TOOLS`。
 - AGY 内部工具由 AGY 独占执行，不转换为 DSH tool calls。
 - 检测到权限请求时立即终止并返回 `PERMISSION_REQUIRED`，避免 headless 无限等待。
+
+当前 M7 配置、安全和可观测性：
+
+- 配置默认 `maxConcurrent: 4`、`maxQueue: 32`、`queueTimeoutMs: 30000`，超出后分别返回 `QUEUE_FULL` 或 `QUEUE_TIMEOUT`。
+- `npm run diagnose` 只执行 `agy --version` 和 `agy agents`，检查路径、最低版本和配置 Agent，不消耗模型额度，也不执行工具。
+- AGY 请求日志通过 Cordis `ctx.logger` 输出结构化 JSON 元数据，包含 request ID、conversation ID、耗时、退出码和事件计数。
+- 日志采用白名单字段并再次脱敏，不包含 Prompt、stderr 原文、环境变量、可执行文件路径或凭据。
 
 当前明确不支持：
 
@@ -67,10 +74,12 @@ dsh-agy-provider/
 │  ├─ development-plan.md
 │  └─ verified-baseline.md
 ├─ src/
-│  ├─ agy/          # 子进程、参数、事件解析
+│  ├─ agy/          # 子进程、参数、事件解析、诊断、限流和脱敏
 │  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射
 │  └─ index.ts
+├─ scripts/
+│  └─ diagnose.mjs  # 只读 AGY 版本/Agent 诊断
 ├─ tests/
 ├─ task_plan.md
 ├─ findings.md
@@ -84,5 +93,28 @@ dsh-agy-provider/
 - 将 AGY 输出视为外部数据，逐行解析并验证事件结构。
 - 第一版先完成文本流、取消、超时和错误映射，再扩展工具调用与持久化会话恢复。
 - 不记录凭据、Token、完整用户 Prompt 或敏感环境变量。
+
+## 配置与诊断
+
+Provider 默认配置保持 `sessionMode: full`，并发和诊断相关配置示例：
+
+```yaml
+enabled: true
+provider: agy
+agent: deepseek-proxy
+model: gemini-3.1-pro-high
+minimumAgyVersion: 1.1.13
+maxConcurrent: 4
+maxQueue: 32
+queueTimeoutMs: 30000
+```
+
+在项目目录执行：
+
+```powershell
+npm run diagnose
+```
+
+也可以通过 `AGY_PATH`、`AGY_AGENT` 和 `AGY_MINIMUM_VERSION` 覆盖诊断命令的检查目标。
 
 详细里程碑、验收标准和风险见 [开发计划](docs/development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。

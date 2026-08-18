@@ -114,3 +114,9 @@ MVP 显式拒绝 DSH tools、image blocks、temperature、maxTokens、stop 和 r
 ## M6 工具边界
 
 V1 选择 AGY 自治 Agent。`GenerateOptions.tools` 非空时适配器在启动进程前返回 `UNSUPPORTED_TOOLS`；AGY 自己产生的 `step_type=tool` 事件不转换成 DSH `tool-call-delta`。检测到 `permission_request` 或 permission step 时，适配器终止子进程并返回 `PERMISSION_REQUIRED`，避免 headless 调用永久等待。完整矩阵见 `docs/tool-capability-matrix.md`。
+
+## M7 配置与可观测性
+
+Adapter 使用 `minimumAgyVersion`、`maxConcurrent`、`maxQueue` 和 `queueTimeoutMs` 控制兼容性与本机进程资源。`diagnoseAgy()` 只调用 `agy --version` 和 `agy agents`；它不会发送 Prompt、使用 AGY 额度或触发工具。
+
+请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间和 `eventCount`/工具/权限事件计数。日志发送前会脱敏字符串，并且不包含 Prompt、stderr、环境变量、AGY 路径或凭据。

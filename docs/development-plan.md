@@ -192,7 +192,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - AGY tool lifecycle 不转换为 DSH tool call，避免重试层重复执行副作用工具。
 - 完整能力矩阵见 `docs/tool-capability-matrix.md`。
 
-### M7：配置、安全和可观测性（预计 1–2 个开发日）
+### M7：配置、安全和可观测性（已完成）
 
 任务：
 
@@ -206,6 +206,14 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 
 - 一条诊断命令能检查 AGY 路径、版本、Agent 和最小调用。
 - 日志审查不包含认证数据和完整敏感内容。
+
+当前实现与验收结果：
+
+- `Config` 增加 `minimumAgyVersion`、`maxConcurrent`、`maxQueue` 和 `queueTimeoutMs`，默认值分别为 `1.1.13`、`4`、`32` 和 `30000`。
+- `npm run diagnose` 通过无模型调用的 `agy --version` 与 `agy agents` 检查；本机复测为 AGY `1.1.14`、Agent `deepseek-proxy`。
+- `AgyConcurrencyLimiter` 提供有界 FIFO 队列、`QUEUE_FULL`、`QUEUE_TIMEOUT` 和排队期间的 `ABORTED` 错误。
+- 日志通过白名单字段输出 request ID、conversation ID、耗时、退出码、队列等待时间和事件计数；Prompt、stderr、环境变量、可执行路径和凭据不进入日志记录。
+- M7 诊断不执行最小模型请求，避免启动检查消耗 AGY 额度；“最小调用”保留为后续集成测试项。
 
 ### M8：测试、兼容性和性能（预计 2 个开发日）
 

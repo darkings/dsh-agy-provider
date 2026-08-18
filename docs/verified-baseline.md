@@ -14,6 +14,8 @@
 | Git | `2.55.0.windows.3` |
 | Agent | `deepseek-proxy` |
 
+M7 复测时 `agy.exe --version` 返回 `1.1.14`，`agy agents` 仍返回 `deepseek-proxy`。Provider 的最低版本默认设为 `1.1.13`，因此当前版本兼容。运行 `npm run diagnose` 已通过；该命令只执行版本和 Agent 读取检查，不触发模型调用。
+
 ## 命令行为
 
 `agy agents` 可列出：
@@ -80,7 +82,7 @@ Node.js `spawn()` 实测结果：
 - AGY 工具调用、权限请求和错误事件结构。
 - 跨插件进程重启的持久化 conversation 映射；当前实现明确使用完整 DSH history 降级。
 - macOS/Linux 可移植性。
-- AGY 升级后的事件兼容性。
+- AGY `1.1.14` 之后的事件兼容性。
 
 ## 会话参数实测（M5）
 

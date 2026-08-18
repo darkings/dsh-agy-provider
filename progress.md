@@ -246,7 +246,8 @@
 | M8 安全回归 | 超长 NDJSON、stdout 上限、shell metacharacters | 有界失败且不改变 argv 结构 | `npm test` 42 个测试通过 | 通过 |
 | M8 性能基线 | `npm run benchmark` | 不消耗额度并输出可复测指标 | Parser 约 768k events/s；serializer/limiter 基线已记录 | 通过 |
 | M9 包预览 | `npm pack --dry-run` | 仅包含发布所需文件 | `lib`、`cordis.patch.yml`、README 和 package metadata 可见 | 通过 |
-| M9 CI 配置 | `.github/workflows/ci.yml` | Node.js 20/24 Windows 验证 | 已创建 workflow；CI 不触发真实 AGY 请求 | 依赖和 Node 20 测试入口均已修复，待远端重跑 |
+| M9 CI 配置 | `.github/workflows/ci.yml` | Node.js 20/24 Windows 验证 | 已创建 workflow；CI 不触发真实 AGY 请求 | 依赖和 Node 20 测试入口均已修复；第三轮 CI 两个 job 全部通过 |
+| M9 CI 重跑 | GitHub Actions run `32112054709` | Node.js 20/24 verify + benchmark | 两个矩阵 job 全部成功 | 通过 |
 | GitHub 发布 | 创建并推送仓库 | 远程默认分支可访问 | 私有仓库已创建，默认分支为 `main` | 通过 |
 | 远端 ref | `git ls-remote --heads origin main` | 与本地提交一致 | 已返回远端 `main` commit | 通过 |
 | 官方 DSH 源码 | `deepseek-ai/deepseek-harness` | 找到 Provider 与 bundle 契约 | revision `99f6f02` 已读取 | 通过 |

@@ -14,7 +14,7 @@
 - 当前自动化测试 76 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort`、V3-M3 显式 AGY-owned 工具策略、V3-M4 fixture transport 闸门和 V3-M5 诊断/安全加固已完成本地验证；V3-M4 prototype 尚未接入默认 Provider，也未发起真实 AGY 模型请求。持久 stream transport 仅在真实协议、隔离和收益门槛全部通过后才可能作为显式实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md) 和 [V3-M4 实验报告](docs/experimental-stream-transport.md)。
+`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort`、V3-M3 显式 AGY-owned 工具策略、V3-M4 fixture transport 闸门和 V3-M5 诊断/安全加固已完成本地验证，并通过 GitHub Actions run `32152437868` 的 9 个跨平台 job；V3-M4 prototype 尚未接入默认 Provider，也未发起真实 AGY 模型请求。持久 stream transport 仅在真实协议、隔离和收益门槛全部通过后才可能作为显式实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md) 和 [V3-M4 实验报告](docs/experimental-stream-transport.md)。
 
 当前 M4 文本 MVP 支持：
 

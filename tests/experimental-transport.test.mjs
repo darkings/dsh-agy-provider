@@ -201,7 +201,10 @@ test('abort, timeout, output-limit, and correlation faults reset the worker befo
 })
 
 test('persistent worker tree is terminated on timeout and transport dispose rejects active work', async () => {
-  const value = transport({ idleTtlMs: 5_000 })
+  const value = transport({
+    idleTtlMs: 5_000,
+    env: { PERSISTENT_FIXTURE_READY_DELAY_MS: '100' },
+  })
   let childPid
   try {
     await assert.rejects(

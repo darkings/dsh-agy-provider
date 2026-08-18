@@ -46,8 +46,6 @@ function spawnTreeChild() {
   return child.pid
 }
 
-emit({ kind: 'ready', sessionId, workerPid: process.pid })
-
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity })
 input.on('line', line => {
   let frame
@@ -103,3 +101,10 @@ input.on('line', line => {
   }
   finishRequest(frame, mode)
 })
+
+const readyDelayMs = Number(process.env.PERSISTENT_FIXTURE_READY_DELAY_MS ?? 0)
+if (Number.isFinite(readyDelayMs) && readyDelayMs > 0) {
+  setTimeout(() => emit({ kind: 'ready', sessionId, workerPid: process.pid }), readyDelayMs)
+} else {
+  emit({ kind: 'ready', sessionId, workerPid: process.pid })
+}

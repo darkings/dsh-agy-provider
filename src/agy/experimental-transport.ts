@@ -385,10 +385,15 @@ class PersistentAgyWorker {
     }
     this.clearIdleTimer()
     if (this.state === 'starting') {
-      this.rejectReady(new PersistentTransportError(
-        'Persistent AGY worker stopped before startup completed',
-        'WORKER_STOPPED',
-      ))
+      this.rejectReady(reason === 'dispose'
+        ? new PersistentTransportError(
+          'Persistent AGY transport was disposed during worker startup',
+          'DISPOSED',
+        )
+        : new PersistentTransportError(
+          'Persistent AGY worker stopped before startup completed',
+          'WORKER_STOPPED',
+        ))
     }
     if (this.active !== undefined) {
       this.settleActiveError(new PersistentTransportError(

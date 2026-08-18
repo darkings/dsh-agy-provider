@@ -246,7 +246,7 @@
 | M8 安全回归 | 超长 NDJSON、stdout 上限、shell metacharacters | 有界失败且不改变 argv 结构 | `npm test` 42 个测试通过 | 通过 |
 | M8 性能基线 | `npm run benchmark` | 不消耗额度并输出可复测指标 | Parser 约 768k events/s；serializer/limiter 基线已记录 | 通过 |
 | M9 包预览 | `npm pack --dry-run` | 仅包含发布所需文件 | `lib`、`cordis.patch.yml`、README 和 package metadata 可见 | 通过 |
-| M9 CI 配置 | `.github/workflows/ci.yml` | Node.js 20/24 Windows 验证 | 已创建 workflow；CI 不触发真实 AGY 请求 | 修复依赖后待远端重跑 |
+| M9 CI 配置 | `.github/workflows/ci.yml` | Node.js 20/24 Windows 验证 | 已创建 workflow；CI 不触发真实 AGY 请求 | 依赖和 Node 20 测试入口均已修复，待远端重跑 |
 | GitHub 发布 | 创建并推送仓库 | 远程默认分支可访问 | 私有仓库已创建，默认分支为 `main` | 通过 |
 | 远端 ref | `git ls-remote --heads origin main` | 与本地提交一致 | 已返回远端 `main` commit | 通过 |
 | 官方 DSH 源码 | `deepseek-ai/deepseek-harness` | 找到 Provider 与 bundle 契约 | revision `99f6f02` 已读取 | 通过 |
@@ -278,6 +278,7 @@
 | 2026-08-18 | exact optional property 不允许显式传 `system: undefined` | 1 | 序列化 turn 时省略可选字段 |
 | 2026-08-18 | AGY headless 工具请求未稳定暴露完整 permission payload | 2 | 不做工具桥接；权限事件分类后快速失败，等待 M7 再接入诊断 |
 | 2026-08-18 | GitHub Actions `npm ci` 因 `@deepseek-ai/dsh-timeout` peer 版本冲突失败 | 1 | 已将 timeout 对齐到 `^0.1.0-rc.7`，补齐 DSH peer dependencies，并用干净 `npm ci` 验证 |
+| 2026-08-18 | GitHub Actions Node 20 将 `tests/*.test.mjs` 作为字面路径，导致测试入口失败 | 1 | 新增 `scripts/run-tests.mjs` 动态枚举测试文件，避免依赖 Shell glob 展开；本地 `npm run verify` 通过 |
 
 ## 五问重启检查
 

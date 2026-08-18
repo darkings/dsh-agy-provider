@@ -63,6 +63,7 @@
 - M9 CI 使用 Windows runner 和 Node.js 20/24，只执行本地 typecheck/test/pack/benchmark，不依赖 AGY 登录，也不会消耗用户额度。
 - 真正 npm publish 需要额外确认包名、可见性和账号权限，因此本阶段只完成 GitHub 源码安装与预览包准备。
 - GitHub Actions 首次失败不是代码问题，而是 CI 的干净 npm 环境正确暴露了 peer 依赖漂移：`@deepseek-ai/dsh-llm@0.1.0-rc.7` 要求 timeout `^0.1.0-rc.7`，项目原先锁定了 `0.0.1-rc.1`。已补齐 `dsh-attachment`、`dsh-brand`、`dsh-invariants` 和新 timeout 版本，干净 `npm ci` 已通过。
+- GitHub Actions 第二次只剩 Node 20 测试入口差异：Node 20 不展开 `node --test tests/*.test.mjs` 的 glob。已改为 `scripts/run-tests.mjs` 动态枚举 `.test.mjs` 文件，Node 24 本地验证通过，等待第三轮 CI 确认 Node 20。
 
 ## 技术决策
 

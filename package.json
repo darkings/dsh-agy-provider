@@ -36,7 +36,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test tests/*.test.mjs",
+    "test": "npm run build && node scripts/run-tests.mjs",
     "diagnose": "npm run build && node scripts/diagnose.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
     "verify": "npm run typecheck && npm test && npm pack --dry-run",

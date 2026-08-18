@@ -47,7 +47,7 @@
 | permission request | `PERMISSION_REQUIRED` |
 | timeout/abort/parse/output limit | `TIMEOUT`/`ABORTED`/`AGY_PARSE`/`AGY_OUTPUT_LIMIT` |
 
-无法分类的非零退出或非成功 status 保留 `AGY_EXIT` 或 `AGY_STATUS`。reasoning envelope 尚未验证，因此不映射为 `reasoning-delta`。
+无法分类的非零退出或非成功 status 保留 `AGY_EXIT` 或 `AGY_STATUS`。V3-M2 已支持 `reasoningEffort=low|medium|high` 到 `--effort` 的控制映射；AGY 输出 reasoning envelope 尚未验证，因此不映射为 `reasoning-delta`。
 
 ## 未覆盖环境
 

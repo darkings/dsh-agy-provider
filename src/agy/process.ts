@@ -4,6 +4,14 @@ import { delimiter, join, resolve } from 'node:path'
 
 export type ProcessTermination = 'completed' | 'non-zero' | 'signaled' | 'aborted' | 'timeout' | 'output-limit'
 
+export const AGY_REASONING_EFFORTS = ['low', 'medium', 'high'] as const
+export type AgyReasoningEffort = typeof AGY_REASONING_EFFORTS[number]
+
+export function isAgyReasoningEffort(value: unknown): value is AgyReasoningEffort {
+  return typeof value === 'string'
+    && (AGY_REASONING_EFFORTS as readonly string[]).includes(value)
+}
+
 export class AgyProcessError extends Error {
   constructor(
     message: string,
@@ -45,6 +53,7 @@ export interface AgyRequest extends Omit<ProcessRequest, 'executable' | 'args'> 
   agent?: string
   model?: string
   conversation?: string
+  reasoningEffort?: AgyReasoningEffort
 }
 
 export function defaultAgyCommand(): 'agy.exe' | 'agy' {
@@ -103,12 +112,18 @@ export function resolveAgyExecutable(explicit?: string): string {
 }
 
 /** Build AGY's print-mode argv without invoking a shell. */
-export function buildAgyArgs(request: Pick<AgyRequest, 'prompt' | 'agent' | 'model' | 'conversation'>): string[] {
+export function buildAgyArgs(
+  request: Pick<AgyRequest, 'prompt' | 'agent' | 'model' | 'conversation' | 'reasoningEffort'>,
+): string[] {
+  if (request.reasoningEffort !== undefined && !isAgyReasoningEffort(request.reasoningEffort)) {
+    throw new TypeError('AGY reasoning effort must be one of: low, medium, high')
+  }
   return [
     '-p', request.prompt,
     ...(request.agent === undefined ? [] : ['--agent', request.agent]),
     ...(request.model === undefined ? [] : ['--model', request.model]),
     ...(request.conversation === undefined ? [] : ['--conversation', request.conversation]),
+    ...(request.reasoningEffort === undefined ? [] : ['--effort', request.reasoningEffort]),
     '--output-format', 'stream-json',
   ]
 }

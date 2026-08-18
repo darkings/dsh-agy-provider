@@ -8,10 +8,12 @@
 - 动态模型目录的显式配置合并、TTL 缓存、single-flight、最近成功缓存和静态 fallback。
 - 诊断 JSON 增加 `configuration.modelDiscovery` 与 `modelCatalog` 来源/过期/警告状态。
 - `modelDiscovery`、`modelDiscoveryTtlMs` 和 `modelDiscoveryTimeoutMs` 配置。
+- V3-M2 reasoning metadata：为模型公开 `low`、`medium`、`high`，并将请求级 `reasoningEffort` 映射为独立 `--effort` argv。
 
 ### Security
 
 - 模型发现继续使用无 Shell 子进程，不发送 Prompt、不执行工具、不读取或持久化 Token，并保持 `quotaUsed: false`。
+- effort 只接受固定白名单；非法值在 spawn 前返回 `UNSUPPORTED_REASONING_EFFORT`，不会进入 shell 或 Prompt。
 
 ## [0.2.0] - 2026-08-18
 

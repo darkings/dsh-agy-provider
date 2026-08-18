@@ -49,6 +49,8 @@ modelDiscoveryTimeoutMs: 10000
 
 默认 `modelDiscovery: auto` 会以无 Shell 的方式执行 `agy models`，并将发现到的模型追加到显式目录之后。显式目录的顺序和 metadata 优先；发现结果只缓存在当前 Provider 进程内，默认 TTL 为 5 分钟，单次发现命令默认超时为 10 秒。设置 `modelDiscovery: off` 可恢复 0.2.0 的静态目录行为。
 
+`reasoningEffort` 是请求级字段，不写入上述 Provider 配置。可选值为 `low`、`medium`、`high`，Provider 会将其作为独立 `--effort` 参数传给 AGY；未指定时不传该参数。`temperature`、`stop` 和 `maxTokens` 仍会返回不支持错误。
+
 推荐的资源边界：
 
 ```yaml

@@ -40,9 +40,27 @@ modelDiscovery: off
 
 warning 只返回稳定的通用错误描述，不包含本机路径、环境变量、Prompt、stderr 或凭据。
 
+## Reasoning effort（V3-M2）
+
+Provider 现在为每个 AGY 模型公开三档 reasoning metadata：`low`、`medium`、`high`。不设置 `defaultEffort`，因此未指定请求级 effort 时保留 AGY/模型自身默认值。
+
+请求级调用可以传入：
+
+```ts
+reasoningEffort: 'high'
+```
+
+合法值会以独立参数传给 AGY：
+
+```text
+--effort high
+```
+
+Provider 不把 effort 拼进 Prompt 或 shell 字符串。非法值返回稳定错误码 `UNSUPPORTED_REASONING_EFFORT`，并且在 AGY 进程启动前失败。`temperature`、`stop` 和 `maxTokens` 仍不支持。
+
 ## 兼容性与边界
 
 - 0.2.0 的 `model`、`models`、`agent`、`agyPath` 和会话配置保持兼容。
 - 动态目录刷新发生在 `listModels()`；如果 DSH UI 已缓存模型选择器，需要重新加载 profile。
-- `reasoningEffort` 映射、显式 `toolPolicy: agy-owned` 和持久 stream transport 尚未在本次 M1 实施中启用。
+- 显式 `toolPolicy: agy-owned` 和持久 stream transport 尚未实施；V3-M2 只增加 reasoning 控制参数映射，不实现 `reasoning-delta` 输出桥接。
 - 当前版本不新增真实模型请求，因此模型发现验证不计入 AGY 模型额度预算。

@@ -12,4 +12,4 @@
 
 M7 增加了每个 Adapter 实例的 AGY 进程并发上限和有界等待队列。通过 DSH bundle 注册时，Adapter 使用 Cordis `ctx.logger('dsh-agy-provider')` 输出脱敏的 JSON 生命周期记录；日志失败不会影响请求。
 
-V2-M3 增加固定事件类别计数、最终 AGY status 和稳定错误分类。工具/权限事件只作为内部进度计数，不转换为 DSH tool call；reasoning-delta 仍未启用，避免依赖未验证的 AGY envelope。
+V2-M3 增加固定事件类别计数、最终 AGY status 和稳定错误分类。工具/权限事件只作为内部进度计数，不转换为 DSH tool call；V3-M2 已支持 reasoning effort 控制参数，但 reasoning-delta 输出仍未启用，避免依赖未验证的 AGY envelope。

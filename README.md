@@ -11,10 +11,10 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 60 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 64 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现已经落地：默认调用 `agy models`，使用进程内 TTL 缓存，并在失败时回退到最近成功缓存或静态配置；`reasoningEffort` 映射和显式 AGY-owned 工具策略仍待后续里程碑。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
+`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现和 V3-M2 `reasoningEffort → --effort` 已落地，等待后续里程碑完成后统一发布；显式 AGY-owned 工具策略仍待实施。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
 
 当前 M4 文本 MVP 支持：
 
@@ -50,7 +50,7 @@
 
 - 已覆盖 `init`、`step_update`、`checkpoint`、`agent_response`、`result`、工具、权限、错误和未知事件 fixture；未知事件保留并归类为 `unknown`。
 - 认证、额度、速率限制、未知模型、Agent 缺失、上下文超限、权限、超时、取消、解析和输出上限映射为稳定 `LlmError.code`。
-- 未发现稳定的 AGY reasoning envelope，因此不把思考文本猜测性映射为 `reasoning-delta`。
+- 未发现稳定的 AGY 输出 reasoning envelope，因此不把思考文本猜测性映射为 `reasoning-delta`；V3-M2 仅映射 reasoning 控制参数，不改变输出事件边界。
 
 当前 M8 测试、兼容性和性能：
 
@@ -60,9 +60,15 @@
 - AGY/DSH 的已验证组合记录在 [兼容性矩阵](docs/compatibility-matrix.md)。
 - V2-M4 CI 已覆盖 Windows、Ubuntu、macOS 与 Node.js 20/22/24；timeout/abort 使用父子 Node 进程 fixture 验证整棵进程树退出。
 
+当前 V3-M2 reasoning effort 支持：
+
+- `resolveModel()` 为 AGY 模型公开 `low`、`medium`、`high` 三档 reasoning metadata，不设置 `defaultEffort`。
+- 请求级 `reasoningEffort` 经过白名单校验后，以独立 `--effort <value>` argv 传给 AGY。
+- 未指定 effort 时不传入 `--effort`；非法值在启动 AGY 前返回 `UNSUPPORTED_REASONING_EFFORT`。
+
 当前明确不支持：
 
-- DSH `tools`、图像内容、采样参数、`reasoningEffort`、`stop` 和 `maxTokens`。
+- DSH `tools`、图像内容、采样参数、`temperature`、`stop` 和 `maxTokens`。
 - 会跨插件进程重启持久化的 AGY Conversation 映射；重启后会使用完整 DSH 历史降级创建新会话。
 - `--continue` 自动选择的最近会话；为避免多个 DSH Session 串话，Provider 不使用它。
 
@@ -148,6 +154,8 @@ modelDiscoveryTimeoutMs: 10000
 `model` 仍表示默认请求模型，并兼容 0.1.0 配置。`models` 是可选的显式目录；目录按 `id` 去重，若默认 `model` 未列出会自动补入。未配置但由请求方明确传入的模型 ID 会原样保留，不会被静默改写成默认模型。
 
 `modelDiscovery: auto` 是默认值。Provider 会以无 Shell 的方式执行 `agy models`，将动态目录中未配置的模型补到显式目录之后；显式 `models` 的顺序、名称和其他 metadata 优先。发现结果只保存在进程内，默认 TTL 为 5 分钟，单次命令默认超时为 10 秒。设置 `modelDiscovery: off` 可完全恢复 0.2.0 的静态目录行为。
+
+`reasoningEffort` 是请求级能力，不是 Provider 配置项。可选值为 `low`、`medium`、`high`；未指定时保持 AGY/模型自身默认值，`temperature`、`stop` 和 `maxTokens` 仍会被拒绝。
 
 在项目目录执行：
 

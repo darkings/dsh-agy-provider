@@ -69,6 +69,65 @@ test('AgyAdapter maps AGY text deltas, final response, usage, and finish', async
   assert.equal(captured[0].model, 'gemini-test')
 })
 
+test('AgyAdapter exposes and forwards the supported reasoning efforts', async () => {
+  const captured = []
+  const adapter = new AgyAdapter({ model: 'gemini-test' }, {
+    runAgyProcess: fakeRunner([
+      { event: 'result', result: { status: 'SUCCESS', response: 'reasoned' } },
+    ], captured),
+  })
+
+  const resolved = await adapter.resolveModel('agy-test', 'gemini-test')
+  assert.deepEqual(resolved.reasoning?.efforts.map(effort => effort.id), ['low', 'medium', 'high'])
+  assert.equal(resolved.reasoning?.defaultEffort, undefined)
+
+  for await (const _chunk of adapter.stream({ ...request, reasoningEffort: 'high' })) {}
+  assert.equal(captured[0]?.reasoningEffort, 'high')
+
+  await assert.rejects(
+    async () => {
+      for await (const _chunk of adapter.stream({ ...request, reasoningEffort: 'turbo' })) {}
+    },
+    error => error.code === 'UNSUPPORTED_REASONING_EFFORT',
+  )
+  assert.equal(captured.length, 1)
+})
+
+test('official DSH runtime validates reasoning effort before AGY spawn', async () => {
+  const root = new Context()
+  const captured = []
+  await root.plugin(LlmRuntime)
+  root.llm.registerAdapter(['agy-reasoning-runtime'], new AgyAdapter({ model: 'gemini-test' }, {
+    runAgyProcess: fakeRunner([
+      { event: 'result', result: { status: 'SUCCESS', response: 'reasoned' } },
+    ], captured),
+  }))
+
+  for await (const _chunk of root.llm.stream({
+    ...request,
+    provider: 'agy-reasoning-runtime',
+    reasoningEffort: 'medium',
+    messages: [],
+    system: 'reply',
+  })) {}
+  assert.equal(captured[0]?.reasoningEffort, 'medium')
+
+  const invalidChunks = []
+  for await (const chunk of root.llm.stream({
+    ...request,
+    provider: 'agy-reasoning-runtime',
+    reasoningEffort: 'turbo',
+    messages: [],
+    system: 'reply',
+  })) invalidChunks.push(chunk)
+  const invalidFinish = invalidChunks.at(-1)
+  assert.equal(invalidFinish?.type, 'finish')
+  assert.equal(invalidFinish?.reason.kind, 'error')
+  assert.equal(invalidFinish?.reason.failure.code, 'UNSUPPORTED_REASONING_EFFORT')
+  assert.equal(captured.length, 1)
+  await root.fiber.dispose()
+})
+
 test('AgyAdapter uses result.response when AGY emits no text delta', async () => {
   const adapter = new AgyAdapter({}, {
     runAgyProcess: fakeRunner([

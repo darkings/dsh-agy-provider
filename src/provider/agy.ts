@@ -8,13 +8,16 @@ import type {
   GenerateOptions,
   LlmModelInfo,
   LlmProviderInfo,
+  ReasoningEffortId,
   LlmResolvedModelInfo,
   StreamChunk,
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
 import {
   AgyProcessError,
+  isAgyReasoningEffort,
   runAgyProcess,
+  type AgyReasoningEffort,
   type AgyRequest,
   type ProcessResult,
 } from '../agy/process.js'
@@ -124,6 +127,24 @@ const DEFAULT_QUEUE_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const DEFAULT_MAX_EVENT_LINE_LENGTH = 1_048_576
 
+const AGY_REASONING_METADATA = [
+  {
+    id: 'low' as ReasoningEffortId,
+    name: 'Low',
+    description: 'Lower reasoning budget through the AGY model backend.',
+  },
+  {
+    id: 'medium' as ReasoningEffortId,
+    name: 'Medium',
+    description: 'Balanced reasoning budget through the AGY model backend.',
+  },
+  {
+    id: 'high' as ReasoningEffortId,
+    name: 'High',
+    description: 'Higher reasoning budget through the AGY model backend.',
+  },
+] as const
+
 function abortError(): LlmError {
   return new LlmError('AGY request aborted by caller', 'ABORTED')
 }
@@ -204,6 +225,15 @@ function processFailure(result: ProcessResult): LlmError | undefined {
 
 function isSuccessStatus(status: string | undefined): boolean {
   return status === undefined || status.toUpperCase() === 'SUCCESS'
+}
+
+function normalizeReasoningEffort(value: unknown): AgyReasoningEffort | undefined {
+  if (value === undefined) return undefined
+  if (isAgyReasoningEffort(value)) return value
+  throw new LlmError(
+    'AGY supports reasoning efforts: low, medium, high',
+    'UNSUPPORTED_REASONING_EFFORT',
+  )
 }
 
 /** DSH text-only adapter backed by the locally authenticated AGY CLI. */
@@ -320,6 +350,9 @@ export class AgyAdapter extends LlmAdapter {
       ...(configured?.contextWindow === undefined
         ? {}
         : { context: { contextWindow: configured.contextWindow } }),
+      reasoning: {
+        efforts: AGY_REASONING_METADATA,
+      },
     })
   }
 
@@ -343,10 +376,10 @@ export class AgyAdapter extends LlmAdapter {
         'UNSUPPORTED_TOOLS',
       )
     }
-    if (options.reasoningEffort !== undefined || options.temperature !== undefined
-      || options.maxTokens !== undefined || options.stop !== undefined) {
+    const reasoningEffort = normalizeReasoningEffort(options.reasoningEffort)
+    if (options.temperature !== undefined || options.maxTokens !== undefined || options.stop !== undefined) {
       throw new LlmError(
-        'AGY text MVP does not yet map reasoning, sampling, maxTokens, or stop controls',
+        'AGY text MVP does not yet map sampling, maxTokens, or stop controls',
         'UNSUPPORTED_OPTIONS',
       )
     }
@@ -386,7 +419,13 @@ export class AgyAdapter extends LlmAdapter {
 
       for (let attempt = 0; attempt < 2; attempt += 1) {
         telemetry.attempt = attempt + 1
-        const outcome = yield* this.streamAttempt(options, sessionKey, requestedConversationId, telemetry)
+        const outcome = yield* this.streamAttempt(
+          options,
+          sessionKey,
+          requestedConversationId,
+          telemetry,
+          reasoningEffort,
+        )
         if (!outcome.retryWithFullPrompt) {
           telemetry.durationMs = Date.now() - telemetry.startedAt
           emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.completed'))
@@ -415,6 +454,7 @@ export class AgyAdapter extends LlmAdapter {
     sessionKey: string | undefined,
     requestedConversationId: string | undefined,
     telemetry: AgyTelemetry,
+    reasoningEffort: AgyReasoningEffort | undefined,
   ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
     const prompt = requestedConversationId === undefined
       ? serializeAgyPrompt(options)
@@ -439,6 +479,7 @@ export class AgyAdapter extends LlmAdapter {
         for (const event of parser.push(`${line}\n`)) queue.push(event)
       },
       ...(requestedConversationId === undefined ? {} : { conversation: requestedConversationId }),
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
       ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
     }
     const processPromise = this.run(request).then(processResultValue => {

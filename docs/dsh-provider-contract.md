@@ -44,7 +44,7 @@ class ProviderAdapter extends LlmAdapter {
 - `messages`、`system`
 - `tools`
 - `temperature`、`maxTokens`、`stop`
-- `reasoningEffort`
+- `reasoningEffort`：V3-M2 已支持 `low`、`medium`、`high`，并映射为 AGY `--effort`。
 - `signal`
 - `sessionId`、`purpose`
 

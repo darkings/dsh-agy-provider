@@ -20,6 +20,31 @@ test('buildAgyArgs preserves prompt and conversation as separate argv items', ()
   )
 })
 
+test('buildAgyArgs maps reasoning effort as a separate argv pair', () => {
+  assert.deepEqual(
+    buildAgyArgs({
+      prompt: 'a prompt',
+      agent: 'deepseek-proxy',
+      model: 'gemini-test',
+      reasoningEffort: 'high',
+    }),
+    [
+      '-p', 'a prompt',
+      '--agent', 'deepseek-proxy',
+      '--model', 'gemini-test',
+      '--effort', 'high',
+      '--output-format', 'stream-json',
+    ],
+  )
+})
+
+test('buildAgyArgs rejects a non-whitelisted reasoning effort', () => {
+  assert.throws(
+    () => buildAgyArgs({ prompt: 'a prompt', reasoningEffort: 'high; whoami' }),
+    /reasoning effort must be one of/,
+  )
+})
+
 test('buildAgyArgs keeps shell metacharacters inside the prompt argument', () => {
   const prompt = '$(whoami); & del important.txt\n--agent forged'
   const args = buildAgyArgs({ prompt, agent: 'deepseek-proxy', model: 'gemini-test' })

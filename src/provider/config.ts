@@ -7,6 +7,8 @@ export interface Config {
   provider?: string
   /** AGY model passed to the CLI when a request does not override it. */
   model?: string
+  /** Explicit model catalog; legacy `model` remains the default/fallback entry. */
+  models?: ModelConfig[]
   /** AGY agent profile, for example `deepseek-proxy`. */
   agent?: string
   /** Explicit AGY executable path; empty means discover from environment/PATH. */
@@ -33,10 +35,31 @@ export interface Config {
   delayMs?: number
 }
 
+export interface ModelConfig {
+  /** Exact model id passed to AGY. */
+  id: string
+  /** Optional selector label; defaults to `id`. */
+  name?: string
+  /** Optional selector description. */
+  description?: string
+  /** Optional provider-declared combined context capacity. */
+  contextWindow?: number
+}
+
+export const DEFAULT_MODEL = 'gemini-3.1-pro-high'
+
+const ModelConfig = z.object({
+  id: z.string().pattern(/^\S(?:.*\S)?$/).required(),
+  name: z.string().pattern(/^\S(?:.*\S)?$/),
+  description: z.string(),
+  contextWindow: z.natural().min(1).max(10_000_000),
+}) as unknown as z<ModelConfig>
+
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(false),
   provider: z.string().default('agy'),
-  model: z.string().default('gemini-3.1-pro-high'),
+  model: z.string().default(DEFAULT_MODEL),
+  models: z.array(ModelConfig).default([]),
   agent: z.string().default('deepseek-proxy'),
   agyPath: z.string().default(''),
   timeoutMs: z.number().min(1).max(3_600_000).default(120_000),
@@ -50,3 +73,25 @@ export const Config: z<Config> = z.object({
   response: z.string().default('AGY mock provider is ready.'),
   delayMs: z.number().min(0).max(60_000).default(0),
 })
+
+/**
+ * Resolve the effective catalog while keeping the 0.1.0 `model` setting
+ * compatible. Catalog membership is advisory; unknown exact model ids remain
+ * valid request targets and are handled by each adapter's resolveModel().
+ */
+export function configuredModels(config: Pick<Config, 'model' | 'models'> = {}): readonly ModelConfig[] {
+  const fallbackId = config.model?.trim() || DEFAULT_MODEL
+  const entries = config.models !== undefined && config.models.length > 0
+    ? config.models
+    : [{ id: fallbackId }]
+  const catalog: ModelConfig[] = []
+  const seen = new Set<string>()
+  for (const entry of entries) {
+    const id = entry.id.trim()
+    if (id.length === 0 || seen.has(id)) continue
+    seen.add(id)
+    catalog.push({ ...entry, id })
+  }
+  if (!seen.has(fallbackId)) catalog.push({ id: fallbackId })
+  return catalog
+}

@@ -11,11 +11,11 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 42 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 47 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 
 当前 M4 文本 MVP 支持：
 
-- `agyPath`、`agent`、`model`、`timeoutMs` 配置。
+- `agyPath`、`agent`、`model`/`models`、`timeoutMs` 配置；模型目录按 `id` 去重，并保留旧版 `model` 作为 fallback。
 - DSH 文本消息确定性序列化为 AGY Prompt。
 - `step_update.text_delta` 实时映射为 `text-delta`。
 - `result.response`、`result.usage`、退出码、超时和取消映射。
@@ -84,6 +84,7 @@ dsh-agy-provider/
 │  └─ verified-baseline.md
 ├─ src/
 │  ├─ agy/          # 子进程、参数、事件解析、诊断、限流和脱敏
+│  ├─ diagnostics.ts # Provider/DSH/Node.js/AGY 聚合诊断
 │  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射
 │  └─ index.ts
@@ -114,6 +115,13 @@ enabled: true
 provider: agy
 agent: deepseek-proxy
 model: gemini-3.1-pro-high
+models:
+  - id: gemini-3.1-pro-high
+    name: Gemini 3.1 Pro High
+    description: High quality Gemini model through AGY
+    contextWindow: 1000000
+  - id: gemini-3.6-flash
+    name: Gemini 3.6 Flash
 minimumAgyVersion: 1.1.13
 maxConcurrent: 4
 maxQueue: 32
@@ -122,13 +130,29 @@ maxOutputBytes: 8388608
 maxEventLineLength: 1048576
 ```
 
+`model` 仍表示默认请求模型，并兼容 0.1.0 配置。`models` 是可选的显式目录；目录按 `id` 去重，若默认 `model` 未列出会自动补入。未配置但由请求方明确传入的模型 ID 会原样保留，不会被静默改写成默认模型。
+
 在项目目录执行：
 
 ```powershell
 npm run diagnose
 ```
 
-也可以通过 `AGY_PATH`、`AGY_AGENT` 和 `AGY_MINIMUM_VERSION` 覆盖诊断命令的检查目标。
+默认输出保留人类可读格式；增加 `--json` 可得到带 `schemaVersion`、`quotaUsed`、组件状态、模型能力和稳定 `errors[].code` 的机器可读结果：
+
+```powershell
+npm run diagnose -- --json
+```
+
+诊断只执行 `agy --version` 和 `agy agents`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。也可以通过 `AGY_PATH`、`AGY_AGENT`、`AGY_MODEL`、`AGY_MODELS` 和 `AGY_MINIMUM_VERSION` 覆盖检查目标；`AGY_MODELS` 必须是 JSON 数组，例如：
+
+```powershell
+$env:AGY_AGENT = 'deepseek-proxy'
+$env:AGY_MODELS = '[{"id":"gemini-3.1-pro-high","name":"Gemini 3.1 Pro High"},{"id":"gemini-3.6-flash"}]'
+npm run diagnose -- --json
+```
+
+诊断输出只返回可执行文件来源标签（`explicit`/`environment`/`path`），不返回本机完整路径，也不包含 Prompt、凭据或 Token。
 
 ### DSH 安装 smoke test
 

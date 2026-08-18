@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { Config } from '../lib/provider/config.js'
+import { Config, configuredModels } from '../lib/provider/config.js'
 
 test('Config applies safe M7 defaults and rejects invalid concurrency values', () => {
   const config = Config({})
@@ -12,4 +12,20 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.equal(config.maxEventLineLength, 1_048_576)
   assert.throws(() => Config({ maxConcurrent: 0 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ minimumAgyVersion: 'latest' }), error => error.name === 'ValidationError')
+})
+
+test('Config accepts a multi-model catalog and preserves the legacy model fallback', () => {
+  const config = Config({
+    model: 'gemini-default',
+    models: [
+      { id: 'gemini-flash', name: 'Flash', contextWindow: 1_000_000 },
+      { id: 'gemini-flash', name: 'Duplicate' },
+    ],
+  })
+
+  assert.deepEqual(configuredModels(config), [
+    { id: 'gemini-flash', name: 'Flash', contextWindow: 1_000_000 },
+    { id: 'gemini-default' },
+  ])
+  assert.throws(() => Config({ models: [{ id: '  ' }] }), error => error.name === 'ValidationError')
 })

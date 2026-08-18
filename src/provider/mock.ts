@@ -6,10 +6,10 @@ import type {
   LlmResolvedModelInfo,
   StreamChunk,
 } from '@deepseek-ai/dsh-llm'
-import type { Config } from './config.js'
+import { configuredModels, type Config, type ModelConfig } from './config.js'
 
 const DEFAULT_PROVIDER = 'agy-mock'
-const DEFAULT_MODEL = 'agy-mock-model'
+const DEFAULT_MOCK_MODEL = 'agy-mock-model'
 const DEFAULT_RESPONSE = 'AGY mock provider is ready.'
 
 function abortError(): LlmError {
@@ -31,12 +31,14 @@ function wait(ms: number, signal: AbortSignal | undefined): Promise<void> {
 
 export class MockAdapter extends LlmAdapter {
   private readonly model: string
+  private readonly models: readonly ModelConfig[]
   private readonly response: string
   private readonly delayMs: number
 
   constructor(config: Config = {}) {
     super()
-    this.model = config.model ?? DEFAULT_MODEL
+    this.model = config.model ?? DEFAULT_MOCK_MODEL
+    this.models = configuredModels({ ...config, model: config.model ?? DEFAULT_MOCK_MODEL })
     this.response = config.response ?? DEFAULT_RESPONSE
     this.delayMs = config.delayMs ?? 0
   }
@@ -46,13 +48,13 @@ export class MockAdapter extends LlmAdapter {
   }
 
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    return Promise.resolve([{
+    return Promise.resolve(this.models.map(model => ({
       provider,
-      id: this.model,
-      name: 'AGY Mock Model',
-      description: 'M1 DSH Provider contract probe; does not consume AGY quota.',
-      inputModalities: ['text'],
-    }])
+      id: model.id,
+      name: model.name ?? 'AGY Mock Model',
+      description: model.description ?? 'DSH Provider contract probe; does not consume AGY quota.',
+      inputModalities: ['text'] as const,
+    })))
   }
 
   override resolveModel(
@@ -60,12 +62,14 @@ export class MockAdapter extends LlmAdapter {
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
+    const configured = this.models.find(entry => entry.id === model)
     return Promise.resolve({
       provider,
       id: model,
-      name: model,
+      name: configured?.name ?? model,
+      ...(configured?.description === undefined ? {} : { description: configured.description }),
       inputModalities: ['text'] as const,
-      context: { contextWindow: 128_000 },
+      context: { contextWindow: configured?.contextWindow ?? 128_000 },
     })
   }
 

@@ -35,7 +35,7 @@ import {
   usageOf,
   type AgyJsonEvent,
 } from '../agy/parser.js'
-import type { Config } from './config.js'
+import { configuredModels, DEFAULT_MODEL, type Config, type ModelConfig } from './config.js'
 import { SessionRegistry, type SessionRecord } from '../session/store.js'
 import { AgyPromptError, serializeAgyPrompt, serializeAgyTurnPrompt } from './serialize.js'
 
@@ -102,7 +102,6 @@ class AsyncQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
   }
 }
 
-const DEFAULT_MODEL = 'gemini-3.1-pro-high'
 const DEFAULT_AGENT = 'deepseek-proxy'
 const DEFAULT_MINIMUM_AGY_VERSION = '1.1.13'
 const DEFAULT_MAX_CONCURRENT = 4
@@ -195,6 +194,7 @@ function isSuccessStatus(status: string | undefined): boolean {
 /** DSH text-only adapter backed by the locally authenticated AGY CLI. */
 export class AgyAdapter extends LlmAdapter {
   private readonly model: string
+  private readonly models: readonly ModelConfig[]
   private readonly agent: string
   private readonly agyPath: string | undefined
   private readonly timeoutMs: number
@@ -210,6 +210,7 @@ export class AgyAdapter extends LlmAdapter {
   constructor(config: Config = {}, dependencies: AgyAdapterDependencies = {}) {
     super()
     this.model = config.model ?? DEFAULT_MODEL
+    this.models = configuredModels(config)
     this.agent = config.agent ?? DEFAULT_AGENT
     this.agyPath = config.agyPath?.trim() === '' ? undefined : config.agyPath?.trim()
     this.timeoutMs = config.timeoutMs ?? 120_000
@@ -257,13 +258,13 @@ export class AgyAdapter extends LlmAdapter {
   }
 
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    return Promise.resolve([{
+    return Promise.resolve(this.models.map(model => ({
       provider,
-      id: this.model,
-      name: this.model,
-      description: `AGY agent ${this.agent}; uses the local AGY account quota.`,
-      inputModalities: ['text'],
-    }])
+      id: model.id,
+      name: model.name ?? model.id,
+      description: model.description ?? `AGY agent ${this.agent}; uses the local AGY account quota.`,
+      inputModalities: ['text'] as const,
+    })))
   }
 
   override resolveModel(
@@ -271,11 +272,16 @@ export class AgyAdapter extends LlmAdapter {
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
+    const configured = this.models.find(entry => entry.id === model)
     return Promise.resolve({
       provider,
       id: model,
-      name: model,
+      name: configured?.name ?? model,
+      ...(configured?.description === undefined ? {} : { description: configured.description }),
       inputModalities: ['text'] as const,
+      ...(configured?.contextWindow === undefined
+        ? {}
+        : { context: { contextWindow: configured.contextWindow } }),
     })
   }
 

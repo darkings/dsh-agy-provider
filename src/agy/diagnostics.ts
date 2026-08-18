@@ -13,7 +13,9 @@ export type AgyDiagnosticCommand = (request: ProcessRequest) => Promise<ProcessR
 
 export interface AgyDiagnosticResult {
   ok: boolean
+  /** Safe source label; never contains the resolved user filesystem path. */
   executable: string
+  executableSource: 'explicit' | 'environment' | 'path'
   version: string | undefined
   agents: readonly string[]
   expectedAgent: string | undefined
@@ -72,6 +74,12 @@ function commandFailure(label: string, result: ProcessResult): string | undefine
   return `${label} failed (${result.termination}, exit code ${result.exitCode ?? 'unknown'})`
 }
 
+function executableSource(options: AgyDiagnosticOptions): 'explicit' | 'environment' | 'path' {
+  if (options.executable?.trim()) return 'explicit'
+  if (process.env.AGY_PATH?.trim() || process.env.AGY_EXECUTABLE?.trim()) return 'environment'
+  return 'path'
+}
+
 async function runDiagnosticCommand(
   label: string,
   executable: string,
@@ -96,6 +104,7 @@ async function runDiagnosticCommand(
 /** Check the local AGY executable without spending model quota or invoking tools. */
 export async function diagnoseAgy(options: AgyDiagnosticOptions = {}): Promise<AgyDiagnosticResult> {
   const executable = resolveAgyExecutable(options.executable)
+  const source = executableSource(options)
   const runCommand = options.runCommand ?? runProcess
   const versionCheck = await runDiagnosticCommand(
     'agy --version',
@@ -137,7 +146,8 @@ export async function diagnoseAgy(options: AgyDiagnosticOptions = {}): Promise<A
 
   return {
     ok: errors.length === 0,
-    executable,
+    executable: source,
+    executableSource: source,
     version,
     agents,
     expectedAgent: options.expectedAgent,

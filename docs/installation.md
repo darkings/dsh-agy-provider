@@ -34,7 +34,15 @@ enabled: true
 provider: agy
 agent: deepseek-proxy
 model: gemini-3.1-pro-high
+models:
+  - id: gemini-3.1-pro-high
+    name: Gemini 3.1 Pro High
+    contextWindow: 1000000
+  - id: gemini-3.6-flash
+    name: Gemini 3.6 Flash
 ```
+
+`model` 继续兼容 0.1.0，并作为默认/回退模型；`models` 是可选的显式模型目录，按 `id` 去重。请求方明确传入的未知模型 ID 会原样交给 AGY，不会被 Provider 静默替换。
 
 推荐的资源边界：
 
@@ -58,14 +66,23 @@ sessionMode: full
 npm run diagnose
 ```
 
-诊断只执行 `agy --version` 和 `agy agents`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。可用以下环境变量覆盖检查目标：
+诊断只执行 `agy --version` 和 `agy agents`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力和稳定错误码：
+
+```powershell
+npm run diagnose -- --json
+```
+
+可用以下环境变量覆盖检查目标。`AGY_MODELS` 必须是 JSON 数组：
 
 ```powershell
 $env:AGY_PATH = 'C:\Users\Jie\.local\bin\agy.exe'
 $env:AGY_AGENT = 'deepseek-proxy'
 $env:AGY_MINIMUM_VERSION = '1.1.13'
+$env:AGY_MODELS = '[{"id":"gemini-3.1-pro-high"},{"id":"gemini-3.6-flash"}]'
 npm run diagnose
 ```
+
+诊断结果不会返回 `AGY_PATH` 的完整路径，也不会包含 Prompt、凭据或 Token；`quotaUsed` 固定为 `false`。
 
 ## 开发验证
 

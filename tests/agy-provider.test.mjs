@@ -69,6 +69,31 @@ test('AgyAdapter uses result.response when AGY emits no text delta', async () =>
   assert.equal(chunks.find(chunk => chunk.type === 'text-delta')?.text, '123')
 })
 
+test('AgyAdapter advertises a deduplicated model catalog and resolves metadata', async () => {
+  const adapter = new AgyAdapter({
+    model: 'gemini-default',
+    models: [
+      { id: 'gemini-flash', name: 'Flash', contextWindow: 1_000_000 },
+      { id: 'gemini-flash', name: 'Duplicate' },
+      { id: 'gemini-pro', description: 'Pro text model' },
+    ],
+  })
+
+  const models = await adapter.listModels('agy-test')
+  assert.deepEqual(models.map(model => model.id), ['gemini-flash', 'gemini-pro', 'gemini-default'])
+  assert.equal(models[0]?.name, 'Flash')
+  assert.equal(models[1]?.description, 'Pro text model')
+  assert.deepEqual(models[0]?.inputModalities, ['text'])
+
+  const resolved = await adapter.resolveModel('agy-test', 'gemini-flash')
+  assert.equal(resolved.name, 'Flash')
+  assert.deepEqual(resolved.context, { contextWindow: 1_000_000 })
+
+  const unknown = await adapter.resolveModel('agy-test', 'gemini-not-in-catalog')
+  assert.equal(unknown.id, 'gemini-not-in-catalog')
+  assert.equal(unknown.name, 'gemini-not-in-catalog')
+})
+
 test('AgyAdapter rejects DSH tools in the text-only MVP', async () => {
   const adapter = new AgyAdapter({}, { runAgyProcess: fakeRunner([], []) })
   await assert.rejects(

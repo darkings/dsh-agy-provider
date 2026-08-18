@@ -43,6 +43,7 @@
     "diagnose": "npm run build && node scripts/diagnose.mjs",
     "smoke:dsh": "node scripts/dsh-smoke.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "quota:experiment": "npm run build && node scripts/quota-experiment.mjs",
     "verify": "npm run typecheck && npm test && npm pack --dry-run",
     "prepare": "npm run build"
   },

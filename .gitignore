@@ -10,3 +10,8 @@ coverage/
 Thumbs.db
 .idea/
 .vscode/
+
+# Local planning and progress notes
+/findings.md
+/progress.md
+/task_plan.md

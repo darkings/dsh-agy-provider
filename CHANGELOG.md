@@ -17,4 +17,4 @@
 
 - V1 仅支持文本消息；不支持 DSH tools、图像、采样控制和跨进程会话持久化。
 - 当前完整实机兼容性范围是 Windows 11、AGY `1.1.13`/`1.1.14` 和 `deepseek-proxy`。
-- package manifest 仍保持 `private: true`；本仓库提供 GitHub 源码安装和预览包验证，不执行 npm publish。
+- package 以公开 npm 包发布；GitHub 仓库继续提供源码安装和开发协作入口。

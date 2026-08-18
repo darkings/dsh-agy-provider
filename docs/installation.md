@@ -7,15 +7,23 @@
 - AGY CLI 已安装并完成登录，`agy agents` 能列出 `deepseek-proxy`。
 - DSH 使用与插件兼容的 `@deepseek-ai/dsh-llm` runtime。
 
+## 从 npm 安装
+
+公开包可以直接安装：
+
+```powershell
+npm install dsh-agy-provider
+```
+
+安装包会通过 `dsh.bundle.patch` 暴露插件入口。pnpm 用户需要按自己的 pnpm 版本允许该依赖的构建脚本。
+
 ## 从 GitHub 安装源码包
 
-仓库当前是私有预览包，可以在有 GitHub 权限的环境中安装：
+开发分支也可以直接安装：
 
 ```powershell
 npm install github:darkings/dsh-agy-provider
 ```
-
-GitHub 安装会执行 package 的 `prepare` 构建脚本，并通过 `dsh.bundle.patch` 暴露插件入口。pnpm 用户需要按自己的 pnpm 版本允许该依赖的构建脚本。
 
 ## 配置
 

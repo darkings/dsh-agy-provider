@@ -129,6 +129,6 @@ npm run diagnose
 
 也可以通过 `AGY_PATH`、`AGY_AGENT` 和 `AGY_MINIMUM_VERSION` 覆盖诊断命令的检查目标。
 
-安装、升级和发布前检查见 [安装文档](docs/installation.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。当前包保持 `private: true`，仅准备 GitHub 源码安装与预览包验证，不自动发布到 npm。
+安装、升级和发布检查见 [安装文档](docs/installation.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。公开包可直接通过 `npm install dsh-agy-provider` 安装。
 
 详细里程碑、验收标准和风险见 [开发计划](docs/development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

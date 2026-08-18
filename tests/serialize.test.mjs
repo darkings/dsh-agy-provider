@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { AgyPromptError, serializeAgyPrompt } from '../lib/provider/serialize.js'
+import { AgyPromptError, serializeAgyPrompt, serializeAgyTurnPrompt } from '../lib/provider/serialize.js'
 
 const message = (role, text) => ({
   role,
@@ -23,5 +23,18 @@ test('serializeAgyPrompt rejects non-text content instead of silently dropping i
       messages: [{ role: 'user', content: [{ type: 'image', attachment: {} }] }],
     }),
     error => error instanceof AgyPromptError && error.code === 'UNSUPPORTED_CONTENT',
+  )
+})
+
+test('serializeAgyTurnPrompt sends only messages after the previous assistant turn', () => {
+  assert.equal(
+    serializeAgyTurnPrompt({
+      messages: [
+        message('user', 'first'),
+        message('assistant', 'first answer'),
+        message('user', 'second'),
+      ],
+    }),
+    '=== USER ===\nsecond',
   )
 })

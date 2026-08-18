@@ -49,3 +49,19 @@ export function serializeAgyPrompt(options: Pick<GenerateOptions, 'messages' | '
   }
   return sections.join('\n\n')
 }
+
+/**
+ * Serialize only the messages added after the previous assistant turn.
+ * AGY already owns the earlier turns when `--conversation` is used; sending
+ * the complete DSH history again would duplicate context and spend quota.
+ */
+export function serializeAgyTurnPrompt(
+  options: Pick<GenerateOptions, 'messages'>,
+): string {
+  let lastAssistant = -1
+  options.messages.forEach((message, index) => {
+    if (message.role === 'assistant') lastAssistant = index
+  })
+  const messages = options.messages.slice(lastAssistant + 1)
+  return serializeAgyPrompt({ messages })
+}

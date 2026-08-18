@@ -89,6 +89,18 @@ function nestedRecord(event: Record<string, unknown>, key: string): Record<strin
   return isRecord(value) ? value : undefined
 }
 
+/** Extract the AGY conversation identity emitted by an init event. */
+export function conversationIdOf(event: AgyJsonEvent): string | undefined {
+  if (event.event !== 'init') return undefined
+  if (typeof event.conversation_id === 'string' && event.conversation_id.length > 0) {
+    return event.conversation_id
+  }
+  const init = nestedRecord(event, 'init')
+  return typeof init?.conversation_id === 'string' && init.conversation_id.length > 0
+    ? init.conversation_id
+    : undefined
+}
+
 /** Extract a text delta from the observed AGY step_update envelope. */
 export function textDeltaOf(event: AgyJsonEvent): string | undefined {
   if (event.event !== 'step_update') return undefined

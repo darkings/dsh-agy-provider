@@ -35,6 +35,15 @@
 - 已观察 `init`、`step_update`、`result` 事件。
 - 最终 `result.usage` 可作为本轮 Token 统计；中间 checkpoint 也可能包含 usage。
 - `agy agents --output-format json` 在本机版本不可用。
+- `agy --help` 显示 `--conversation`、`--continue`（短参数 `-c`）均为 CLI 会话选项；`--conversation` 接收显式 conversation ID。
+- 使用不存在的 `--conversation __dsh_m5_invalid_probe__` 时，AGY 输出 `warning: conversation "..." not found`，随后创建新的 `init.conversation_id` 并正常完成请求。
+- 使用显式 conversation ID 连续两轮请求时，第二轮 `init.conversation_id` 与第一轮一致，并能回答第一轮上下文中的数字；`--continue` 也恢复同一最近会话。
+- 多 DSH Session 不能使用 `--continue`，因为它按最近会话选择；Provider M5 采用 DSH Session → 显式 AGY conversation ID 映射，并为每个 Session 加串行锁。
+- `AgyAdapter` 的 `sessionMode: resume` 首轮记录 `init.conversation_id`，后续只序列化上次 assistant 之后的新 turn；恢复 ID 失效或返回不同 ID 时自动完整历史重试一次。
+- `SessionRegistry` 使用进程内 `InMemorySessionStore`；插件进程重启后不复用未知旧 ID，而是依靠 DSH 提供的完整 messages 创建新的 AGY conversation。
+- 真实 M5 两轮验证中，同一 DSH Session 两轮均返回 `7\n`，证明显式 `--conversation` 恢复了首轮上下文。
+- 相同两轮样本的 quota 对照：`sessionMode: full` 的完整 DSH history 请求 `inputTokens=4490`；`sessionMode: resume` 的第二轮 `inputTokens=9385`。因此默认设为 `full`，resume 作为可选模式，后续长会话仍需持续测量。
+- M5 自动化测试共 26 个，覆盖 Session store、锁、full/resume Prompt、conversation 参数、恢复失败降级和官方 runtime 回归。
 
 ## 技术决策
 

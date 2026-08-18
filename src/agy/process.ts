@@ -40,6 +40,7 @@ export interface AgyRequest extends Omit<ProcessRequest, 'executable' | 'args'> 
   prompt: string
   agent?: string
   model?: string
+  conversation?: string
 }
 
 /**
@@ -72,11 +73,12 @@ export function resolveAgyExecutable(explicit?: string): string {
 }
 
 /** Build AGY's print-mode argv without invoking a shell. */
-export function buildAgyArgs(request: Pick<AgyRequest, 'prompt' | 'agent' | 'model'>): string[] {
+export function buildAgyArgs(request: Pick<AgyRequest, 'prompt' | 'agent' | 'model' | 'conversation'>): string[] {
   return [
     '-p', request.prompt,
     ...(request.agent === undefined ? [] : ['--agent', request.agent]),
     ...(request.model === undefined ? [] : ['--model', request.model]),
+    ...(request.conversation === undefined ? [] : ['--conversation', request.conversation]),
     '--output-format', 'stream-json',
   ]
 }
@@ -202,4 +204,3 @@ export function runAgyProcess(request: AgyRequest): Promise<ProcessResult> {
     args: buildAgyArgs(request),
   })
 }
-

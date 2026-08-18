@@ -103,3 +103,104 @@ test('AgyAdapter registers and streams through the official DSH LLM runtime', as
   assert.equal(chunks.at(-1)?.type, 'finish')
   await root.fiber.dispose()
 })
+
+test('AgyAdapter maps a DSH Session to --conversation and sends only the new turn', async () => {
+  const captured = []
+  let call = 0
+  const adapter = new AgyAdapter({ model: 'gemini-test', sessionMode: 'resume' }, {
+    runAgyProcess: async request => {
+      captured.push({
+        conversation: request.conversation,
+        prompt: request.prompt,
+      })
+      request.onStdoutLine?.(JSON.stringify({ event: 'init', conversation_id: 'conversation-a' }))
+      request.onStdoutLine?.(JSON.stringify({
+        event: 'result',
+        result: { status: 'SUCCESS', response: call++ === 0 ? 'first' : 'second' },
+      }))
+      return result()
+    },
+  })
+
+  const sessionId = 'session-a'
+  for await (const _chunk of adapter.stream({
+    ...request,
+    sessionId,
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'first' }] }],
+  })) {}
+  const secondMessages = [
+    { role: 'user', content: [{ type: 'text', text: 'first' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'first' }] },
+    { role: 'user', content: [{ type: 'text', text: 'second' }] },
+  ]
+  for await (const _chunk of adapter.stream({ ...request, sessionId, messages: secondMessages })) {}
+
+  assert.equal(captured[0].conversation, undefined)
+  assert.equal(captured[1].conversation, 'conversation-a')
+  assert.match(captured[0].prompt, /first/)
+  assert.doesNotMatch(captured[1].prompt, /first/)
+  assert.match(captured[1].prompt, /second/)
+  assert.equal(adapter.getSession(sessionId)?.conversationId, 'conversation-a')
+  assert.equal(adapter.clearSession(sessionId), true)
+  assert.equal(adapter.getSession(sessionId), undefined)
+})
+
+test('AgyAdapter retries with full DSH history when AGY resumes a different conversation', async () => {
+  const captured = []
+  let call = 0
+  const adapter = new AgyAdapter({ model: 'gemini-test', sessionMode: 'resume' }, {
+    runAgyProcess: async request => {
+      const index = call++
+      captured.push({ conversation: request.conversation, prompt: request.prompt })
+      request.onStdoutLine?.(JSON.stringify({
+        event: 'init',
+        conversation_id: index === 0 ? 'conversation-old' : index === 1 ? 'conversation-new' : 'conversation-new',
+      }))
+      request.onStdoutLine?.(JSON.stringify({
+        event: 'result',
+        result: { status: 'SUCCESS', response: index === 2 ? 'recovered' : 'discarded' },
+      }))
+      return result()
+    },
+  })
+
+  const sessionId = 'session-recovery'
+  const messages = [{ role: 'user', content: [{ type: 'text', text: 'full history' }] }]
+  for await (const _chunk of adapter.stream({ ...request, sessionId, messages })) {}
+  const chunks = []
+  for await (const chunk of adapter.stream({ ...request, sessionId, messages })) chunks.push(chunk)
+
+  assert.equal(chunks.find(chunk => chunk.type === 'text-delta')?.text, 'recovered')
+  assert.deepEqual(captured.map(item => item.conversation), [undefined, 'conversation-old', undefined])
+  assert.match(captured[2].prompt, /full history/)
+  assert.equal(adapter.getSession(sessionId)?.conversationId, 'conversation-new')
+})
+
+test('AgyAdapter serializes same-session calls while allowing separate sessions to overlap', async () => {
+  let active = 0
+  let maximum = 0
+  const adapter = new AgyAdapter({ model: 'gemini-test', sessionMode: 'resume' }, {
+    runAgyProcess: async request => {
+      active += 1
+      maximum = Math.max(maximum, active)
+      request.onStdoutLine?.(JSON.stringify({ event: 'init', conversation_id: `conversation-${request.prompt.slice(-1)}` }))
+      await new Promise(resolve => setTimeout(resolve, 10))
+      request.onStdoutLine?.(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'ok' } }))
+      active -= 1
+      return result()
+    },
+  })
+  const consume = async sessionId => {
+    for await (const _chunk of adapter.stream({
+      ...request,
+      sessionId,
+      messages: [{ role: 'user', content: [{ type: 'text', text: sessionId }] }],
+    })) {}
+  }
+
+  await Promise.all([consume('same'), consume('same')])
+  assert.equal(maximum, 1)
+  maximum = 0
+  await Promise.all([consume('one'), consume('two')])
+  assert.equal(maximum, 2)
+})

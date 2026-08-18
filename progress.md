@@ -130,8 +130,42 @@
 
 ### 下一阶段：M5 会话与上下文策略
 
+- **状态：** in_progress
+- 已验证 AGY 1.1.13 支持 `--conversation <id>` 和 `--continue`；不存在的 conversation ID 会 warning 后创建新 ID。
+- 已决定 Provider 使用显式 `--conversation`，不使用全局 `--continue`，避免多个 DSH Session 串话。
+- 待执行：实现映射、同 Session 串行锁、恢复失败完整上下文降级和测试。
+
+### 阶段 9：M5 会话与上下文策略
+
+- **状态：** complete
+- 执行的操作：
+  - 验证 `--conversation <id>` 恢复、`--continue` 最近会话和不存在 ID 的 warning/新建行为。
+  - 实现 `SessionRegistry` 和 `InMemorySessionStore`，按 DSH `sessionId` 保存 AGY `conversation_id`。
+  - 同一 Session 使用串行锁，不同 Session 可并发。
+  - `sessionMode: resume` 仅发送上一轮 assistant 后的新 turn，并显式传递 `--conversation`。
+  - resume 返回不同 conversation ID 时，丢弃该次输出并自动使用完整 DSH history 重试一次。
+  - `sessionMode: full` 作为默认策略；进程重启后因内存映射丢失，自然使用完整 DSH history 创建新会话。
+  - 完成真实 AGY 两轮恢复测试和完整历史 token 成本对照。
+- 创建/修改的文件：
+  - `src/session/store.ts`
+  - `src/provider/agy.ts`
+  - `src/provider/config.ts`
+  - `src/provider/serialize.ts`
+  - `src/agy/process.ts`
+  - `src/agy/parser.ts`
+  - `tests/session-store.test.mjs`
+  - `tests/agy-provider.test.mjs`
+  - `tests/process.test.mjs`
+  - `tests/parser.test.mjs`
+  - `tests/serialize.test.mjs`
+  - `README.md`
+  - `docs/development-plan.md`
+  - `docs/dsh-provider-contract.md`
+
+### 下一阶段：M6 工具能力边界
+
 - **状态：** pending
-- 计划：验证 AGY `--conversation`/`--continue`，建立 DSH Session 与 AGY Conversation 的隔离映射，并定义不可恢复时的降级策略。
+- 计划：采集 AGY 工具/权限事件样本，决定 AGY 自治 Agent 与 DSH tools 的唯一执行所有者。
 
 ## 测试结果
 
@@ -140,7 +174,7 @@
 | AGY Agent 枚举 | `agy agents` | 出现 `deepseek-proxy` | 已出现 | 通过 |
 | AGY stream-json | 最小 `123` Prompt | 逐行 JSON 并成功结束 | `SUCCESS`，返回 `123` | 通过 |
 | Node.js spawn | 直接启动 `agy.exe` | 退出码 0、无解析错误 | 5 个事件、0 个解析错误 | 通过 |
-| 项目配置 | `npm run typecheck && npm run build && npm test` | 配置有效 | 全部退出码 0，19 个测试通过 | 通过 |
+| 项目配置 | `npm run typecheck && npm run build && npm test` | 配置有效 | 全部退出码 0，26 个测试通过 | 通过 |
 | GitHub 发布 | 创建并推送仓库 | 远程默认分支可访问 | 私有仓库已创建，默认分支为 `main` | 通过 |
 | 远端 ref | `git ls-remote --heads origin main` | 与本地提交一致 | 已返回远端 `main` commit | 通过 |
 | 官方 DSH 源码 | `deepseek-ai/deepseek-harness` | 找到 Provider 与 bundle 契约 | revision `99f6f02` 已读取 | 通过 |
@@ -152,6 +186,12 @@
 | AgyAdapter Fake runner | 事件 fixture + DSH request | text/response/usage/finish 映射正确 | 3 个 adapter 测试通过 | 通过 |
 | AgyAdapter official runtime | `Context + LlmRuntime` | 注册路由并完成文本流 | 测试通过 | 通过 |
 | AgyAdapter real AGY | 本机 AGY `1.1.13` + 最小 Prompt | 返回 `123` 和完整 StreamChunk 生命周期 | `123\n`、exit 0、finish stop | 通过 |
+| M5 same-session resume | 同一 `sessionId` 两轮真实 AGY | 第二轮恢复首轮上下文 | 两轮均返回 `7\n`，conversation ID 一致 | 通过 |
+| M5 full/resume cost | 相同两轮上下文的 usage 对照 | 选择更可控默认策略 | full `4490` vs resume 第二轮 `9385` input tokens | 通过 |
+| M5 concurrency | 同/不同 Session Fake runner | 同 Session 不重入，不同 Session 可并发 | 26 个测试全部通过 | 通过 |
+| AGY conversation resume | 首轮创建 ID，随后 `--conversation <id>` | 第二轮保留首轮上下文 | 返回首轮数字 `1` | 通过 |
+| AGY continue | `--continue` | 继续最近会话 | conversation ID 与上一轮一致，返回 `3` | 通过 |
+| AGY invalid conversation | 不存在的 `--conversation <id>` | warning 并创建新会话 | 已观察 warning 和新 conversation ID | 通过 |
 
 ## 错误日志
 
@@ -160,16 +200,18 @@
 | 2026-08-18 | `agy agents --output-format json` 参数不支持 | 1 | 使用 `agy agents` |
 | 2026-08-18 | GitHub URL credential helper 指向已删除的安装路径 | 1 | 为本仓库设置当前 Scoop `gh.exe` helper，远端验证通过 |
 | 2026-08-18 | Parser fixture 的单引号字符串转义导致 JS 语法错误 | 1 | 改用 template literal，随后 19 个测试全部通过 |
+| 2026-08-18 | `sessionMode` schema 的宽泛 string 与字面量联合类型不兼容 | 1 | 使用 `z.union(['resume', 'full'] as const)` |
+| 2026-08-18 | exact optional property 不允许显式传 `system: undefined` | 1 | 序列化 turn 时省略可选字段 |
 
 ## 五问重启检查
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 产品阶段 M4 已完成，准备进入 M5：会话与上下文策略 |
-| 我要去哪里？ | 验证 `--conversation`/`--continue`，建立 Session 隔离映射 |
+| 我在哪里？ | 产品阶段 M5 已完成，默认上下文策略已确定 |
+| 我要去哪里？ | 进入 M6，采集工具/权限事件并确定工具执行所有权 |
 | 目标是什么？ | 建立本地与 GitHub 的 `dsh-agy-provider` 项目并固化开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
-| 我做了什么？ | 完成 M1–M4 的实现和测试，见上方记录 |
+| 我做了什么？ | 完成 M1–M5 的实现、真实验证和成本对照，见上方记录 |
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

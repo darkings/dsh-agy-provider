@@ -2,13 +2,19 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildAgyArgs, resolveAgyExecutable, runProcess } from '../lib/agy/process.js'
 
-test('buildAgyArgs preserves prompt as one argv item and requests stream-json', () => {
+test('buildAgyArgs preserves prompt and conversation as separate argv items', () => {
   assert.deepEqual(
-    buildAgyArgs({ prompt: 'a prompt with spaces', agent: 'deepseek-proxy', model: 'gemini-test' }),
+    buildAgyArgs({
+      prompt: 'a prompt with spaces',
+      agent: 'deepseek-proxy',
+      model: 'gemini-test',
+      conversation: 'conversation-fixture',
+    }),
     [
       '-p', 'a prompt with spaces',
       '--agent', 'deepseek-proxy',
       '--model', 'gemini-test',
+      '--conversation', 'conversation-fixture',
       '--output-format', 'stream-json',
     ],
   )

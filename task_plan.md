@@ -6,7 +6,7 @@
 
 ## 当前阶段
 
-阶段 5：M5 会话与上下文策略
+阶段 5：M6 工具能力边界
 
 ## 各阶段
 
@@ -66,7 +66,12 @@
   - [x] 将 `text_delta` 和 `result.response` 映射为 DSH 文本流
   - [x] 映射 usage、退出码、超时、取消、解析错误和 AGY 状态
   - [x] 完成 Fake runner、官方 runtime 和真实 AGY 端到端测试
-- [ ] M5：实现会话和上下文策略
+- [x] M5：实现会话和上下文策略
+  - [x] 验证 `--conversation`、`--continue` 和不存在会话的降级行为
+  - [x] 实现 DSH Session → AGY Conversation 内存映射
+  - [x] 实现同一 Session 串行锁和跨 Session 并发
+  - [x] 实现恢复失败时的完整上下文重试
+  - [x] 增加会话新建、恢复、删除、崩溃/降级测试
 - [ ] M6：确认并实现工具能力边界
 - [ ] M7：配置、安全和可观测性
 - [ ] M8：测试、兼容性和性能
@@ -92,6 +97,8 @@
 | 文本 MVP 先于工具桥接 | 降低双 Agent loop 的副作用风险 |
 | Provider 适配基于 `@deepseek-ai/dsh-llm` 的 `LlmAdapter` | 官方契约明确要求适配器输出 `StreamChunk` |
 | 插件按 bundle 发布 | 官方 `dsh plugin` 只会激活声明 `dsh.bundle` 的 npm 包 |
+| 默认使用 `sessionMode: full` | 实测两轮样本中完整 DSH 历史的 `inputTokens=4490`，AGY resume 第二轮为 `9385`；DSH history 是当前更可控的 quota 成本 |
+| `sessionMode: resume` 保留为显式选项 | AGY conversation 能保留上下文，但 `--continue` 会按最近会话选择，不适合多 Session |
 
 ## 遇到的错误
 

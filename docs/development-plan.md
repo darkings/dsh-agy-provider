@@ -157,7 +157,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - 用户取消后 AGY 进程在限定时间内退出。
 - 错误信息不泄露 Token、环境变量或完整敏感 Prompt。
 
-### M5：会话与上下文策略（预计 1–2 个开发日）
+### M5：会话与上下文策略（已完成；预计 1–2 个开发日）
 
 任务：
 
@@ -167,11 +167,13 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 4. 比较“AGY 恢复会话”和“每轮完整序列化历史”的 Token 成本。
 5. 为不可恢复会话提供显式降级策略。
 
-验收标准：
+当前实现与验收决定：
 
-- 两个 DSH Session 不会串话。
-- 同一 Session 重启后能按配置恢复或明确创建新会话。
-- 并发写入同一会话时有锁或队列，不产生竞态。
+- 默认 `sessionMode: full`，每轮发送完整 DSH history；实测同一两轮样本中 AGY `inputTokens` 为 4490。
+- `sessionMode: resume` 使用显式 `--conversation <id>`，后续只发送新 turn；同一两轮样本中第二轮 AGY `inputTokens` 为 9385，因此暂不作为默认策略。
+- DSH Session 映射目前为进程内存储；插件重启后明确降级为完整 DSH history 并创建新 AGY conversation。
+- 两个 DSH Session 使用不同映射；同一 Session 有串行锁，不同 Session 可并行。
+- resume ID 不存在或 AGY 返回不同 ID 时，放弃该次 resume 输出，自动使用完整 DSH history 重试一次。
 
 ### M6：工具调用能力决策与实现（预计 2–3 个开发日）
 

@@ -13,6 +13,8 @@ export interface Config {
   agyPath?: string
   /** Hard upper bound for one AGY child process. */
   timeoutMs?: number
+  /** `full` sends DSH history; `resume` reuses an AGY conversation. */
+  sessionMode?: 'resume' | 'full'
   /** Deterministic response used only by the M1 mock route. */
   response?: string
   /** Optional delay used only by the M1 mock route. */
@@ -26,6 +28,7 @@ export const Config: z<Config> = z.object({
   agent: z.string().default('deepseek-proxy'),
   agyPath: z.string().default(''),
   timeoutMs: z.number().min(1).max(3_600_000).default(120_000),
+  sessionMode: z.union(['resume', 'full'] as const).default('full'),
   response: z.string().default('AGY mock provider is ready.'),
   delayMs: z.number().min(0).max(60_000).default(0),
 })

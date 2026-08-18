@@ -16,6 +16,7 @@ import {
 import {
   AgyParserError,
   AgyStreamParser,
+  conversationIdOf,
   responseOf,
   statusOf,
   textDeltaOf,
@@ -23,13 +24,20 @@ import {
   type AgyJsonEvent,
 } from '../agy/parser.js'
 import type { Config } from './config.js'
-import { AgyPromptError, serializeAgyPrompt } from './serialize.js'
+import { SessionRegistry, type SessionRecord } from '../session/store.js'
+import { AgyPromptError, serializeAgyPrompt, serializeAgyTurnPrompt } from './serialize.js'
 
 export type AgyProcessRunner = (request: AgyRequest) => Promise<ProcessResult>
 
 export interface AgyAdapterDependencies {
   /** Injectable seam for deterministic tests; production uses `runAgyProcess`. */
   runAgyProcess?: AgyProcessRunner
+  /** Injectable session mapping for tests or a future persistent store. */
+  sessionRegistry?: SessionRegistry
+}
+
+interface AttemptOutcome {
+  retryWithFullPrompt: boolean
 }
 
 class AsyncQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
@@ -169,6 +177,8 @@ export class AgyAdapter extends LlmAdapter {
   private readonly agyPath: string | undefined
   private readonly timeoutMs: number
   private readonly run: AgyProcessRunner
+  private readonly sessionMode: 'resume' | 'full'
+  private readonly sessions: SessionRegistry
 
   constructor(config: Config = {}, dependencies: AgyAdapterDependencies = {}) {
     super()
@@ -177,6 +187,18 @@ export class AgyAdapter extends LlmAdapter {
     this.agyPath = config.agyPath?.trim() === '' ? undefined : config.agyPath?.trim()
     this.timeoutMs = config.timeoutMs ?? 120_000
     this.run = dependencies.runAgyProcess ?? runAgyProcess
+    this.sessionMode = config.sessionMode === 'resume' ? 'resume' : 'full'
+    this.sessions = dependencies.sessionRegistry ?? new SessionRegistry()
+  }
+
+  /** Remove the in-memory AGY mapping; the next call sends complete DSH history. */
+  clearSession(sessionId: string): boolean {
+    return this.sessions.delete(sessionId)
+  }
+
+  /** Inspect the detached mapping for diagnostics and tests. */
+  getSession(sessionId: string): SessionRecord | undefined {
+    return this.sessions.get(sessionId)
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
@@ -206,7 +228,7 @@ export class AgyAdapter extends LlmAdapter {
     })
   }
 
-  override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+  override async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk, void, void> {
     if (options.signal?.aborted) throw abortError()
     if (options.tools !== undefined && options.tools.length > 0) {
       throw new LlmError(
@@ -222,7 +244,35 @@ export class AgyAdapter extends LlmAdapter {
       )
     }
 
-    const prompt = serializeAgyPrompt(options)
+    const sessionKey = options.sessionId === undefined ? undefined : String(options.sessionId)
+    const release = sessionKey === undefined ? undefined : await this.sessions.acquire(sessionKey)
+    try {
+      let requestedConversationId = sessionKey === undefined || this.sessionMode === 'full'
+        ? undefined
+        : this.sessions.get(sessionKey)?.conversationId
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const outcome = yield* this.streamAttempt(options, sessionKey, requestedConversationId)
+        if (!outcome.retryWithFullPrompt) return
+        requestedConversationId = undefined
+      }
+      throw new LlmError(
+        'AGY conversation could not be resumed; full DSH history retry failed',
+        'SESSION_RESUME_FAILED',
+      )
+    } finally {
+      release?.()
+    }
+  }
+
+  private async *streamAttempt(
+    options: GenerateOptions,
+    sessionKey: string | undefined,
+    requestedConversationId: string | undefined,
+  ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
+    const prompt = requestedConversationId === undefined
+      ? serializeAgyPrompt(options)
+      : serializeAgyTurnPrompt(options)
     const queue = new AsyncQueue<AgyJsonEvent>()
     const parser = new AgyStreamParser()
     const controller = new AbortController()
@@ -240,6 +290,7 @@ export class AgyAdapter extends LlmAdapter {
       onStdoutLine: line => {
         for (const event of parser.push(`${line}\n`)) queue.push(event)
       },
+      ...(requestedConversationId === undefined ? {} : { conversation: requestedConversationId }),
       ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
     }
     const processPromise = this.run(request).then(processResultValue => {
@@ -258,9 +309,21 @@ export class AgyAdapter extends LlmAdapter {
     let finalResponse: string | undefined
     let finalStatus: string | undefined
     let finalUsage: Record<string, unknown> | undefined
+    let conversationMismatch = false
 
     try {
       for await (const event of queue) {
+        const observedConversationId = conversationIdOf(event)
+        if (observedConversationId !== undefined) {
+          if (requestedConversationId !== undefined && observedConversationId !== requestedConversationId) {
+            conversationMismatch = true
+            controller.abort()
+            continue
+          }
+          if (sessionKey !== undefined) this.sessions.set(sessionKey, observedConversationId)
+        }
+        if (conversationMismatch) continue
+
         const delta = textDeltaOf(event)
         if (delta !== undefined && delta.length > 0) {
           if (!blockStarted) {
@@ -290,6 +353,8 @@ export class AgyAdapter extends LlmAdapter {
       options.signal?.removeEventListener('abort', forwardAbort)
     }
 
+    if (conversationMismatch) return { retryWithFullPrompt: true }
+
     const failure = result === undefined ? new LlmError('AGY process did not return a result', 'AGY_PROCESS') : processFailure(result)
     if (failure !== undefined) throw failure
     if (resultSeen && !isSuccessStatus(finalStatus)) {
@@ -316,5 +381,6 @@ export class AgyAdapter extends LlmAdapter {
     yield { type: 'block-end', index: 0, block: { type: 'text', text: visibleText } }
     if (finalUsage !== undefined) yield { type: 'usage', usage: mapAgyUsage(finalUsage) }
     yield { type: 'finish', reason: { kind: 'stop' } }
+    return { retryWithFullPrompt: false }
   }
 }

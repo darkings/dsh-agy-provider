@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   AgyParserError,
   AgyStreamParser,
+  conversationIdOf,
   parseAgyChunks,
   responseOf,
   statusOf,
@@ -24,6 +25,13 @@ test('AgyStreamParser handles arbitrary chunks, CRLF, and a trailing line', () =
   assert.equal(responseOf(events[2]), '123\n')
   assert.equal(statusOf(events[2]), 'SUCCESS')
   assert.deepEqual(usageOf(events[2]), { total_tokens: 3 })
+  assert.equal(conversationIdOf(events[0]), 'fixture')
+})
+
+test('conversationIdOf accepts the nested init envelope', () => {
+  const parser = new AgyStreamParser()
+  const [event] = parser.push('{"event":"init","init":{"conversation_id":"nested"}}\n')
+  assert.equal(conversationIdOf(event), 'nested')
 })
 
 test('parser preserves unknown event types for forward compatibility', () => {

@@ -99,3 +99,14 @@ Mock 默认关闭，实际 bundle route 为 `agy`；`agy-mock` 仅作为测试�
 - 将 AGY 非零退出、超时、取消、解析失败和非 `SUCCESS` 状态映射为稳定 `LlmError.code`。
 
 MVP 显式拒绝 DSH tools、image blocks、temperature、maxTokens、stop 和 reasoning effort，避免把 DSH 的工具/采样语义静默丢给 AGY。
+
+## M5 会话与上下文策略
+
+`GenerateOptions.sessionId` 被转换为本地 Session key。`SessionRegistry` 保存 AGY `init.conversation_id`，并对同一 key 加锁：同一个 DSH Session 不会同时启动两个 AGY 请求，不同 Session 不互相阻塞。
+
+配置：
+
+- `sessionMode: full`（默认）：每轮把 DSH 完整历史发送到新的 AGY CLI 会话。该模式重启安全，且当前实测 quota 成本更低。
+- `sessionMode: resume`：首轮创建并记录 conversation ID，后续调用 `--conversation <id>`，只发送上次 assistant 之后的消息。
+
+恢复 ID 如果不存在，AGY 会 warning 后创建新 ID。适配器通过 `init.conversation_id` 检测不一致，丢弃该次 resume 输出并用完整 DSH history 重试一次。映射是进程内的；插件重启后不伪造旧 ID，而是使用完整历史创建新会话。

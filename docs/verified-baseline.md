@@ -78,7 +78,14 @@ Node.js `spawn()` 实测结果：
 
 - DSH 的真实 Provider 插件注册与事件 API。
 - AGY 工具调用、权限请求和错误事件结构。
-- `--conversation`/`--continue` 的恢复和并发语义。
+- 跨插件进程重启的持久化 conversation 映射；当前实现明确使用完整 DSH history 降级。
 - macOS/Linux 可移植性。
 - AGY 升级后的事件兼容性。
 
+## 会话参数实测（M5）
+
+- `--conversation <id>` 可以恢复指定会话；第二轮 `init.conversation_id` 与首轮一致，并能读取首轮上下文。
+- `--continue` 会恢复当前工作目录下的最近会话，不适合多个 DSH Session 共享。
+- 不存在的 conversation ID 会输出 warning，然后创建新的 `init.conversation_id`。
+- Provider 默认 `sessionMode: full`；`sessionMode: resume` 才使用显式 `--conversation`。
+- 真实两轮成本样本：full `inputTokens=4490`；resume 第二轮 `inputTokens=9385`。该结果只代表当前 AGY/Agent/提示条件，后续长会话仍需重新测量。

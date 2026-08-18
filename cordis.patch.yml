@@ -7,3 +7,4 @@
         provider: agy
         model: gemini-3.1-pro-high
         agent: deepseek-proxy
+        sessionMode: full

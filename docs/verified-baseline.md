@@ -96,4 +96,4 @@ Node.js `spawn()` 实测结果：
 
 - 只读工具请求曾输出 `step_update.step_type=tool`，状态从 `ACTIVE` 到 `ERROR`，随后出现 `checkpoint`、`agent_response` 和 `error_message`。
 - 默认权限模式下另一次只读工具请求未在超时前完成交互，说明 headless Provider 不能等待人工审批。
-- Provider 因此不桥接 AGY tool call；DSH tools 直接拒绝，权限事件快速失败。
+- Provider 因此不桥接 AGY tool call；默认 `toolPolicy: reject` 直接拒绝 DSH tools，显式 `agy-owned` 只忽略 schema；两种策略下权限事件都快速失败。

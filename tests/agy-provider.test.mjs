@@ -205,20 +205,58 @@ test('AgyAdapter rejects DSH tools in the text-only MVP', async () => {
   )
 })
 
-test('AgyAdapter fails fast on an AGY permission request', async () => {
-  const adapter = new AgyAdapter({}, {
-    runAgyProcess: async request => {
-      request.onStdoutLine?.(JSON.stringify({ event: 'init', conversation_id: 'permission-test' }))
-      request.onStdoutLine?.(JSON.stringify({ event: 'permission_request', permission: { kind: 'fixture' } }))
-      return result()
-    },
-  })
-  await assert.rejects(
-    async () => {
-      for await (const _chunk of adapter.stream({ ...request, messages: [], system: 'reply' })) {}
-    },
-    error => error.code === 'PERMISSION_REQUIRED',
-  )
+test('official DSH runtime accepts tool schemas only with explicit AGY ownership', async () => {
+  const root = new Context()
+  const captured = []
+  const logs = []
+  await root.plugin(LlmRuntime)
+  root.llm.registerAdapter(['agy-owned-runtime'], new AgyAdapter({ toolPolicy: 'agy-owned' }, {
+    logger: record => logs.push(record),
+    runAgyProcess: fakeRunner([
+      { event: 'step_update', step_update: { step_type: 'tool', tool_name: 'list_dir', state: 'ACTIVE' } },
+      { event: 'result', result: { status: 'SUCCESS', response: 'text-only response' } },
+    ], captured),
+  }))
+
+  const chunks = []
+  for await (const chunk of root.llm.stream({
+    ...request,
+    provider: 'agy-owned-runtime',
+    messages: [],
+    system: 'Reply with text.',
+    tools: [{
+      name: 'fixture',
+      description: 'fixture tool',
+      parameters: { secret: 'schema-secret-must-not-be-forwarded' },
+    }],
+  })) chunks.push(chunk)
+
+  assert.equal(chunks.find(chunk => chunk.type === 'text-delta')?.text, 'text-only response')
+  assert.equal(chunks.some(chunk => chunk.type === 'tool-call-delta'), false)
+  assert.equal(chunks.some(chunk => chunk.type === 'block-end' && chunk.block?.type === 'tool-call'), false)
+  assert.equal(Object.hasOwn(captured[0] ?? {}, 'tools'), false)
+  assert.doesNotMatch(captured[0]?.prompt ?? '', /schema-secret-must-not-be-forwarded/)
+  assert.equal(logs[0]?.toolPolicy, 'agy-owned')
+  assert.equal(logs.at(-1)?.toolSchemaCount, 1)
+  await root.fiber.dispose()
+})
+
+test('AgyAdapter fails fast on an AGY permission request under both tool policies', async () => {
+  for (const toolPolicy of ['reject', 'agy-owned']) {
+    const adapter = new AgyAdapter({ toolPolicy }, {
+      runAgyProcess: async requestValue => {
+        requestValue.onStdoutLine?.(JSON.stringify({ event: 'init', conversation_id: 'permission-test' }))
+        requestValue.onStdoutLine?.(JSON.stringify({ event: 'permission_request', permission: { kind: 'fixture' } }))
+        return result()
+      },
+    })
+    await assert.rejects(
+      async () => {
+        for await (const _chunk of adapter.stream({ ...request, messages: [], system: 'reply' })) {}
+      },
+      error => error.code === 'PERMISSION_REQUIRED',
+    )
+  }
 })
 
 test('AgyAdapter maps a process output limit to a stable provider error', async () => {

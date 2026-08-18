@@ -34,6 +34,7 @@ enabled: true
 provider: agy
 agent: deepseek-proxy
 model: gemini-3.1-pro-high
+toolPolicy: reject       # reject | agy-owned
 models:
   - id: gemini-3.1-pro-high
     name: Gemini 3.1 Pro High
@@ -50,6 +51,8 @@ modelDiscoveryTimeoutMs: 10000
 默认 `modelDiscovery: auto` 会以无 Shell 的方式执行 `agy models`，并将发现到的模型追加到显式目录之后。显式目录的顺序和 metadata 优先；发现结果只缓存在当前 Provider 进程内，默认 TTL 为 5 分钟，单次发现命令默认超时为 10 秒。设置 `modelDiscovery: off` 可恢复 0.2.0 的静态目录行为。
 
 `reasoningEffort` 是请求级字段，不写入上述 Provider 配置。可选值为 `low`、`medium`、`high`，Provider 会将其作为独立 `--effort` 参数传给 AGY；未指定时不传该参数。`temperature`、`stop` 和 `maxTokens` 仍会返回不支持错误。
+
+Provider 配置 `toolPolicy` 默认为 `reject`。只有在确认 AGY Agent 是唯一工具执行者时，才显式设置 `toolPolicy: agy-owned`；该模式忽略 DSH tool schemas，不产生 DSH tool chunks，也不会自动批准 AGY 权限请求。
 
 推荐的资源边界：
 
@@ -108,4 +111,4 @@ npm run benchmark
 
 ## 已知边界
 
-V1 不桥接 DSH tools 与 AGY 内部 tools。DSH 传入非空 `tools` 时返回 `UNSUPPORTED_TOOLS`；AGY headless 请求权限时返回 `PERMISSION_REQUIRED`。完整约束见 `docs/tool-capability-matrix.md`。
+默认不桥接 DSH tools 与 AGY 内部 tools；DSH 传入非空 `tools` 时返回 `UNSUPPORTED_TOOLS`。显式 `toolPolicy: agy-owned` 时只忽略 DSH schemas，AGY 仍独占内部 tools；AGY headless 请求权限时返回 `PERMISSION_REQUIRED`。完整约束见 `docs/tool-capability-matrix.md`。

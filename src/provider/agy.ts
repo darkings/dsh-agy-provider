@@ -50,7 +50,7 @@ import {
   usageOf,
   type AgyJsonEvent,
 } from '../agy/parser.js'
-import { configuredModels, DEFAULT_MODEL, type Config, type ModelConfig } from './config.js'
+import { configuredModels, DEFAULT_MODEL, type Config, type ModelConfig, type ToolPolicy } from './config.js'
 import { SessionRegistry, type SessionRecord } from '../session/store.js'
 import { AgyPromptError, serializeAgyPrompt, serializeAgyTurnPrompt } from './serialize.js'
 
@@ -241,6 +241,7 @@ export class AgyAdapter extends LlmAdapter {
   private readonly model: string
   private readonly models: readonly ModelConfig[]
   private readonly agent: string
+  private readonly toolPolicy: ToolPolicy
   private readonly agyPath: string | undefined
   private readonly timeoutMs: number
   private readonly run: AgyProcessRunner
@@ -260,6 +261,7 @@ export class AgyAdapter extends LlmAdapter {
     this.model = config.model ?? DEFAULT_MODEL
     this.models = configuredModels(config)
     this.agent = config.agent ?? DEFAULT_AGENT
+    this.toolPolicy = config.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject'
     this.agyPath = config.agyPath?.trim() === '' ? undefined : config.agyPath?.trim()
     this.timeoutMs = config.timeoutMs ?? 120_000
     this.run = dependencies.runAgyProcess ?? runAgyProcess
@@ -370,7 +372,8 @@ export class AgyAdapter extends LlmAdapter {
 
   override async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk, void, void> {
     if (options.signal?.aborted) throw abortError()
-    if (options.tools !== undefined && options.tools.length > 0) {
+    const toolSchemaCount = options.tools?.length ?? 0
+    if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
       throw new LlmError(
         'AGY text MVP does not accept DSH tool schemas; AGY owns tool execution in this phase',
         'UNSUPPORTED_TOOLS',
@@ -390,6 +393,8 @@ export class AgyAdapter extends LlmAdapter {
       provider: options.provider,
       model: options.model || this.model,
       agent: this.agent,
+      toolPolicy: this.toolPolicy,
+      toolSchemaCount,
       sessionId: sessionKey,
       startedAt: Date.now(),
       attempt: 1,

@@ -67,6 +67,7 @@ await writeFile(patchPath, `- id: agent-default-model
     enabled: true
     provider: agy-mock
     model: agy-mock-model
+    toolPolicy: reject
     response: ${expectedResponse}
 `, 'utf8')
 
@@ -78,7 +79,8 @@ try {
   }
   if (!config.stdout.includes('# == dsh-agy-provider')
     || !config.stdout.includes('provider: agy-mock')
-    || !config.stdout.includes('enabled: true')) {
+    || !config.stdout.includes('enabled: true')
+    || !config.stdout.includes('toolPolicy: reject')) {
     throw new Error('DSH config smoke did not activate the dsh-agy-provider mock patch')
   }
 

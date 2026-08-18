@@ -15,6 +15,8 @@ export interface Config {
   modelDiscoveryTtlMs?: number
   /** Timeout for the quota-free `agy models` command. */
   modelDiscoveryTimeoutMs?: number
+  /** Ownership policy for DSH tool schemas; AGY remains the internal tool owner. */
+  toolPolicy?: ToolPolicy
   /** AGY agent profile, for example `deepseek-proxy`. */
   agent?: string
   /** Explicit AGY executable path; empty means discover from environment/PATH. */
@@ -40,6 +42,8 @@ export interface Config {
   /** Optional delay used only by the M1 mock route. */
   delayMs?: number
 }
+
+export type ToolPolicy = 'reject' | 'agy-owned'
 
 export interface ModelConfig {
   /** Exact model id passed to AGY. */
@@ -69,6 +73,7 @@ export const Config: z<Config> = z.object({
   modelDiscovery: z.union(['auto', 'off'] as const).default('auto'),
   modelDiscoveryTtlMs: z.number().min(1_000).max(3_600_000).default(300_000),
   modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000),
+  toolPolicy: z.union(['reject', 'agy-owned'] as const).default('reject'),
   agent: z.string().default('deepseek-proxy'),
   agyPath: z.string().default(''),
   timeoutMs: z.number().min(1).max(3_600_000).default(120_000),

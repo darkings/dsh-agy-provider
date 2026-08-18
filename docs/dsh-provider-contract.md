@@ -98,7 +98,7 @@ Mock 默认关闭，实际 bundle route 为 `agy`；`agy-mock` 仅作为测试�
 - 以最终 `result.usage` 为准发出一次 usage；仅有 `totalTokens` 时暂按输入压力保守计入。
 - 将 AGY 非零退出、超时、取消、解析失败和非 `SUCCESS` 状态映射为稳定 `LlmError.code`。
 
-MVP 显式拒绝 DSH tools、image blocks、temperature、maxTokens、stop 和 reasoning effort，避免把 DSH 的工具/采样语义静默丢给 AGY。
+默认 `toolPolicy: reject` 显式拒绝非空 DSH tools、image blocks、temperature、maxTokens、stop 和未支持的采样语义，避免静默丢弃。显式 `toolPolicy: agy-owned` 时只忽略 DSH tool schemas，继续以文本 Prompt 调用 AGY；该模式不生成 DSH tool chunks，AGY 内部工具仍由 AGY 独占。
 
 ## M5 会话与上下文策略
 
@@ -113,7 +113,7 @@ MVP 显式拒绝 DSH tools、image blocks、temperature、maxTokens、stop 和 r
 
 ## M6 工具边界
 
-V1 选择 AGY 自治 Agent。`GenerateOptions.tools` 非空时适配器在启动进程前返回 `UNSUPPORTED_TOOLS`；AGY 自己产生的 `step_type=tool` 事件不转换成 DSH `tool-call-delta`。检测到 `permission_request` 或 permission step 时，适配器终止子进程并返回 `PERMISSION_REQUIRED`，避免 headless 调用永久等待。完整矩阵见 `docs/tool-capability-matrix.md`。
+V1 选择 AGY 自治 Agent。默认 `toolPolicy: reject` 时 `GenerateOptions.tools` 非空在启动进程前返回 `UNSUPPORTED_TOOLS`；显式 `toolPolicy: agy-owned` 时忽略这些 schema，但 AGY 自己产生的 `step_type=tool` 事件仍不转换成 DSH `tool-call-delta`。检测到 `permission_request` 或 permission step 时，适配器终止子进程并返回 `PERMISSION_REQUIRED`，避免 headless 调用永久等待。完整矩阵见 `docs/tool-capability-matrix.md`。
 
 ## M7 配置与可观测性
 
@@ -121,6 +121,6 @@ Adapter 使用 `minimumAgyVersion`、`maxConcurrent`、`maxQueue` 和 `queueTime
 
 `Config.models` 提供显式模型目录，条目包含必填的精确 `id`，以及可选的 `name`、`description` 和 `contextWindow`。`Config.model` 仍兼容 0.1.0，并作为默认/回退条目；目录按 `id` 去重，未配置但由请求方明确传入的模型 ID 不会被静默改写。`diagnoseProvider()` 和 `npm run diagnose -- --json` 使用 `schemaVersion: 1` 返回插件、Node.js、DSH、AGY、Agent、配置和模型目录状态，并将诊断标记为 `quotaUsed: false`。
 
-请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间、最终 AGY `status`、`eventCount`、固定类别计数以及工具/权限事件计数。日志发送前会脱敏字符串，并且不包含 Prompt、stderr、环境变量、AGY 路径、工具参数或凭据。
+请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间、最终 AGY `status`、`eventCount`、固定类别计数、工具/权限事件计数、`toolPolicy` 和 `toolSchemaCount`。日志发送前会脱敏字符串，并且不包含 Prompt、stderr、环境变量、AGY 路径、工具参数或凭据。
 
 V2-M3 使用稳定错误分类：认证 `AUTH`、额度 `QUOTA`、速率限制 `RATE_LIMIT`、未知模型 `MODEL_NOT_FOUND`、Agent 缺失 `AGY_AGENT_MISSING`、上下文超限 `CONTEXT_WINDOW_EXCEEDED`，以及现有的 `PERMISSION_REQUIRED`、`TIMEOUT`、`ABORTED`、`AGY_PARSE`、`AGY_OUTPUT_LIMIT`、`AGY_STATUS` 和 `AGY_EXIT`。分类只基于有界的 AGY status/stderr/error event detail；未知文本保留 fallback code。

@@ -13,11 +13,17 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.equal(config.modelDiscovery, 'auto')
   assert.equal(config.modelDiscoveryTtlMs, 300_000)
   assert.equal(config.modelDiscoveryTimeoutMs, 10_000)
+  assert.equal(config.toolPolicy, 'reject')
   assert.throws(() => Config({ maxConcurrent: 0 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ minimumAgyVersion: 'latest' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ modelDiscovery: 'invalid' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ modelDiscoveryTtlMs: 999 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ modelDiscoveryTimeoutMs: 99 }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ toolPolicy: 'bridge' }), error => error.name === 'ValidationError')
+})
+
+test('Config accepts the explicit AGY-owned tool policy', () => {
+  assert.equal(Config({ toolPolicy: 'agy-owned' }).toolPolicy, 'agy-owned')
 })
 
 test('Config accepts a multi-model catalog and preserves the legacy model fallback', () => {

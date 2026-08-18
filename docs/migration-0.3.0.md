@@ -1,6 +1,6 @@
 # 0.3.0 迁移说明
 
-当前仓库正在实施 0.3.0，npm `latest` 仍为 `0.2.0`。本页记录已经落地的 V3-M1 行为，后续里程碑完成后会继续补充。
+当前仓库正在实施 0.3.0，npm `latest` 仍为 `0.2.0`。本页记录已经落地的 V3-M1/V3-M2 行为以及 V3-M3 工具策略，后续里程碑完成后会继续补充。
 
 ## 动态模型发现
 
@@ -62,5 +62,19 @@ Provider 不把 effort 拼进 Prompt 或 shell 字符串。非法值返回稳定
 
 - 0.2.0 的 `model`、`models`、`agent`、`agyPath` 和会话配置保持兼容。
 - 动态目录刷新发生在 `listModels()`；如果 DSH UI 已缓存模型选择器，需要重新加载 profile。
-- 显式 `toolPolicy: agy-owned` 和持久 stream transport 尚未实施；V3-M2 只增加 reasoning 控制参数映射，不实现 `reasoning-delta` 输出桥接。
+- `toolPolicy` 默认是 `reject`，与 0.2.0 一致；显式 `toolPolicy: agy-owned` 时忽略 DSH tool schemas，不生成 DSH tool chunks，AGY 继续作为唯一工具执行者。
+- 两种策略都不自动批准 AGY 权限请求；检测到权限事件立即返回 `PERMISSION_REQUIRED`。持久 stream transport 尚未实施；V3-M2 只增加 reasoning 控制参数映射，不实现 `reasoning-delta` 输出桥接。
 - 当前版本不新增真实模型请求，因此模型发现验证不计入 AGY 模型额度预算。
+
+## AGY-owned 工具策略（V3-M3）
+
+0.3.0 新增显式配置：
+
+```yaml
+toolPolicy: reject       # 默认；非空 DSH tools 返回 UNSUPPORTED_TOOLS
+# toolPolicy: agy-owned  # 仅在 AGY 独占工具执行时启用
+```
+
+启用 `agy-owned` 后，Provider 不把 DSH `tools` schema 转换为 AGY 参数，也不把 AGY 内部工具事件转换为 DSH `tool-call-delta` 或 tool block；它只继续发送文本 system/messages。这样不会形成两个 Agent loop，但也意味着模型不会按 DSH tool 协议调用这些 schema。日志只记录策略和值数量（`toolPolicy`、`toolSchemaCount`），不记录参数。
+
+该策略不是权限绕过开关。AGY 产生 `permission_request`、`ask_permission` 或 permission step 时，两种配置都立即终止并返回 `PERMISSION_REQUIRED`，Provider 不会自动传入 `--dangerously-skip-permissions`。

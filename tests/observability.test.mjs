@@ -19,6 +19,7 @@ test('AgyAdapter emits redacted structured lifecycle metadata', async () => {
   const adapter = new AgyAdapter({
     model: 'gemini-test',
     agent: 'deepseek-proxy',
+    toolPolicy: 'agy-owned',
   }, {
     logger: record => logs.push(record),
     runAgyProcess: async request => {
@@ -41,11 +42,14 @@ test('AgyAdapter emits redacted structured lifecycle metadata', async () => {
     model: 'gemini-test',
     system: promptSecret,
     messages: [{ role: 'user', content: [{ type: 'text', text: promptSecret }] }],
+    tools: [{ name: 'fixture', description: 'fixture', parameters: { secret: promptSecret } }],
   })) {}
 
   assert.deepEqual(logs.map(log => log.event), ['agy.request.started', 'agy.request.completed'])
   const completed = logs[1]
   assert.equal(completed.provider, 'agy-test')
+  assert.equal(completed.toolPolicy, 'agy-owned')
+  assert.equal(completed.toolSchemaCount, 1)
   assert.equal(completed.conversationId, 'conversation-safe')
   assert.equal(completed.eventCount, 3)
   assert.equal(completed.toolEventCount, 1)

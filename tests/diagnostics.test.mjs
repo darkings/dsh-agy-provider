@@ -111,6 +111,7 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
   assert.equal(resultValue.dsh.llmContractVersion, '0.1.0-rc.7')
   assert.deepEqual(resultValue.models.map(model => model.id), ['gemini-flash', 'gemini-default'])
   assert.equal(resultValue.configuration.modelDiscovery, 'auto')
+  assert.equal(resultValue.configuration.toolPolicy, 'reject')
   assert.equal(resultValue.modelCatalog.source, 'fallback')
   assert.equal(resultValue.modelCatalog.stale, true)
   assert.equal(resultValue.modelCatalog.warning, 'AGY model discovery returned no usable models')

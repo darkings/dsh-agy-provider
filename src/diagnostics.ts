@@ -13,7 +13,13 @@ import {
   type ModelDiscoverySource,
 } from './agy/models.js'
 import { redactText } from './agy/redact.js'
-import { Config as ConfigSchema, configuredModels, type Config, type ModelConfig } from './provider/config.js'
+import {
+  Config as ConfigSchema,
+  configuredModels,
+  type Config,
+  type ModelConfig,
+  type ToolPolicy,
+} from './provider/config.js'
 
 const require = createRequire(import.meta.url)
 
@@ -87,6 +93,7 @@ export interface ProviderDiagnosticResult {
     agent: string
     defaultModel: string
     modelDiscovery: 'auto' | 'off'
+    toolPolicy: ToolPolicy
     sessionMode: 'resume' | 'full'
     enabled: boolean
   }
@@ -229,6 +236,7 @@ export async function diagnoseProvider(
       agent: config.agent ?? 'deepseek-proxy',
       defaultModel: config.model ?? models[0]?.id ?? 'unknown',
       modelDiscovery: config.modelDiscovery === 'off' ? 'off' : 'auto',
+      toolPolicy: config.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject',
       sessionMode: config.sessionMode === 'resume' ? 'resume' : 'full',
       enabled: config.enabled === true,
     },

@@ -11,10 +11,10 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 64 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 66 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现和 V3-M2 `reasoningEffort → --effort` 已落地，等待后续里程碑完成后统一发布；显式 AGY-owned 工具策略仍待实施。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
+`0.3.0` 正在实施。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort` 和 V3-M3 显式 AGY-owned 工具策略已进入实现与验证阶段，等待后续里程碑完成后统一发布。持久 stream transport 仅在隔离与收益实验通过后作为可选实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.3.0 迁移说明](docs/migration-0.3.0.md)。
 
 当前 M4 文本 MVP 支持：
 
@@ -33,17 +33,17 @@
 
 当前 M6 工具边界：
 
-- V1 采用“AGY 自治 Agent + DSH 文本外壳”。
-- DSH 传入非空 `tools` 时立即返回 `UNSUPPORTED_TOOLS`。
+- 默认 `toolPolicy: reject`，DSH 传入非空 `tools` 时仍立即返回 `UNSUPPORTED_TOOLS`，保持 0.2.0 行为。
+- 显式设置 `toolPolicy: agy-owned` 时忽略 DSH tool schemas，只把文本上下文交给 AGY；schema 不会按 DSH 工具协议发送给模型。
 - AGY 内部工具由 AGY 独占执行，不转换为 DSH tool calls。
-- 检测到权限请求时立即终止并返回 `PERMISSION_REQUIRED`，避免 headless 无限等待。
+- 两种策略检测到权限请求时都立即终止并返回 `PERMISSION_REQUIRED`，不会自动批准或加入 `--dangerously-skip-permissions`。
 
 当前 M7 配置、安全和可观测性：
 
 - 配置默认 `maxConcurrent: 4`、`maxQueue: 32`、`queueTimeoutMs: 30000`，超出后分别返回 `QUEUE_FULL` 或 `QUEUE_TIMEOUT`。
 - `npm run diagnose` 只执行 `agy --version`、`agy agents` 和 `agy models`，检查路径、最低版本、配置 Agent 和模型目录，不消耗模型额度，也不执行工具。
-- AGY 请求日志通过 Cordis `ctx.logger` 输出结构化 JSON 元数据，包含 request ID、conversation ID、耗时、退出码和事件计数。
-- V2-M3 日志增加固定事件类别计数和最终 AGY status；内部工具/权限只计数，不输出工具参数或原始事件 payload。
+- AGY 请求日志通过 Cordis `ctx.logger` 输出结构化 JSON 元数据，包含 request ID、conversation ID、耗时、退出码、事件计数、`toolPolicy` 和 DSH schema 数量。
+- V2-M3 日志增加固定事件类别计数和最终 AGY status；V3-M3 只记录工具策略与 schema 数量，不输出工具参数或原始事件 payload。
 - 日志采用白名单字段并再次脱敏，不包含 Prompt、stderr 原文、环境变量、可执行文件路径或凭据。
 
 当前 V2-M3 事件与错误兼容：
@@ -55,7 +55,7 @@
 当前 M8 测试、兼容性和性能：
 
 - Parser 和 Process Adapter 有单条事件/总输出上限，恶意超长输出返回 `LINE_TOO_LONG` 或 `AGY_OUTPUT_LIMIT`。
-- 已覆盖 shell metacharacters 参数注入回归、配置边界、版本兼容、权限/工具事件和限流行为。
+- 已覆盖 shell metacharacters 参数注入回归、配置边界、版本兼容、两种工具策略下的权限/工具事件和限流行为。
 - `npm run benchmark` 提供不调用 AGY 的 Parser、serializer 和 limiter 基线，结果记录在 [性能基线](docs/performance-baseline.md)。
 - AGY/DSH 的已验证组合记录在 [兼容性矩阵](docs/compatibility-matrix.md)。
 - V2-M4 CI 已覆盖 Windows、Ubuntu、macOS 与 Node.js 20/22/24；timeout/abort 使用父子 Node 进程 fixture 验证整棵进程树退出。
@@ -66,9 +66,15 @@
 - 请求级 `reasoningEffort` 经过白名单校验后，以独立 `--effort <value>` argv 传给 AGY。
 - 未指定 effort 时不传入 `--effort`；非法值在启动 AGY 前返回 `UNSUPPORTED_REASONING_EFFORT`。
 
+当前 V3-M3 AGY-owned 工具策略：
+
+- `toolPolicy` 默认值为 `reject`；不配置时与 0.2.0 完全一致。
+- `toolPolicy: agy-owned` 只改变 DSH schema 的入口策略，不建立 DSH ↔ AGY 双向工具桥；AGY 仍是唯一工具执行者。
+- 日志只保留 `toolPolicy` 和 `toolSchemaCount`，不会记录 schema 参数、Prompt、stderr 或凭据。
+
 当前明确不支持：
 
-- DSH `tools`、图像内容、采样参数、`temperature`、`stop` 和 `maxTokens`。
+- DSH tool-call bridge、图像内容、采样参数、`temperature`、`stop` 和 `maxTokens`；显式 `toolPolicy: agy-owned` 仅允许忽略 DSH schemas，不产生 DSH tool chunks。
 - 会跨插件进程重启持久化的 AGY Conversation 映射；重启后会使用完整 DSH 历史降级创建新会话。
 - `--continue` 自动选择的最近会话；为避免多个 DSH Session 串话，Provider 不使用它。
 
@@ -133,6 +139,7 @@ enabled: true
 provider: agy
 agent: deepseek-proxy
 model: gemini-3.1-pro-high
+toolPolicy: reject       # reject | agy-owned
 models:
   - id: gemini-3.1-pro-high
     name: Gemini 3.1 Pro High
@@ -156,6 +163,8 @@ modelDiscoveryTimeoutMs: 10000
 `modelDiscovery: auto` 是默认值。Provider 会以无 Shell 的方式执行 `agy models`，将动态目录中未配置的模型补到显式目录之后；显式 `models` 的顺序、名称和其他 metadata 优先。发现结果只保存在进程内，默认 TTL 为 5 分钟，单次命令默认超时为 10 秒。设置 `modelDiscovery: off` 可完全恢复 0.2.0 的静态目录行为。
 
 `reasoningEffort` 是请求级能力，不是 Provider 配置项。可选值为 `low`、`medium`、`high`；未指定时保持 AGY/模型自身默认值，`temperature`、`stop` 和 `maxTokens` 仍会被拒绝。
+
+`toolPolicy` 是 Provider 配置项，默认 `reject`。只有确认由 AGY Agent 独占工具执行时才设置 `agy-owned`；此时 DSH `tools` 仅作为上游已携带的 schema 元数据被忽略，文本上下文仍按原路径交给 AGY，AGY 内部工具事件不会转换为 DSH tool chunks。
 
 在项目目录执行：
 

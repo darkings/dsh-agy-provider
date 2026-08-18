@@ -1,6 +1,7 @@
 import type { ProcessResult, ProcessTermination } from './process.js'
 import { redactText } from './redact.js'
 import type { AgyEventCategoryCounts } from './parser.js'
+import type { ToolPolicy } from '../provider/config.js'
 
 export type AgyLogEvent =
   | 'agy.request.started'
@@ -13,6 +14,8 @@ export interface AgyLogRecord {
   provider: string
   model: string
   agent: string
+  toolPolicy: ToolPolicy
+  toolSchemaCount: number
   attempt: number
   eventCount: number
   toolEventCount: number
@@ -36,6 +39,8 @@ export interface AgyTelemetry {
   readonly provider: string
   readonly model: string
   readonly agent: string
+  readonly toolPolicy: ToolPolicy
+  readonly toolSchemaCount: number
   readonly sessionId: string | undefined
   readonly startedAt: number
   durationMs: number | undefined
@@ -57,6 +62,8 @@ function baseRecord(telemetry: AgyTelemetry): AgyLogRecord {
     provider: telemetry.provider,
     model: telemetry.model,
     agent: telemetry.agent,
+    toolPolicy: telemetry.toolPolicy,
+    toolSchemaCount: telemetry.toolSchemaCount,
     attempt: telemetry.attempt,
     eventCount: telemetry.eventCount,
     toolEventCount: telemetry.toolEventCount,

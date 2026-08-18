@@ -9,6 +9,7 @@
 | macOS | `macos-latest` | 通过无额度验证 | V2-M4 GitHub Actions typecheck/test/pack/benchmark |
 | Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | V2-M4 GitHub Actions 矩阵 |
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
+| DSH tools policy | `reject` 默认；显式 `agy-owned` | 通过无额度验证 | 官方 DSH runtime schema、工具事件、权限 fail-fast 和日志白名单测试 |
 | AGY | `1.1.13` | 通过 | M0–M6 真实文本、会话和工具采样 |
 | AGY | `1.1.14` | 通过诊断与动态目录发现 | `npm run diagnose -- --json`；版本、Agent 和 `agy models` 检查通过，实测发现 14 个模型 |
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
@@ -31,7 +32,7 @@
 | `result` | 读取 `status`、最终 response 和 usage |
 | `checkpoint`、`agent_response`、未知事件 | 保留并按固定类别计数，不静默转换为 DSH tool call |
 | `error`、`error_message` | 提取有界分类 detail；不记录原始 payload |
-| 工具事件 | 只累计 `tool` 类别和工具计数，不产生 DSH tool chunk |
+| 工具事件 | 只累计 `tool` 类别和工具计数，不产生 DSH tool chunk；`toolPolicy` 不改变 AGY 唯一所有权 |
 | permission event | 终止 headless 请求并返回 `PERMISSION_REQUIRED` |
 
 ## 稳定错误分类

@@ -6,5 +6,6 @@
         enabled: false
         provider: agy
         model: gemini-3.1-pro-high
+        toolPolicy: reject
         agent: deepseek-proxy
         sessionMode: full

@@ -7,7 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { AgyAdapter } from './provider/agy.js'
 import { Config as ConfigSchema, type Config as ConfigType } from './provider/config.js'
-import type { ModelConfig } from './provider/config.js'
+import type { ModelConfig, ToolPolicy } from './provider/config.js'
 import { MockAdapter } from './provider/mock.js'
 
 export const name = 'dsh-agy-provider'
@@ -18,7 +18,7 @@ export { AgyAdapter, MockAdapter }
 export { AgyModelDiscovery, mergeModelCatalog, parseAgyModels } from './agy/models.js'
 export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
-export type { ConfigType, ModelConfig }
+export type { ConfigType, ModelConfig, ToolPolicy }
 export interface Config extends ConfigType {}
 
 export function apply(ctx: Context, config: ConfigType): void {

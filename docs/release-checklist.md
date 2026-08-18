@@ -8,6 +8,7 @@
 - [x] GitHub Actions CI 覆盖 Node.js 20/24 和 Windows runner。
 - [x] 包内容只包含 `lib`、`cordis.patch.yml`、README 和 package metadata，不包含本机日志、凭据或测试会话。
 - [x] `package.json` 已设置公开发布：`private: false`、`publishConfig.access: public`。
+- [x] 已执行 `npm publish --access public`，`dsh-agy-provider@0.1.0` 已发布到 npm，`latest` 指向 `0.1.0`。
 
 ## 发布后人工复验
 

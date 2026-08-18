@@ -4,14 +4,14 @@
 
 ## 当前状态
 
-项目已完成 M1–M5 的最小闭环，当前以 Windows 11、AGY `1.1.13` 为开发基线：
+项目已完成 M1–M6 的最小闭环，当前以 Windows 11、AGY `1.1.13` 为开发基线：
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 26 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 28 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 
 当前 M4 文本 MVP 支持：
 
@@ -27,6 +27,13 @@
 - `sessionMode: resume`：后续请求使用显式 `--conversation <id>`，只发送上次 assistant 之后的新消息。
 - 同一 Session 串行，不同 Session 并发。
 - AGY conversation ID 失效时自动改用完整 DSH 历史重试。
+
+当前 M6 工具边界：
+
+- V1 采用“AGY 自治 Agent + DSH 文本外壳”。
+- DSH 传入非空 `tools` 时立即返回 `UNSUPPORTED_TOOLS`。
+- AGY 内部工具由 AGY 独占执行，不转换为 DSH tool calls。
+- 检测到权限请求时立即终止并返回 `PERMISSION_REQUIRED`，避免 headless 无限等待。
 
 当前明确不支持：
 

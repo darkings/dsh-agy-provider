@@ -6,7 +6,7 @@
 
 ## 当前阶段
 
-阶段 5：M6 工具能力边界
+阶段 5：M7 配置、安全和可观测性
 
 ## 各阶段
 
@@ -72,7 +72,12 @@
   - [x] 实现同一 Session 串行锁和跨 Session 并发
   - [x] 实现恢复失败时的完整上下文重试
   - [x] 增加会话新建、恢复、删除、崩溃/降级测试
-- [ ] M6：确认并实现工具能力边界
+- [x] M6：确认并实现工具能力边界
+  - [x] 采集 AGY tool step、错误和权限相关事件样本
+  - [x] 建立 DSH/AGY 工具能力矩阵
+  - [x] 决定 V1 采用 AGY 自治 Agent + DSH 文本外壳
+  - [x] 防止 DSH 与 AGY 重复执行工具
+  - [x] 对 headless 权限请求返回稳定错误并终止子进程
 - [ ] M7：配置、安全和可观测性
 - [ ] M8：测试、兼容性和性能
 - [ ] M9：打包并发布 `0.1.0`
@@ -99,6 +104,8 @@
 | 插件按 bundle 发布 | 官方 `dsh plugin` 只会激活声明 `dsh.bundle` 的 npm 包 |
 | 默认使用 `sessionMode: full` | 实测两轮样本中完整 DSH 历史的 `inputTokens=4490`，AGY resume 第二轮为 `9385`；DSH history 是当前更可控的 quota 成本 |
 | `sessionMode: resume` 保留为显式选项 | AGY conversation 能保留上下文，但 `--continue` 会按最近会话选择，不适合多 Session |
+| V1 由 AGY 独占工具执行 | DSH `tools` 与 AGY 内置工具可能形成双 Agent loop；Provider 拒绝 DSH tools，AGY 工具事件不转换为 DSH tool call |
+| headless 权限请求快速失败 | 没有可交互审批 UI 时等待会造成无限挂起；返回 `PERMISSION_REQUIRED` 并终止 AGY |
 
 ## 遇到的错误
 

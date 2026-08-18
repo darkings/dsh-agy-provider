@@ -175,7 +175,7 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 - 两个 DSH Session 使用不同映射；同一 Session 有串行锁，不同 Session 可并行。
 - resume ID 不存在或 AGY 返回不同 ID 时，放弃该次 resume 输出，自动使用完整 DSH history 重试一次。
 
-### M6：工具调用能力决策与实现（预计 2–3 个开发日）
+### M6：工具调用能力决策与实现（已完成；预计 2–3 个开发日）
 
 任务：
 
@@ -185,11 +185,12 @@ DSH 是 Agent 编排层，AGY 也可能执行自己的 Agent loop。两套工具
 4. 防止 DSH 和 AGY 同时执行同一个工具调用。
 5. 为不支持的工具能力提供清晰错误，而不是伪装成功。
 
-验收标准：
+当前验收结果：
 
-- 工具执行所有权只有一个。
-- 权限询问不会让 headless 子进程无限挂起。
-- 重试不会重复执行有副作用的工具。
+- V1 工具执行所有权归 AGY；DSH `tools` 进入 Provider 时直接返回 `UNSUPPORTED_TOOLS`。
+- 检测到 permission event 时终止子进程并返回 `PERMISSION_REQUIRED`，不会无限等待。
+- AGY tool lifecycle 不转换为 DSH tool call，避免重试层重复执行副作用工具。
+- 完整能力矩阵见 `docs/tool-capability-matrix.md`。
 
 ### M7：配置、安全和可观测性（预计 1–2 个开发日）
 

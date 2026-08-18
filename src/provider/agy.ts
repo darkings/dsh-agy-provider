@@ -17,6 +17,7 @@ import {
   AgyParserError,
   AgyStreamParser,
   conversationIdOf,
+  isPermissionEvent,
   responseOf,
   statusOf,
   textDeltaOf,
@@ -310,6 +311,7 @@ export class AgyAdapter extends LlmAdapter {
     let finalStatus: string | undefined
     let finalUsage: Record<string, unknown> | undefined
     let conversationMismatch = false
+    let permissionRequested = false
 
     try {
       for await (const event of queue) {
@@ -323,6 +325,11 @@ export class AgyAdapter extends LlmAdapter {
           if (sessionKey !== undefined) this.sessions.set(sessionKey, observedConversationId)
         }
         if (conversationMismatch) continue
+        if (isPermissionEvent(event)) {
+          permissionRequested = true
+          controller.abort()
+          continue
+        }
 
         const delta = textDeltaOf(event)
         if (delta !== undefined && delta.length > 0) {
@@ -354,6 +361,12 @@ export class AgyAdapter extends LlmAdapter {
     }
 
     if (conversationMismatch) return { retryWithFullPrompt: true }
+    if (permissionRequested) {
+      throw new LlmError(
+        'AGY requested interactive permission; headless Provider cannot approve it',
+        'PERMISSION_REQUIRED',
+      )
+    }
 
     const failure = result === undefined ? new LlmError('AGY process did not return a result', 'AGY_PROCESS') : processFailure(result)
     if (failure !== undefined) throw failure

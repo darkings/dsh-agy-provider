@@ -101,6 +101,43 @@ export function conversationIdOf(event: AgyJsonEvent): string | undefined {
     : undefined
 }
 
+function stepUpdateOf(event: AgyJsonEvent): Record<string, unknown> | undefined {
+  return event.event === 'step_update' ? nestedRecord(event, 'step_update') : undefined
+}
+
+/** Return AGY's step type without constraining future event payloads. */
+export function stepTypeOf(event: AgyJsonEvent): string | undefined {
+  const update = stepUpdateOf(event)
+  return typeof update?.step_type === 'string' ? update.step_type : undefined
+}
+
+/** Extract the advisory tool name from a step update, when present. */
+export function toolNameOf(event: AgyJsonEvent): string | undefined {
+  const update = stepUpdateOf(event)
+  if (typeof update?.tool_name === 'string') return update.tool_name
+  return typeof update?.name === 'string' ? update.name : undefined
+}
+
+/** Recognize internal AGY tool lifecycle events without mapping them to DSH tools. */
+export function isToolEvent(event: AgyJsonEvent): boolean {
+  const stepType = stepTypeOf(event)
+  return event.event === 'tool_call'
+    || event.event === 'tool_result'
+    || stepType === 'tool'
+    || toolNameOf(event) !== undefined
+}
+
+/** Recognize permission checkpoints that cannot be answered by a headless Provider. */
+export function isPermissionEvent(event: AgyJsonEvent): boolean {
+  const stepType = stepTypeOf(event)
+  return event.event === 'permission_request'
+    || event.event === 'ask_permission'
+    || stepType === 'permission'
+    || stepType === 'permission_request'
+    || stepType === 'ask_permission'
+    || toolNameOf(event) === 'ask_permission'
+}
+
 /** Extract a text delta from the observed AGY step_update envelope. */
 export function textDeltaOf(event: AgyJsonEvent): string | undefined {
   if (event.event !== 'step_update') return undefined

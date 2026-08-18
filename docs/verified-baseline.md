@@ -89,3 +89,9 @@ Node.js `spawn()` 实测结果：
 - 不存在的 conversation ID 会输出 warning，然后创建新的 `init.conversation_id`。
 - Provider 默认 `sessionMode: full`；`sessionMode: resume` 才使用显式 `--conversation`。
 - 真实两轮成本样本：full `inputTokens=4490`；resume 第二轮 `inputTokens=9385`。该结果只代表当前 AGY/Agent/提示条件，后续长会话仍需重新测量。
+
+## 工具事件实测（M6）
+
+- 只读工具请求曾输出 `step_update.step_type=tool`，状态从 `ACTIVE` 到 `ERROR`，随后出现 `checkpoint`、`agent_response` 和 `error_message`。
+- 默认权限模式下另一次只读工具请求未在超时前完成交互，说明 headless Provider 不能等待人工审批。
+- Provider 因此不桥接 AGY tool call；DSH tools 直接拒绝，权限事件快速失败。

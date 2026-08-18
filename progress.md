@@ -128,9 +128,9 @@
   - `README.md`
   - `docs/dsh-provider-contract.md`
 
-### 下一阶段：M5 会话与上下文策略
+### M5 会话与上下文策略总结
 
-- **状态：** in_progress
+- **状态：** complete
 - 已验证 AGY 1.1.13 支持 `--conversation <id>` 和 `--continue`；不存在的 conversation ID 会 warning 后创建新 ID。
 - 已决定 Provider 使用显式 `--conversation`，不使用全局 `--continue`，避免多个 DSH Session 串话。
 - 待执行：实现映射、同 Session 串行锁、恢复失败完整上下文降级和测试。
@@ -162,10 +162,29 @@
   - `docs/development-plan.md`
   - `docs/dsh-provider-contract.md`
 
-### 下一阶段：M6 工具能力边界
+### 阶段 10：M6 工具能力边界
+
+- **状态：** complete
+- 结果：V1 采用 AGY 自治 Agent + DSH 文本外壳；DSH tools 显式拒绝，AGY 内部工具不转换为 DSH tool call。
+- 执行的操作：
+  - 使用只读 `list_dir`/`run_command` 指令采样 AGY headless 工具行为。
+  - 观察到真实 `step_type=tool` 的 `ACTIVE → ERROR` 生命周期，以及后续 `checkpoint`、`agent_response` 和 `error_message`。
+  - 增加工具/权限事件分类器；权限请求会主动终止 AGY 并返回 `PERMISSION_REQUIRED`。
+  - 固化 DSH/AGY 工具能力矩阵和唯一执行所有者规则。
+  - 保留 DSH `tools` 的 `UNSUPPORTED_TOOLS` 防线，避免双重 Agent loop。
+- 创建/修改的文件：
+  - `src/agy/parser.ts`
+  - `src/provider/agy.ts`
+  - `tests/parser.test.mjs`
+  - `tests/agy-provider.test.mjs`
+  - `docs/tool-capability-matrix.md`
+  - `README.md`
+  - `docs/dsh-provider-contract.md`
+
+### 下一阶段：M7 配置、安全和可观测性
 
 - **状态：** pending
-- 计划：采集 AGY 工具/权限事件样本，决定 AGY 自治 Agent 与 DSH tools 的唯一执行所有者。
+- 计划：增加配置诊断、版本检查、脱敏日志、并发上限和可观测事件计数。
 
 ## 测试结果
 
@@ -174,7 +193,7 @@
 | AGY Agent 枚举 | `agy agents` | 出现 `deepseek-proxy` | 已出现 | 通过 |
 | AGY stream-json | 最小 `123` Prompt | 逐行 JSON 并成功结束 | `SUCCESS`，返回 `123` | 通过 |
 | Node.js spawn | 直接启动 `agy.exe` | 退出码 0、无解析错误 | 5 个事件、0 个解析错误 | 通过 |
-| 项目配置 | `npm run typecheck && npm run build && npm test` | 配置有效 | 全部退出码 0，26 个测试通过 | 通过 |
+| 项目配置 | `npm run typecheck && npm run build && npm test` | 配置有效 | 全部退出码 0，28 个测试通过 | 通过 |
 | GitHub 发布 | 创建并推送仓库 | 远程默认分支可访问 | 私有仓库已创建，默认分支为 `main` | 通过 |
 | 远端 ref | `git ls-remote --heads origin main` | 与本地提交一致 | 已返回远端 `main` commit | 通过 |
 | 官方 DSH 源码 | `deepseek-ai/deepseek-harness` | 找到 Provider 与 bundle 契约 | revision `99f6f02` 已读取 | 通过 |
@@ -189,6 +208,8 @@
 | M5 same-session resume | 同一 `sessionId` 两轮真实 AGY | 第二轮恢复首轮上下文 | 两轮均返回 `7\n`，conversation ID 一致 | 通过 |
 | M5 full/resume cost | 相同两轮上下文的 usage 对照 | 选择更可控默认策略 | full `4490` vs resume 第二轮 `9385` input tokens | 通过 |
 | M5 concurrency | 同/不同 Session Fake runner | 同 Session 不重入，不同 Session 可并发 | 26 个测试全部通过 | 通过 |
+| M6 tool lifecycle | 真实 AGY `step_type=tool` 样本 | 工具事件不进入 DSH tool loop | 已观察 `ACTIVE → ERROR`，矩阵已固化 | 通过 |
+| M6 permission guard | Fake `permission_request` event | headless 不无限等待 | 返回 `PERMISSION_REQUIRED`，28 个测试通过 | 通过 |
 | AGY conversation resume | 首轮创建 ID，随后 `--conversation <id>` | 第二轮保留首轮上下文 | 返回首轮数字 `1` | 通过 |
 | AGY continue | `--continue` | 继续最近会话 | conversation ID 与上一轮一致，返回 `3` | 通过 |
 | AGY invalid conversation | 不存在的 `--conversation <id>` | warning 并创建新会话 | 已观察 warning 和新 conversation ID | 通过 |
@@ -202,16 +223,17 @@
 | 2026-08-18 | Parser fixture 的单引号字符串转义导致 JS 语法错误 | 1 | 改用 template literal，随后 19 个测试全部通过 |
 | 2026-08-18 | `sessionMode` schema 的宽泛 string 与字面量联合类型不兼容 | 1 | 使用 `z.union(['resume', 'full'] as const)` |
 | 2026-08-18 | exact optional property 不允许显式传 `system: undefined` | 1 | 序列化 turn 时省略可选字段 |
+| 2026-08-18 | AGY headless 工具请求未稳定暴露完整 permission payload | 2 | 不做工具桥接；权限事件分类后快速失败，等待 M7 再接入诊断 |
 
 ## 五问重启检查
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 产品阶段 M5 已完成，默认上下文策略已确定 |
-| 我要去哪里？ | 进入 M6，采集工具/权限事件并确定工具执行所有权 |
+| 我在哪里？ | 产品阶段 M6 已完成，工具所有权已确定 |
+| 我要去哪里？ | 进入 M7，完善配置、安全和可观测性 |
 | 目标是什么？ | 建立本地与 GitHub 的 `dsh-agy-provider` 项目并固化开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
-| 我做了什么？ | 完成 M1–M5 的实现、真实验证和成本对照，见上方记录 |
+| 我做了什么？ | 完成 M1–M6 的实现、真实验证和工具边界记录，见上方记录 |
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

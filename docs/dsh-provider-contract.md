@@ -110,3 +110,7 @@ MVP 显式拒绝 DSH tools、image blocks、temperature、maxTokens、stop 和 r
 - `sessionMode: resume`：首轮创建并记录 conversation ID，后续调用 `--conversation <id>`，只发送上次 assistant 之后的消息。
 
 恢复 ID 如果不存在，AGY 会 warning 后创建新 ID。适配器通过 `init.conversation_id` 检测不一致，丢弃该次 resume 输出并用完整 DSH history 重试一次。映射是进程内的；插件重启后不伪造旧 ID，而是使用完整历史创建新会话。
+
+## M6 工具边界
+
+V1 选择 AGY 自治 Agent。`GenerateOptions.tools` 非空时适配器在启动进程前返回 `UNSUPPORTED_TOOLS`；AGY 自己产生的 `step_type=tool` 事件不转换成 DSH `tool-call-delta`。检测到 `permission_request` 或 permission step 时，适配器终止子进程并返回 `PERMISSION_REQUIRED`，避免 headless 调用永久等待。完整矩阵见 `docs/tool-capability-matrix.md`。

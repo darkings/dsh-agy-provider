@@ -82,6 +82,22 @@ test('AgyAdapter rejects DSH tools in the text-only MVP', async () => {
   )
 })
 
+test('AgyAdapter fails fast on an AGY permission request', async () => {
+  const adapter = new AgyAdapter({}, {
+    runAgyProcess: async request => {
+      request.onStdoutLine?.(JSON.stringify({ event: 'init', conversation_id: 'permission-test' }))
+      request.onStdoutLine?.(JSON.stringify({ event: 'permission_request', permission: { kind: 'fixture' } }))
+      return result()
+    },
+  })
+  await assert.rejects(
+    async () => {
+      for await (const _chunk of adapter.stream({ ...request, messages: [], system: 'reply' })) {}
+    },
+    error => error.code === 'PERMISSION_REQUIRED',
+  )
+})
+
 test('AgyAdapter registers and streams through the official DSH LLM runtime', async () => {
   const root = new Context()
   await root.plugin(LlmRuntime)

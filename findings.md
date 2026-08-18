@@ -44,6 +44,10 @@
 - 真实 M5 两轮验证中，同一 DSH Session 两轮均返回 `7\n`，证明显式 `--conversation` 恢复了首轮上下文。
 - 相同两轮样本的 quota 对照：`sessionMode: full` 的完整 DSH history 请求 `inputTokens=4490`；`sessionMode: resume` 的第二轮 `inputTokens=9385`。因此默认设为 `full`，resume 作为可选模式，后续长会话仍需持续测量。
 - M5 自动化测试共 26 个，覆盖 Session store、锁、full/resume Prompt、conversation 参数、恢复失败降级和官方 runtime 回归。
+- M6 一次真实 headless `list_dir` 采样出现 `step_type=tool`、`state=ACTIVE`，随后同一 tool step 为 `state=ERROR`，之后出现 `checkpoint`、`agent_response` 和 `error_message`；完整 `tool_info`/permission payload 未稳定暴露。
+- 另一只读工具采样在默认权限模式下只输出 user step 后等待到超时，证明 headless 模式不能依赖交互式权限流程自行完成。
+- M6 决定 V1 由 AGY 独占工具执行：Provider 拒绝 DSH `tools`，只解析并忽略 AGY 内部 tool lifecycle，不生成 DSH `tool-call-delta`。
+- M6 增加 `isToolEvent()`、`isPermissionEvent()` 和 `PERMISSION_REQUIRED` 快速失败路径；当前自动化测试共 28 个。
 
 ## 技术决策
 

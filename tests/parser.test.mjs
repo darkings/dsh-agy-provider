@@ -4,6 +4,8 @@ import {
   AgyParserError,
   AgyStreamParser,
   conversationIdOf,
+  isPermissionEvent,
+  isToolEvent,
   parseAgyChunks,
   responseOf,
   statusOf,
@@ -32,6 +34,17 @@ test('conversationIdOf accepts the nested init envelope', () => {
   const parser = new AgyStreamParser()
   const [event] = parser.push('{"event":"init","init":{"conversation_id":"nested"}}\n')
   assert.equal(conversationIdOf(event), 'nested')
+})
+
+test('parser classifies internal tool and permission lifecycle events', () => {
+  const parser = new AgyStreamParser()
+  const events = parser.push([
+    '{"event":"step_update","step_update":{"step_type":"tool","tool_name":"list_dir","state":"ACTIVE"}}',
+    '{"event":"permission_request","permission":{"kind":"fixture"}}',
+  ].join('\n') + '\n')
+  assert.equal(isToolEvent(events[0]), true)
+  assert.equal(isPermissionEvent(events[0]), false)
+  assert.equal(isPermissionEvent(events[1]), true)
 })
 
 test('parser preserves unknown event types for forward compatibility', () => {

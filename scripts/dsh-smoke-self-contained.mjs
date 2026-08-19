@@ -102,6 +102,28 @@ function runNpm(args, options) {
   return runNode(resolveNpmCli(), args, options)
 }
 
+async function findCachedDshEntry() {
+  const cacheRoots = [
+    process.env.npm_config_cache,
+    process.env.NPM_CONFIG_CACHE,
+    process.env.LOCALAPPDATA === undefined ? undefined : join(process.env.LOCALAPPDATA, 'npm-cache'),
+  ].filter(value => typeof value === 'string' && value.length > 0)
+  for (const cacheRoot of cacheRoots) {
+    const npxRoot = join(cacheRoot, '_npx')
+    if (!existsSync(npxRoot)) continue
+    for (const entry of await readdir(npxRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const root = join(npxRoot, entry.name, 'node_modules', '@deepseek-ai', 'dsh')
+      const dshEntry = join(root, 'lib', 'bin.js')
+      const packageJson = join(root, 'package.json')
+      if (!existsSync(dshEntry) || !existsSync(packageJson)) continue
+      const packageInfo = JSON.parse(await readFile(packageJson, 'utf8'))
+      if (packageInfo.version === '0.1.0-rc.7') return dshEntry
+    }
+  }
+  return undefined
+}
+
 function safeVersion(value) {
   const match = value.match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/)
   return match?.[0] ?? 'unknown'
@@ -140,12 +162,17 @@ async function main() {
       providerSource = join(providerTarballDir, tarballs[0])
     }
 
-    await runNpm([
-      'install', '--prefix', installRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',
-      '--no-audit', '--no-fund', DSH_PACKAGE,
-    ], { cwd: process.cwd() }).then(result => assertSuccess(result, 'DSH_INSTALL_FAILED'))
-    const dshEntry = join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    let dshEntry = await findCachedDshEntry()
+    if (dshEntry === undefined) {
+      await runNpm([
+        'install', '--prefix', installRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',
+        '--no-audit', '--no-fund', DSH_PACKAGE,
+      ], { cwd: process.cwd() }).then(result => assertSuccess(result, 'DSH_INSTALL_FAILED'))
+      dshEntry = join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    }
+    await mkdir(installRoot, { recursive: true })
     if (!existsSync(dshEntry)) throw new Error('DSH_ENTRY_NOT_FOUND')
+    const dshPackageJson = join(dirname(dirname(dshEntry)), 'package.json')
 
     const dshVersionResult = await runNode(dshEntry, ['--version'], { cwd: installRoot, env: dshEnv })
     assertSuccess(dshVersionResult, 'DSH_VERSION_FAILED')
@@ -167,7 +194,7 @@ async function main() {
       throw new Error('WEB_PROFILE_BUNDLE_DECLARATION_MISSING')
     }
 
-    // Verify web profile dump-config has ready agy-owned defaults without manual patch
+    // Verify web profile dump-config has ready DSH-owned defaults without manual patch
     const webDumpConfig = await runNode(dshEntry, ['--profile', 'web', '--dump-config'], {
       cwd: installRoot,
       env: dshEnv,
@@ -176,7 +203,7 @@ async function main() {
     const webChecks = [
       '# == dsh-agy-provider',
       'enabled: true',
-      'toolPolicy: agy-owned',
+      'toolPolicy: dsh-owned',
       'provider: agy',
       'model: gemini-3.1-pro-high',
     ]
@@ -208,7 +235,7 @@ async function main() {
       || doctorParsed.profile?.packageInstalled !== true
       || doctorParsed.profile?.bundleDeclared !== true
       || doctorParsed.profile?.bundleEnabled !== true
-      || doctorParsed.profile?.toolPolicy !== 'agy-owned'
+      || doctorParsed.profile?.toolPolicy !== 'dsh-owned'
       || doctorParsed.profile?.effectiveProvider !== 'agy'
       || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro-high'
       || doctorParsed.profile?.profileSchemaVersion !== 2
@@ -275,7 +302,7 @@ async function main() {
     if (!response.stdout.includes(EXPECTED_RESPONSE)) throw new Error('DSH_MOCK_RESPONSE_MISMATCH')
 
     const providerMetadata = await packageVersion(join(webProfileRoot, 'node_modules', 'dsh-agy-provider', 'package.json'))
-    const dshMetadata = await packageVersion(join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
+    const dshMetadata = await packageVersion(dshPackageJson)
     const inventory = [
       'lib/index.js',
       'lib/index.d.ts',
@@ -298,7 +325,7 @@ async function main() {
       installMethod: PROVIDER_SPEC === undefined ? 'dsh plugin add' : 'dsh plugin add (registry spec)',
       bundleDefaults: {
         enabled: true,
-        toolPolicy: 'agy-owned',
+        toolPolicy: 'dsh-owned',
         provider: 'agy',
         model: 'gemini-3.1-pro-high',
       },

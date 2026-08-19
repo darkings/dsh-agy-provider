@@ -239,7 +239,9 @@ export async function diagnoseProvider(
       agent: config.agent ?? 'deepseek-proxy',
       defaultModel: config.model ?? models[0]?.id ?? 'unknown',
       modelDiscovery: config.modelDiscovery === 'off' ? 'off' : 'auto',
-      toolPolicy: config.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject',
+      toolPolicy: config.toolPolicy === 'agy-owned'
+        ? 'agy-owned'
+        : config.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject',
       sessionMode: config.sessionMode === 'resume' ? 'resume' : 'full',
       enabled: config.enabled === true,
     },

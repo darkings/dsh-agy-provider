@@ -115,7 +115,7 @@ test('diagnoseProfile detects package missing, bundle missing, disabled, and rej
     const mockEnabledRunner = async () => ({
       exitCode: 0,
       timedOut: false,
-      stdout: `# == dsh-agy-provider\n  enabled: true\n  toolPolicy: agy-owned\n  provider: agy\n  model: gemini-3.1-pro-high\n`,
+      stdout: `# == dsh-agy-provider\n  enabled: true\n  toolPolicy: dsh-owned\n  provider: agy\n  model: gemini-3.1-pro-high\n`,
       stderr: '',
     })
     const resReady = await diagnoseProfile({
@@ -126,7 +126,7 @@ test('diagnoseProfile detects package missing, bundle missing, disabled, and rej
     })
     assert.equal(resReady.bundleDeclared, true)
     assert.equal(resReady.bundleEnabled, true)
-    assert.equal(resReady.toolPolicy, 'agy-owned')
+    assert.equal(resReady.toolPolicy, 'dsh-owned')
     assert.equal(resReady.effectiveProvider, 'agy')
     assert.equal(resReady.effectiveModel, 'gemini-3.1-pro-high')
     assert.equal(resReady.issues.length, 0)

@@ -29,8 +29,10 @@ export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
 export { DshContextError, readDshContextServices, resolveDshContext } from './dsh/context.js'
 export {
+  appendToolProtocolPrompt,
   createStructuredToolProtocol,
   parseStructuredEnvelope,
+  renderToolProtocolPrompt,
   StructuredResponseAccumulator,
   ToolProtocolError,
   TOOL_PROTOCOL_LIMITS,

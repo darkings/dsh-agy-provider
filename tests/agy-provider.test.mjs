@@ -39,6 +39,62 @@ function fakeRunner(events, captured) {
   }
 }
 
+function trustedDshContext() {
+  const cwd = process.cwd()
+  const session = {
+    id: 'session-1',
+    header: { id: 'session-1', cwd },
+    events: [],
+  }
+  const services = {
+    sessions: { get: id => id === session.id ? session : undefined },
+    workspaceRegistry: {
+      resolveByPath: async path => ({
+        path,
+        sessionIds: [session.id],
+        status: async () => 'ok',
+      }),
+    },
+    sandboxPolicy: {
+      resolve: ({ session: observed }) => {
+        assert.equal(observed, session)
+        return { mode: 'workspace-write', workspaceRoot: cwd }
+      },
+    },
+    permissionPresets: {
+      current: events => {
+        assert.equal(events, session.events)
+        return 'workspace-write'
+      },
+    },
+    approval: {
+      config: { policy: 'ask' },
+      overrideOf: observed => {
+        assert.equal(observed, session)
+        return undefined
+      },
+    },
+  }
+  return {
+    get(name) {
+      return services[name]
+    },
+  }
+}
+
+const readFileTool = {
+  name: 'read_file',
+  description: 'Read one text file.',
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['path'],
+    properties: {
+      path: { type: 'string', minLength: 1 },
+    },
+  },
+}
+
 const request = {
   provider: 'agy-test',
   model: 'gemini-test',
@@ -409,7 +465,195 @@ test('AgyAdapter rejects DSH tools in the text-only MVP with actionable guidance
         tools: [{ name: 'fixture', description: 'fixture', parameters: {} }],
       })) {}
     },
-    error => error.code === 'UNSUPPORTED_TOOLS' && error.message.includes('toolPolicy: agy-owned'),
+    error => error.code === 'UNSUPPORTED_TOOLS' && error.message.includes('toolPolicy: dsh-owned'),
+  )
+})
+
+test('AgyAdapter bridges a validated DSH-owned tool call without exposing AGY tools', async () => {
+  const captured = []
+  const adapter = new AgyAdapter({
+    model: 'gemini-test',
+    toolPolicy: 'dsh-owned',
+    agent: 'must-be-overridden',
+  }, {
+    dshContext: trustedDshContext(),
+    runAgyProcess: fakeRunner([
+      { event: 'step_update', step_update: { text_delta: 'intermediate text must not leak' } },
+      {
+        event: 'result',
+        result: {
+          status: 'SUCCESS',
+          response: '{"kind":"tool_call","name":"read_file","arguments":{"path":"fixture.txt"}}',
+          usage: { totalTokens: 17 },
+        },
+      },
+    ], captured),
+  })
+
+  const chunks = []
+  for await (const chunk of adapter.stream({
+    ...request,
+    sessionId: 'session-1',
+    tools: [readFileTool],
+  })) chunks.push(chunk)
+
+  assert.equal(captured[0]?.agent, 'dsh-agy-tool-free')
+  assert.equal(Object.hasOwn(captured[0] ?? {}, 'jsonSchemaPath'), false)
+  assert.equal(Object.hasOwn(captured[0] ?? {}, 'cwd'), false)
+  assert.equal(Object.hasOwn(captured[0] ?? {}, 'addDirs'), false)
+  assert.equal(Object.hasOwn(captured[0] ?? {}, 'mode'), false)
+  assert.equal(JSON.stringify(captured[0] ?? {}).includes('dangerously-skip-permissions'), false)
+  assert.match(captured[0]?.prompt ?? '', /=== DSH TOOL PROTOCOL V1 ===/)
+  assert.match(captured[0]?.prompt ?? '', /read_file/)
+  assert.match(captured[0]?.prompt ?? '', /DSH owns every tool execution/)
+  assert.equal(chunks.some(chunk => chunk.type === 'text-delta'), false)
+  const toolDelta = chunks.find(chunk => chunk.type === 'tool-call-delta')
+  assert.equal(toolDelta?.name, 'read_file')
+  assert.deepEqual(JSON.parse(toolDelta?.argumentsDelta ?? '{}'), { path: 'fixture.txt' })
+  assert.deepEqual(chunks.find(chunk => chunk.type === 'block-end')?.block, {
+    type: 'tool-call',
+    id: toolDelta?.id,
+    name: 'read_file',
+    arguments: '{"path":"fixture.txt"}',
+  })
+  assert.deepEqual(chunks.find(chunk => chunk.type === 'usage')?.usage, {
+    inputTokens: 17,
+    outputTokens: 0,
+  })
+  assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'tool-calls' } })
+})
+
+test('AgyAdapter serializes a DSH tool result into the next DSH-owned request', async () => {
+  const captured = []
+  let invocation = 0
+  const adapter = new AgyAdapter({
+    model: 'gemini-test',
+    toolPolicy: 'dsh-owned',
+    modelDiscovery: 'off',
+  }, {
+    dshContext: trustedDshContext(),
+    runAgyProcess: async requestValue => {
+      captured.push(requestValue)
+      requestValue.onStdoutLine?.(JSON.stringify({
+        event: 'result',
+        result: {
+          status: 'SUCCESS',
+          response: invocation++ === 0
+            ? '{"kind":"tool_call","name":"read_file","arguments":{"path":"fixture.txt"}}'
+            : '{"kind":"message","content":"tool result received"}',
+        },
+      }))
+      return result()
+    },
+  })
+
+  const firstChunks = []
+  for await (const chunk of adapter.stream({
+    ...request,
+    sessionId: 'session-1',
+    tools: [readFileTool],
+  })) firstChunks.push(chunk)
+  const firstCall = firstChunks.find(chunk => chunk.type === 'block-end')?.block
+  assert.equal(firstCall?.type, 'tool-call')
+
+  const secondChunks = []
+  for await (const chunk of adapter.stream({
+    ...request,
+    sessionId: 'session-1',
+    messages: [
+      request.messages[0],
+      {
+        role: 'assistant',
+        content: [{
+          type: 'tool-call',
+          id: firstCall.id,
+          name: firstCall.name,
+          arguments: firstCall.arguments,
+        }],
+      },
+      {
+        role: 'user',
+        content: [{
+          type: 'tool-result',
+          toolCallId: firstCall.id,
+          content: [{ type: 'text', text: 'FIXTURE_PROBE_EXECUTED' }],
+        }],
+      },
+    ],
+    tools: [readFileTool],
+  })) secondChunks.push(chunk)
+
+  assert.equal(captured.length, 2)
+  assert.match(captured[1]?.prompt ?? '', /\[DSH TOOL RESULT\]/)
+  assert.match(captured[1]?.prompt ?? '', /FIXTURE_PROBE_EXECUTED/)
+  assert.equal(secondChunks.find(chunk => chunk.type === 'text-delta')?.text, 'tool result received')
+})
+
+test('AgyAdapter fails closed when DSH-owned AGY output is not exactly one valid envelope', async () => {
+  const adapter = new AgyAdapter({ model: 'gemini-test', toolPolicy: 'dsh-owned' }, {
+    dshContext: trustedDshContext(),
+    runAgyProcess: fakeRunner([
+      {
+        event: 'result',
+        result: {
+          status: 'SUCCESS',
+          response: '{"kind":"tool_call","name":"read_file","arguments":{"path":"fixture.txt"}}\nextra',
+        },
+      },
+    ], []),
+  })
+
+  await assert.rejects(
+    async () => {
+      for await (const _chunk of adapter.stream({
+        ...request,
+        sessionId: 'session-1',
+        tools: [readFileTool],
+      })) {}
+    },
+    error => error.code === 'TOOL_PROTOCOL_RESPONSE_INVALID',
+  )
+})
+
+test('AgyAdapter rejects duplicate AGY final responses in DSH-owned mode', async () => {
+  const adapter = new AgyAdapter({ model: 'gemini-test', toolPolicy: 'dsh-owned' }, {
+    dshContext: trustedDshContext(),
+    runAgyProcess: fakeRunner([
+      { event: 'result', result: { status: 'SUCCESS', response: '{"kind":"message","content":"one"}' } },
+      { event: 'result', result: { status: 'SUCCESS', response: '{"kind":"message","content":"two"}' } },
+    ], []),
+  })
+
+  await assert.rejects(
+    async () => {
+      for await (const _chunk of adapter.stream({
+        ...request,
+        sessionId: 'session-1',
+        tools: [readFileTool],
+      })) {}
+    },
+    error => error.code === 'TOOL_PROTOCOL_RESPONSE_INVALID',
+  )
+})
+
+test('AgyAdapter rejects an internal AGY tool event while DSH owns tools', async () => {
+  const adapter = new AgyAdapter({ model: 'gemini-test', toolPolicy: 'dsh-owned' }, {
+    dshContext: trustedDshContext(),
+    runAgyProcess: fakeRunner([
+      { event: 'step_update', step_update: { step_type: 'tool', tool_name: 'shell' } },
+      { event: 'result', result: { status: 'SUCCESS', response: '{"kind":"message","content":"done"}' } },
+    ], []),
+  })
+
+  await assert.rejects(
+    async () => {
+      for await (const _chunk of adapter.stream({
+        ...request,
+        sessionId: 'session-1',
+        tools: [readFileTool],
+      })) {}
+    },
+    error => error.code === 'UNSUPPORTED_TOOLS',
   )
 })
 
@@ -450,7 +694,7 @@ test('official DSH runtime accepts tool schemas only with explicit AGY ownership
 })
 
 test('AgyAdapter fails fast on an AGY permission request under both tool policies with actionable guidance', async () => {
-  for (const toolPolicy of ['reject', 'agy-owned']) {
+  for (const toolPolicy of ['reject', 'agy-owned', 'dsh-owned']) {
     const adapter = new AgyAdapter({ toolPolicy }, {
       runAgyProcess: async requestValue => {
         requestValue.onStdoutLine?.(JSON.stringify({ event: 'init', conversation_id: 'permission-test' }))

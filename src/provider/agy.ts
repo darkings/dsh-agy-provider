@@ -3,6 +3,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { parse as parsePath } from 'node:path'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import {
+  CallId,
   EMPTY_RESPONSE_CODE,
   LlmAdapter,
   LlmError,
@@ -69,6 +70,7 @@ import {
   type ToolPolicy,
 } from './config.js'
 import {
+  DSH_CONTEXT_UNAVAILABLE_CODE,
   PERMISSION_REQUIRED_CODE,
   UNSUPPORTED_REASONING_EFFORT_CODE,
   UNSUPPORTED_TOOLS_CODE,
@@ -76,12 +78,25 @@ import {
 import { SessionRegistry, type SessionRecord } from '../session/store.js'
 import { AgyPromptError, serializeAgyTurnPrompt } from './serialize.js'
 import {
+  appendToolProtocolPrompt,
+  createStructuredToolProtocol,
+  parseStructuredEnvelope,
+  ToolProtocolError,
+  TOOL_PROTOCOL_RESPONSE_INVALID_CODE,
+  type StructuredToolProtocol,
+} from './tool-protocol.js'
+import {
   AgyImageBridgeError,
   prepareAgyPrompts,
   type AgyImageAttachmentStore,
   type PreparedAgyPrompts,
 } from './image-bridge.js'
-import { DshContextError, resolveDshContext, type DshContextLookup } from '../dsh/context.js'
+import {
+  DshContextError,
+  resolveDshContext,
+  type DshContextLookup,
+  type DshContextSnapshot,
+} from '../dsh/context.js'
 
 export type AgyProcessRunner = (request: AgyRequest) => Promise<ProcessResult>
 
@@ -193,12 +208,16 @@ function canonicalWorkspaceRoot(value: string | undefined): string | undefined {
   }
 }
 
-function resolveAgyAgentRuntime(config: Config): AgyAgentRuntime {
-  const preset = config.agentPreset === undefined ? undefined : getAgentPreset(config.agentPreset)
-  if (config.agentPreset !== undefined && preset === undefined) {
+function resolveAgyAgentRuntime(config: Config, toolPolicy: ToolPolicy): AgyAgentRuntime {
+  const dshOwned = toolPolicy === 'dsh-owned'
+  const configuredPreset = config.agentPreset === undefined ? undefined : getAgentPreset(config.agentPreset)
+  if (config.agentPreset !== undefined && configuredPreset === undefined) {
     throw new RangeError('agentPreset must be one of: tool-free, read-only, workspace-write')
   }
-  const workspaceRoot = canonicalWorkspaceRoot(config.workspaceRoot)
+  const preset = dshOwned
+    ? getAgentPreset('tool-free')
+    : configuredPreset
+  const workspaceRoot = dshOwned ? undefined : canonicalWorkspaceRoot(config.workspaceRoot)
   if (preset?.writeAccess === true && workspaceRoot === undefined) {
     throw new RangeError('workspaceRoot is required when agentPreset is workspace-write')
   }
@@ -275,6 +294,9 @@ function asLlmError(error: unknown): LlmError {
     return new LlmError(error.message, error.code, { cause: error })
   }
   if (error instanceof AgyPromptError) {
+    return new LlmError(error.message, error.code, { cause: error })
+  }
+  if (error instanceof ToolProtocolError) {
     return new LlmError(error.message, error.code, { cause: error })
   }
   if (error instanceof AgyImageBridgeError) {
@@ -412,16 +434,16 @@ export class AgyAdapter extends LlmAdapter {
     super()
     this.model = config.model ?? DEFAULT_MODEL
     this.models = configuredModels(config)
-    const agentRuntime = resolveAgyAgentRuntime(config)
+    this.toolPolicy = config.toolPolicy === 'agy-owned'
+      ? 'agy-owned'
+      : config.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject'
+    const agentRuntime = resolveAgyAgentRuntime(config, this.toolPolicy)
     this.agent = agentRuntime.agent
     this.agentCanViewFile = agentRuntime.agentCanViewFile
     this.workspaceRoot = agentRuntime.workspaceRoot
     this.addDirs = agentRuntime.addDirs
     this.mode = agentRuntime.mode
     this.disableSlashCommands = agentRuntime.disableSlashCommands
-    this.toolPolicy = config.toolPolicy === 'agy-owned'
-      ? 'agy-owned'
-      : config.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject'
     this.dshContext = dependencies.dshContext
     this.agyPath = config.agyPath?.trim() === '' ? undefined : config.agyPath?.trim()
     this.timeoutMs = config.timeoutMs ?? 120_000
@@ -543,19 +565,18 @@ export class AgyAdapter extends LlmAdapter {
     if (options.signal?.aborted) throw abortError()
     const toolSchemaCount = options.tools?.length ?? 0
     const sessionKey = options.sessionId === undefined ? undefined : String(options.sessionId)
+    let toolProtocol: StructuredToolProtocol | undefined
+    let dshContextSnapshot: DshContextSnapshot | undefined
     if (toolSchemaCount > 0 && this.toolPolicy === 'dsh-owned') {
-      await resolveDshContext(this.dshContext, {
+      dshContextSnapshot = await resolveDshContext(this.dshContext, {
         ...(sessionKey === undefined ? {} : { sessionId: sessionKey }),
         toolSchemaCount,
       })
-      throw new LlmError(
-        'DSH-owned tool bridge is not enabled until the structured tool protocol is complete',
-        UNSUPPORTED_TOOLS_CODE,
-      )
+      toolProtocol = createStructuredToolProtocol(options.tools ?? [])
     }
     if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
       throw new LlmError(
-        'AGY text MVP does not accept DSH tool schemas under toolPolicy: reject; set toolPolicy: agy-owned to let AGY own tool execution',
+        'AGY text MVP does not accept DSH tool schemas under toolPolicy: reject; set toolPolicy: dsh-owned or agy-owned explicitly',
         UNSUPPORTED_TOOLS_CODE,
       )
     }
@@ -640,6 +661,8 @@ export class AgyAdapter extends LlmAdapter {
           telemetry,
           route,
           prepared,
+          toolProtocol,
+          dshContextSnapshot,
         )
         if (!outcome.retryWithFullPrompt) {
           telemetry.durationMs = Date.now() - telemetry.startedAt
@@ -672,11 +695,23 @@ export class AgyAdapter extends LlmAdapter {
     telemetry: AgyTelemetry,
     route: EffectiveAgyRoute,
     prepared: PreparedAgyPrompts,
+    toolProtocol: StructuredToolProtocol | undefined,
+    dshContextSnapshot: DshContextSnapshot | undefined,
   ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
+    if (toolProtocol !== undefined && (
+      dshContextSnapshot?.state !== 'ready'
+      || dshContextSnapshot.sessionState !== 'trusted'
+      || dshContextSnapshot.workspaceState !== 'trusted'
+    )) {
+      throw new DshContextError(DSH_CONTEXT_UNAVAILABLE_CODE)
+    }
     telemetry.processAttemptCount += 1
-    const prompt = requestedConversationId === undefined
+    const basePrompt = requestedConversationId === undefined
       ? prepared.fullPrompt
       : prepared.turnPrompt ?? serializeAgyTurnPrompt(options)
+    const prompt = toolProtocol === undefined
+      ? basePrompt
+      : appendToolProtocolPrompt(basePrompt, toolProtocol)
     const addDirs = [
       ...(this.addDirs ?? []),
       ...(prepared.imageDirectory === undefined ? [] : [prepared.imageDirectory]),
@@ -734,6 +769,13 @@ export class AgyAdapter extends LlmAdapter {
         telemetry.eventCount += 1
         telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
         if (isToolEvent(event)) telemetry.toolEventCount += 1
+        if (toolProtocol !== undefined && isToolEvent(event)) {
+          controller.abort()
+          throw new LlmError(
+            'AGY emitted an internal tool event while DSH-owned tools were enabled',
+            UNSUPPORTED_TOOLS_CODE,
+          )
+        }
         if (isPermissionEvent(event)) telemetry.permissionEventCount += 1
         const errorDetail = errorDetailOf(event)
         if (errorDetail !== undefined) finalErrorDetail = errorDetail
@@ -754,7 +796,7 @@ export class AgyAdapter extends LlmAdapter {
           continue
         }
 
-        const delta = textDeltaOf(event)
+        const delta = toolProtocol === undefined ? textDeltaOf(event) : undefined
         if (delta !== undefined && delta.length > 0) {
           if (!blockStarted) {
             blockStarted = true
@@ -765,6 +807,10 @@ export class AgyAdapter extends LlmAdapter {
         }
 
         if (event.event === 'result') {
+          if (toolProtocol !== undefined && resultSeen) {
+            controller.abort()
+            throw new ToolProtocolError(TOOL_PROTOCOL_RESPONSE_INVALID_CODE, 'duplicate final response')
+          }
           resultSeen = true
           finalResponse = responseOf(event)
           finalStatus = statusOf(event)
@@ -805,6 +851,44 @@ export class AgyAdapter extends LlmAdapter {
     if (!resultSeen && finalErrorDetail !== undefined) {
       const code = classifyAgyFailure(finalErrorDetail, 'AGY_STATUS')
       throw new LlmError(safeAgyFailureMessage('AGY reported a failure', finalErrorDetail), code)
+    }
+
+    if (toolProtocol !== undefined) {
+      if (finalResponse === undefined) {
+        throw new ToolProtocolError(TOOL_PROTOCOL_RESPONSE_INVALID_CODE, 'missing final response')
+      }
+      const envelope = parseStructuredEnvelope(finalResponse, toolProtocol)
+      if (envelope.kind === 'message') {
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        if (envelope.content.length > 0) yield { type: 'text-delta', index: 0, text: envelope.content }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: envelope.content } }
+        if (attemptUsage !== undefined) yield { type: 'usage', usage: attemptUsage }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+        return { retryWithFullPrompt: false }
+      }
+      const callId = CallId(randomUUID())
+      const argumentsJson = JSON.stringify(envelope.arguments)
+      yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+      yield {
+        type: 'tool-call-delta',
+        index: 0,
+        id: callId,
+        name: envelope.name,
+        argumentsDelta: argumentsJson,
+      }
+      yield {
+        type: 'block-end',
+        index: 0,
+        block: {
+          type: 'tool-call',
+          id: callId,
+          name: envelope.name,
+          arguments: argumentsJson,
+        },
+      }
+      if (attemptUsage !== undefined) yield { type: 'usage', usage: attemptUsage }
+      yield { type: 'finish', reason: { kind: 'tool-calls' } }
+      return { retryWithFullPrompt: false }
     }
 
     if (finalResponse !== undefined) {

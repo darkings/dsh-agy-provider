@@ -747,7 +747,7 @@ export async function diagnoseProfile(
       issues.push({
         component: 'profile',
         code: 'PROFILE_TOOL_POLICY_REJECT',
-        message: `Profile "${profileName}" carries tool schemas by default, but toolPolicy is "reject". Set toolPolicy: agy-owned to prevent UNSUPPORTED_TOOLS errors`,
+        message: `Profile "${profileName}" carries tool schemas by default, but toolPolicy is "reject". Set toolPolicy: dsh-owned to let DSH execute tools, or agy-owned for legacy AGY-owned execution`,
       })
     }
   }

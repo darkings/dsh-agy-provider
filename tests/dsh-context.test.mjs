@@ -124,6 +124,44 @@ test('resolveDshContext returns an immutable redacted capability snapshot for a 
   assert.equal(JSON.stringify(snapshot).includes(cwd), false)
 })
 
+test('resolveDshContext preserves the DSH-selected permission and approval mode', async () => {
+  const cwd = await realpath(process.cwd())
+  for (const selection of [
+    { mode: 'read-only', preset: 'read-only', approval: 'ask' },
+    { mode: 'workspace-write', preset: 'workspace-write', approval: 'ask' },
+    { mode: 'danger-full-access', preset: 'danger-full-access', approval: 'never' },
+  ]) {
+    const session = {
+      id: `session-${selection.preset}`,
+      header: { id: `session-${selection.preset}`, cwd },
+      events: [],
+    }
+    const snapshot = await resolveDshContext(lookup({
+      sessions: { get: id => id === session.id ? session : undefined },
+      workspaceRegistry: {
+        resolveByPath: async path => ({
+          path,
+          sessionIds: [session.id],
+          status: async () => 'ok',
+        }),
+      },
+      sandboxPolicy: { resolve: () => ({ mode: selection.mode, workspaceRoot: cwd }) },
+      permissionPresets: { current: () => selection.preset },
+      approval: { config: { policy: selection.approval }, overrideOf: () => undefined },
+    }), { sessionId: session.id, toolSchemaCount: 1 })
+
+    assert.deepEqual({
+      sandboxMode: snapshot.sandboxMode,
+      permissionPreset: snapshot.permissionPreset,
+      approvalPolicy: snapshot.approvalPolicy,
+    }, {
+      sandboxMode: selection.mode,
+      permissionPreset: selection.preset,
+      approvalPolicy: selection.approval,
+    })
+  }
+})
+
 test('resolveDshContext rejects a workspace that does not account for the session', async () => {
   const { context } = await trustedContext()
   const services = {

@@ -4,11 +4,13 @@
 
 把本机已经登录的 **AGY CLI** 暴露为 [DSH](https://github.com/darkings/dsh) 的模型 Provider。
 
-它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；真正的认证、模型选择和 Agent 工具执行仍由本机 agy 负责。
+它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；认证和模型选择由本机 agy 负责，0.6.x legacy 工具由 AGY 执行，0.7.0 DSH-owned bridge 的实际工具执行由 DSH ToolRuntime 负责。
 
 ## 项目状态
 
 0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
+
+当前仓库正在开发 0.7.0：npm `latest` 仍是 0.6.1，0.7.0 尚未发布。源码中的 DSH-owned bridge 已通过 prompt-contract、DSH ToolRuntime round-trip 和 quota-free 本地门禁，但仍需完成权限矩阵、跨平台回归和发布门禁。
 
 0.6.0 的公开能力重点是：
 
@@ -65,7 +67,7 @@ Provider 使用 spawn(executable, args) 启动 AGY，不经过 shell 拼接命�
 项目明确只允许一个工具执行者：
 
 - 程序化 Provider 默认 toolPolicy: reject，收到 DSH tool schema 时返回 UNSUPPORTED_TOOLS。
-- 通过 DSH profile 安装的 bundle 默认使用 toolPolicy: agy-owned，DSH schema 不会重复发送，AGY 负责自己的内部工具。
+- 已发布的 0.6.1 DSH bundle 默认使用 toolPolicy: agy-owned；0.7.0 开发分支已切换为 toolPolicy: dsh-owned，DSH schema 经过 bounded contract 交给 AGY 生成调用，实际执行仍由 DSH ToolRuntime 完成。
 - 发生权限请求时返回 PERMISSION_REQUIRED 并终止请求，不自动批准，不使用 --dangerously-skip-permissions。
 
 ### 4. Agent capability presets 与读写能力
@@ -131,8 +133,8 @@ imageInput: experimental 已支持：
 | AGY 额度/认证 | 已实现 | 由本机 AGY 管理 |
 | 动态模型发现 | 已实现 | modelDiscovery: auto |
 | reasoning effort | 已实现 | 不设置隐式 effort |
-| AGY 自有工具 | 已实现 | profile 为 agy-owned |
-| DSH tool-call bridge | 未实现 | 返回 UNSUPPORTED_TOOLS 或由 AGY 接管 |
+| AGY 自有工具 | 已实现（0.6.1 legacy） | 0.6.1 profile 为 agy-owned |
+| DSH tool-call bridge | 0.7.0 开发中已完成基础闭环，尚未发布 | 源码 bundle 为 dsh-owned |
 | read-only Agent | 已实现 | 显式安装/配置 |
 | workspace-write Agent | 已实现 | 必须显式 workspaceRoot |
 | 图片 staging bridge | experimental | imageInput: off |
@@ -156,7 +158,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
 npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.1
 ~~~
 
-profile bundle 默认相当于：
+0.6.1 已发布包的 profile bundle 默认相当于：
 
 ~~~yaml
 enabled: true
@@ -168,6 +170,8 @@ imageInput: off
 ~~~
 
 直接使用库的 Config({}) 则保持 enabled: false、toolPolicy: reject，不会因为 import 包而修改用户 DSH profile。
+
+0.7.0 未发布源码的 bundle 默认改为 `toolPolicy: dsh-owned`；它不要求重复配置 `workspaceRoot`，项目目录、read/write、shell、网络、MCP 和 approval 均由 DSH 当前 Session 与 ToolRuntime 控制。
 
 ### Agent preset 配置
 
@@ -196,7 +200,7 @@ model: gemini-3.7-flash-high
 models:
   - id: gemini-3.7-flash-high
     name: Gemini 3.7 Flash High
-toolPolicy: agy-owned
+toolPolicy: dsh-owned
 sessionMode: full
 modelDiscovery: auto
 retryPolicy:
@@ -232,9 +236,9 @@ npm run smoke:dsh:self-contained
 
 未来版本会继续以“可验证、可回退、额度可控”为前提，重点包括：
 
-### 0.7.0：由 DSH 控制项目、权限与工具
+### 0.7.0：由 DSH 控制项目、权限与工具（开发中，尚未发布）
 
-- 新增 DSH-owned tool bridge：AGY 只产生标准 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
+- DSH-owned tool bridge 基础闭环已完成：AGY 只产生经过本地严格校验的 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
 - 直接采用 DSH Session 的项目 `cwd`，以及 `read-only`、`workspace-write`、`danger-full-access` 权限选择，不在插件内复制第二套开关。
 - 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
 - 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。

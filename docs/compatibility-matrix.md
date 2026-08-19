@@ -9,7 +9,7 @@
 | macOS | `macos-latest` | 通过无额度验证 | 0.6.1 release CI run `32230018799`：verify/benchmark + DSH smoke |
 | Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | 0.6.1 release CI run `32230018799`：11/11 success |
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
-| DSH tools policy | `reject` 默认；显式 `agy-owned` | 通过无额度验证 | 官方 DSH runtime schema、工具事件、权限 fail-fast 和日志白名单测试 |
+| DSH tools policy | 0.6.1 registry：`reject` 默认/显式 `agy-owned`；0.7.0 source：bundle `dsh-owned` | 通过无额度与 disposable fixture 验证 | DSH runtime schema、prompt-contract、ToolRuntime round-trip、权限 fail-fast 和日志白名单测试 |
 | DSH profile onboarding | `@deepseek-ai/dsh@0.1.0-rc.7` + `dsh plugin add` | 通过无额度验证 | 0.6.1 registry Web/headless 原生 plugin-add smoke，doctor v2 effective fields，`quotaUsed=false`；验证无 `AttachmentStore` 时可加载 |
 | Doctor CLI | npm package `bin/dsh-agy-provider` | 通过无额度验证 | V6-M5 profile dump failure codes、frontmatter/workspace/image checks 和 tarball smoke |
 | Agent presets | `tool-free`/`read-only`/`workspace-write` | 通过 fake/无额度验证 | 工具白名单、argv、workspace boundary 和显式 installer tests |
@@ -22,7 +22,7 @@
 | npm registry | `dsh-agy-provider@0.6.1`, `latest=0.6.1` | 通过 | npm metadata/tarball、全新 DSH profile 安装 smoke；registry run 后回读通过 |
 | Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.6.1` → commit `333adc8`；publish run `32230568514`；不保存 npm token |
 
-0.6.1 发布后证据：公开仓库 CI run `32230018799` 为 11/11 success；Trusted Publishing run `32230568514` 成功；registry 隔离 smoke 使用 `dsh-agy-provider@0.6.1` 完成 Web/headless 原生 plugin add、doctor v2、bundle inventory 和 Mock response，`quotaUsed=false`、cleanup completed。
+0.6.1 发布后证据：公开仓库 CI run `32230018799` 为 11/11 success；Trusted Publishing run `32230568514` 成功；registry 隔离 smoke 使用 `dsh-agy-provider@0.6.1` 完成 Web/headless 原生 plugin add、doctor v2、bundle inventory 和 Mock response，`quotaUsed=false`、cleanup completed。当前未发布源码的 0.7.0 bundle defaults smoke 已额外验证 `toolPolicy=dsh-owned`，不改变 registry `latest=0.6.1`。
 
 ## 版本策略
 
@@ -41,7 +41,8 @@
 | `result` | 读取 `status`、最终 response 和 usage |
 | `checkpoint`、`agent_response`、未知事件 | 保留并按固定类别计数，不静默转换为 DSH tool call |
 | `error`、`error_message` | 提取有界分类 detail；不记录原始 payload |
-| 工具事件 | 只累计 `tool` 类别和工具计数，不产生 DSH tool chunk；`toolPolicy` 不改变 AGY 唯一所有权 |
+| AGY 内部工具事件 | `step_update.step_type=tool` | AGY 试图自行执行 | `agy-owned` legacy 仅计数；`dsh-owned` fail closed，不伪装成 DSH tool chunk |
+| DSH-owned tool-call | Provider final envelope | AGY 只做文本推理 | 本地严格校验后产生 DSH tool chunk，由 DSH ToolRuntime 执行 |
 | permission event | 终止 headless 请求并返回 `PERMISSION_REQUIRED` |
 
 ## 稳定错误分类

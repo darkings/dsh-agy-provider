@@ -15,6 +15,41 @@ function blockText(block: ContentBlock, messageIndex: number, blockIndex: number
       return block.text
     case 'reasoning':
       return `[reasoning]\n${block.text}`
+    case 'tool-call':
+      return `[DSH TOOL CALL]\n${JSON.stringify({
+        id: block.id,
+        name: block.name,
+        arguments: block.arguments,
+      })}`
+    case 'tool-result':
+      return `[DSH TOOL RESULT]\n${JSON.stringify({
+        callId: block.toolCallId,
+        isError: block.isError === true,
+        content: block.content.map((nested, nestedIndex) => blockValue(nested, messageIndex, `${blockIndex}.${nestedIndex}`)),
+      })}`
+    default:
+      throw new AgyPromptError(
+        `AGY text MVP does not support content block ${block.type} at message ${messageIndex}, block ${blockIndex}`,
+        'UNSUPPORTED_CONTENT',
+      )
+  }
+}
+
+function blockValue(block: ContentBlock, messageIndex: number, blockIndex: string): Record<string, unknown> {
+  switch (block.type) {
+    case 'text':
+      return { type: 'text', text: block.text }
+    case 'reasoning':
+      return { type: 'reasoning', text: block.text }
+    case 'tool-call':
+      return { type: 'tool-call', id: block.id, name: block.name, arguments: block.arguments }
+    case 'tool-result':
+      return {
+        type: 'tool-result',
+        callId: block.toolCallId,
+        isError: block.isError === true,
+        content: block.content.map((nested, nestedIndex) => blockValue(nested, messageIndex, `${blockIndex}.${nestedIndex}`)),
+      }
     default:
       throw new AgyPromptError(
         `AGY text MVP does not support content block ${block.type} at message ${messageIndex}, block ${blockIndex}`,

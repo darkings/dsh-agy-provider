@@ -160,8 +160,8 @@ export function createConfigSchema(defaults: {
 /** Programmatic library default: enabled=false, toolPolicy=reject */
 export const Config: z<Config> = createConfigSchema({ enabled: false, toolPolicy: 'reject' })
 
-/** Bundle default for DSH profile plugin add: enabled=true, toolPolicy=agy-owned */
-export const BundleConfig: z<Config> = createConfigSchema({ enabled: true, toolPolicy: 'agy-owned' })
+/** Bundle default for DSH profile plugin add: enabled=true, DSH owns tools. */
+export const BundleConfig: z<Config> = createConfigSchema({ enabled: true, toolPolicy: 'dsh-owned' })
 
 /**
  * Resolve the effective catalog while keeping the 0.1.0 `model` setting

@@ -8,7 +8,7 @@
 - DSH messages 到 AGY Prompt 的确定性序列化。
 - `step_update.text_delta`、最终 response、usage、finish reason 和错误映射。
 
-默认 `toolPolicy: reject` 会对非空 DSH tools 显式报错，不静默丢弃；显式 `toolPolicy: agy-owned` 只忽略 DSH schemas，AGY 继续独占内部工具执行。图像、采样控制和会话恢复按各自能力边界处理。
+默认 `toolPolicy: reject` 会对非空 DSH tools 显式报错，不静默丢弃；显式 `toolPolicy: dsh-owned` 使用 bounded prompt contract 返回经本地 allowlist/参数校验的 DSH tool call，由 DSH ToolRuntime 执行；`agy-owned` 仅作为 0.6.x 兼容路径，继续由 AGY 独占内部工具执行。图像、采样控制和会话恢复按各自能力边界处理。
 
 M7 增加了每个 Adapter 实例的 AGY 进程并发上限和有界等待队列。通过 DSH bundle 注册时，Adapter 使用 Cordis `ctx.logger('dsh-agy-provider')` 输出脱敏的 JSON 生命周期记录；日志失败不会影响请求。
 

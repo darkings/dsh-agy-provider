@@ -4,11 +4,13 @@
 
 Expose the locally authenticated **AGY CLI** as a model Provider for [DSH](https://github.com/darkings/dsh).
 
-The project lets DSH use the models and quota available to the user's AGY account while keeping DSH's conversations, Sessions, Web mode, and headless mode. The Provider does not call the Google Gemini API directly and does not store OAuth credentials. Authentication, model selection, and Agent tool execution remain owned by the local agy CLI.
+The project lets DSH use the models and quota available to the user's AGY account while keeping DSH's conversations, Sessions, Web mode, and headless mode. The Provider does not call the Google Gemini API directly and does not store OAuth credentials. Authentication and model selection remain owned by the local agy CLI; 0.6.x legacy tools are AGY-owned, while actual tool execution in the 0.7.0 DSH-owned bridge remains in DSH ToolRuntime.
 
 ## Project status
 
 Version 0.6.1 is publicly released as the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible. The `v0.6.1` tag, GitHub Actions CI, and npm Trusted Publishing have passed.
+
+The repository is now developing 0.7.0. npm `latest` is still 0.6.1 and 0.7.0 has not been published. The source tree has passed the prompt-contract, DSH ToolRuntime round-trip, and quota-free local gates for the DSH-owned bridge, while the permission matrix, cross-platform regression, and release gates remain.
 
 The 0.6.0 focus is:
 
@@ -65,7 +67,7 @@ The Provider starts AGY with spawn(executable, args), without shell command comp
 The project keeps one tool executor:
 
 - Programmatic Provider defaults to toolPolicy: reject and returns UNSUPPORTED_TOOLS for DSH tool schemas.
-- A DSH profile bundle defaults to toolPolicy: agy-owned; DSH schemas are not sent twice and AGY owns its internal tools.
+- The published 0.6.1 profile bundle defaults to toolPolicy: agy-owned. The 0.7.0 development branch switches the bundle to toolPolicy: dsh-owned; DSH schemas are bounded and validated locally, while DSH ToolRuntime remains the only executor.
 - Permission requests return PERMISSION_REQUIRED and terminate the request. The Provider never auto-approves permissions or uses --dangerously-skip-permissions.
 
 ### Agent capability presets and read/write access
@@ -131,8 +133,8 @@ This is a protocol experiment, not a public image capability. listModels() remai
 | AGY authentication/quota | Implemented | Owned by local AGY |
 | Dynamic model discovery | Implemented | modelDiscovery: auto |
 | Reasoning effort | Implemented | No implicit effort |
-| AGY-owned tools | Implemented | agy-owned in the profile bundle |
-| DSH tool-call bridge | Not implemented | UNSUPPORTED_TOOLS or AGY ownership |
+| AGY-owned tools | Implemented (0.6.1 legacy) | agy-owned in the 0.6.1 profile bundle |
+| DSH tool-call bridge | Base loop implemented in unreleased 0.7.0 | dsh-owned in the source bundle |
 | read-only Agent | Implemented | Explicit installation/configuration |
 | workspace-write Agent | Implemented | Requires explicit workspaceRoot |
 | Image staging bridge | Experimental | imageInput: off |
@@ -156,7 +158,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
 npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.1
 ~~~
 
-The profile bundle defaults are equivalent to:
+The published 0.6.1 profile bundle defaults are equivalent to:
 
 ~~~yaml
 enabled: true
@@ -168,6 +170,8 @@ imageInput: off
 ~~~
 
 Direct library Config({}) remains enabled: false and toolPolicy: reject. Importing the package does not modify a user's DSH profile.
+
+The unreleased 0.7.0 source bundle defaults to `toolPolicy: dsh-owned`; it does not require a duplicate `workspaceRoot`. The active DSH Session and ToolRuntime control the project, read/write, shell, network, MCP, and approval behavior.
 
 ### Agent preset configuration
 
@@ -196,7 +200,7 @@ model: gemini-3.7-flash-high
 models:
   - id: gemini-3.7-flash-high
     name: Gemini 3.7 Flash High
-toolPolicy: agy-owned
+toolPolicy: dsh-owned
 sessionMode: full
 modelDiscovery: auto
 retryPolicy:
@@ -232,9 +236,9 @@ Experiments that call a real AGY model never run automatically. The image experi
 
 Future work follows the same rules: verifiable behavior, safe fallback, and bounded quota use.
 
-### 0.7.0: DSH-controlled workspace, permissions, and tools
+### 0.7.0: DSH-controlled workspace, permissions, and tools (in development)
 
-- Add a DSH-owned tool bridge: AGY only produces standard DSH tool calls, while DSH ToolRuntime executes filesystem, shell, network, and MCP tools.
+- The base DSH-owned tool bridge is implemented: AGY emits locally validated DSH tool calls, while DSH ToolRuntime executes filesystem, shell, network, and MCP tools.
 - Use the DSH Session project `cwd` and its `read-only`, `workspace-write`, or `danger-full-access` selection instead of duplicating switches in this plugin.
 - Keep sandboxing, approval, MCP credentials, and side effects inside DSH; the Provider does not pass `--dangerously-skip-permissions`.
 - See the [0.7.0 development plan](docs/v0.7.0-development-plan.md) for scope, security gates, quota budget, and milestones.

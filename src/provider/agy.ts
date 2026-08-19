@@ -81,6 +81,7 @@ import {
   type AgyImageAttachmentStore,
   type PreparedAgyPrompts,
 } from './image-bridge.js'
+import { DshContextError, resolveDshContext, type DshContextLookup } from '../dsh/context.js'
 
 export type AgyProcessRunner = (request: AgyRequest) => Promise<ProcessResult>
 
@@ -97,6 +98,8 @@ export interface AgyAdapterDependencies {
   concurrencyLimiter?: AgyConcurrencyLimiter
   /** Optional DSH AttachmentStore; text-only requests do not require it. */
   attachmentStore?: Pick<AttachmentStore, 'readImage'>
+  /** Optional Cordis reflection seam for the DSH-owned capability context. */
+  dshContext?: DshContextLookup
 }
 
 interface AttemptOutcome {
@@ -268,6 +271,9 @@ export function mapAgyUsage(raw: Record<string, unknown>): TokenUsage {
 
 function asLlmError(error: unknown): LlmError {
   if (error instanceof LlmError) return error
+  if (error instanceof DshContextError) {
+    return new LlmError(error.message, error.code, { cause: error })
+  }
   if (error instanceof AgyPromptError) {
     return new LlmError(error.message, error.code, { cause: error })
   }
@@ -383,6 +389,7 @@ export class AgyAdapter extends LlmAdapter {
   private readonly disableSlashCommands: boolean | undefined
   private readonly agentCanViewFile: boolean
   private readonly toolPolicy: ToolPolicy
+  private readonly dshContext: DshContextLookup | undefined
   private readonly agyPath: string | undefined
   private readonly timeoutMs: number
   private readonly run: AgyProcessRunner
@@ -412,7 +419,10 @@ export class AgyAdapter extends LlmAdapter {
     this.addDirs = agentRuntime.addDirs
     this.mode = agentRuntime.mode
     this.disableSlashCommands = agentRuntime.disableSlashCommands
-    this.toolPolicy = config.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject'
+    this.toolPolicy = config.toolPolicy === 'agy-owned'
+      ? 'agy-owned'
+      : config.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject'
+    this.dshContext = dependencies.dshContext
     this.agyPath = config.agyPath?.trim() === '' ? undefined : config.agyPath?.trim()
     this.timeoutMs = config.timeoutMs ?? 120_000
     this.run = dependencies.runAgyProcess ?? runAgyProcess
@@ -532,6 +542,17 @@ export class AgyAdapter extends LlmAdapter {
   override async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk, void, void> {
     if (options.signal?.aborted) throw abortError()
     const toolSchemaCount = options.tools?.length ?? 0
+    const sessionKey = options.sessionId === undefined ? undefined : String(options.sessionId)
+    if (toolSchemaCount > 0 && this.toolPolicy === 'dsh-owned') {
+      await resolveDshContext(this.dshContext, {
+        ...(sessionKey === undefined ? {} : { sessionId: sessionKey }),
+        toolSchemaCount,
+      })
+      throw new LlmError(
+        'DSH-owned tool bridge is not enabled until the structured tool protocol is complete',
+        UNSUPPORTED_TOOLS_CODE,
+      )
+    }
     if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
       throw new LlmError(
         'AGY text MVP does not accept DSH tool schemas under toolPolicy: reject; set toolPolicy: agy-owned to let AGY own tool execution',
@@ -553,7 +574,6 @@ export class AgyAdapter extends LlmAdapter {
       )
     }
 
-    const sessionKey = options.sessionId === undefined ? undefined : String(options.sessionId)
     const telemetry: AgyTelemetry = {
       requestId: randomUUID(),
       provider: options.provider,

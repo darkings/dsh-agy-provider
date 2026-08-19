@@ -164,7 +164,9 @@ export function sanitizeAgyLogRecord(record: AgyLogRecord): AgyLogRecord {
     provider: redactText(record.provider, 256),
     model: redactText(record.model, 256),
     agent: redactText(record.agent, 256),
-    toolPolicy: record.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject',
+    toolPolicy: record.toolPolicy === 'agy-owned'
+      ? 'agy-owned'
+      : record.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject',
     toolSchemaCount: record.toolSchemaCount,
     ...(isAgyReasoningEffort(record.reasoningEffort) ? { reasoningEffort: record.reasoningEffort } : {}),
     ...(record.purpose === 'compaction' || record.purpose === 'session-title' ? { purpose: record.purpose } : {}),

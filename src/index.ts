@@ -16,6 +16,7 @@ import {
 } from './provider/config.js'
 import type { ModelConfig, ToolPolicy } from './provider/config.js'
 import { MockAdapter } from './provider/mock.js'
+import type { DshContextLookup } from './dsh/context.js'
 
 export const name = 'dsh-agy-provider'
 export const inject = ['llm']
@@ -26,6 +27,25 @@ export { AgyAdapter, MockAdapter }
 export { AgyModelDiscovery, mergeModelCatalog, parseAgyModels } from './agy/models.js'
 export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
+export { DshContextError, readDshContextServices, resolveDshContext } from './dsh/context.js'
+export type {
+  DshApprovalPolicy,
+  DshApprovalServiceLike,
+  DshContextLookup,
+  DshContextServices,
+  DshContextSnapshot,
+  DshContextState,
+  DshContextErrorCode,
+  DshPermissionPresetServiceLike,
+  DshSandboxMode,
+  DshSandboxPolicyLike,
+  DshSessionLike,
+  DshSessionState,
+  DshSessionStoreLike,
+  DshWorkspaceLike,
+  DshWorkspaceRegistryLike,
+  DshWorkspaceState,
+} from './dsh/context.js'
 export { diagnoseProfile, runDoctor } from './doctor.js'
 export {
   AgyImageBridgeError,
@@ -87,5 +107,6 @@ export function apply(ctx: Context, config: ConfigType): void {
   ctx.llm.registerAdapter([provider], new AgyAdapter(config, {
     logger: record => logger.info('%s', JSON.stringify(record)),
     ...(attachmentStore === undefined ? {} : { attachmentStore }),
+    dshContext: ctx as unknown as DshContextLookup,
   }))
 }

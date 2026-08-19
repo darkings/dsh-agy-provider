@@ -109,8 +109,9 @@ test('Config keeps image input opt-in and supports the experimental bridge flag'
   assert.equal(Config({ imageInput: 'experimental' }).imageInput, 'experimental')
 })
 
-test('Config accepts the explicit AGY-owned tool policy', () => {
+test('Config accepts the explicit AGY-owned and DSH-owned tool policies', () => {
   assert.equal(Config({ toolPolicy: 'agy-owned' }).toolPolicy, 'agy-owned')
+  assert.equal(Config({ toolPolicy: 'dsh-owned' }).toolPolicy, 'dsh-owned')
 })
 
 test('Config accepts a multi-model catalog and preserves the legacy model fallback', () => {

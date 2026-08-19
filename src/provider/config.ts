@@ -54,7 +54,7 @@ export interface Config {
   delayMs?: number
 }
 
-export type ToolPolicy = 'reject' | 'agy-owned'
+export type ToolPolicy = 'reject' | 'agy-owned' | 'dsh-owned'
 
 export const AGY_RETRYABLE_CODES = ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] as const
 export type AgyRetryableCode = typeof AGY_RETRYABLE_CODES[number]
@@ -133,7 +133,7 @@ export function createConfigSchema(defaults: {
     modelDiscovery: z.union(['auto', 'off'] as const).default('auto'),
     modelDiscoveryTtlMs: z.number().min(1_000).max(3_600_000).default(300_000),
     modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000),
-    toolPolicy: z.union(['reject', 'agy-owned'] as const).default(defaultToolPolicy),
+    toolPolicy: z.union(['reject', 'agy-owned', 'dsh-owned'] as const).default(defaultToolPolicy),
     agent: z.string().default('deepseek-proxy'),
     agentPreset: z.union(AGENT_PRESET_IDS),
     workspaceRoot: z.string().pattern(/^\S(?:.*\S)?$/),

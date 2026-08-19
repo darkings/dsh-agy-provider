@@ -19,12 +19,53 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.equal(config.modelDiscoveryTtlMs, 300_000)
   assert.equal(config.modelDiscoveryTimeoutMs, 10_000)
   assert.equal(config.toolPolicy, 'reject')
+  assert.deepEqual(config.retryPolicy, {
+    maxRetries: 0,
+    retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'],
+  })
   assert.throws(() => Config({ maxConcurrent: 0 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ minimumAgyVersion: 'latest' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ modelDiscovery: 'invalid' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ modelDiscoveryTtlMs: 999 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ modelDiscoveryTimeoutMs: 99 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ toolPolicy: 'bridge' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ retryPolicy: { maxRetries: 3 } }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ retryPolicy: { retryableCodes: ['TIMEOUT'] } }), error => error.name === 'ValidationError')
+})
+
+test('Config accepts only bounded transient retry policy overrides', () => {
+  assert.deepEqual(Config({
+    retryPolicy: { maxRetries: 2, retryableCodes: ['RATE_LIMIT'] },
+  }).retryPolicy, {
+    maxRetries: 2,
+    retryableCodes: ['RATE_LIMIT'],
+  })
+})
+
+test('Config accepts optional purpose-specific route overrides', () => {
+  const config = Config({
+    purposeRoutes: {
+      compaction: {
+        model: 'gemini-3.7-flash-low',
+        reasoningEffort: 'low',
+      },
+      sessionTitle: {
+        agent: 'deepseek-proxy',
+      },
+    },
+  })
+  assert.deepEqual(config.purposeRoutes, {
+    compaction: {
+      model: 'gemini-3.7-flash-low',
+      reasoningEffort: 'low',
+    },
+    sessionTitle: {
+      agent: 'deepseek-proxy',
+    },
+  })
+  assert.throws(() => Config({
+    purposeRoutes: { compaction: { reasoningEffort: 'turbo' } },
+  }), error => error.name === 'ValidationError')
 })
 
 test('Config accepts the explicit AGY-owned tool policy', () => {

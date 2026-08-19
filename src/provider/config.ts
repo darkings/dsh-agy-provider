@@ -37,6 +37,10 @@ export interface Config {
   maxOutputBytes?: number
   /** Maximum length of one AGY stream-json line. */
   maxEventLineLength?: number
+  /** Provider-owned bounded retry policy; omission defaults to zero retries. */
+  retryPolicy?: AgyRetryPolicyConfig
+  /** Optional model/Agent/effort overrides for DSH auxiliary call purposes. */
+  purposeRoutes?: PurposeRoutesConfig
   /** Deterministic response used only by the M1 mock route. */
   response?: string
   /** Optional delay used only by the M1 mock route. */
@@ -44,6 +48,32 @@ export interface Config {
 }
 
 export type ToolPolicy = 'reject' | 'agy-owned'
+
+export const AGY_RETRYABLE_CODES = ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] as const
+export type AgyRetryableCode = typeof AGY_RETRYABLE_CODES[number]
+
+export interface AgyRetryPolicyConfig {
+  /** Eligible retries after the first AGY process; hard capped at 2. */
+  maxRetries?: number
+  /** Stable transient codes allowed to consume another AGY attempt. */
+  retryableCodes?: AgyRetryableCode[]
+}
+
+export type AgyReasoningEffortConfig = 'low' | 'medium' | 'high'
+
+export interface PurposeRouteConfig {
+  /** Optional model override for this auxiliary call purpose. */
+  model?: string
+  /** Optional AGY Agent override for this auxiliary call purpose. */
+  agent?: string
+  /** Optional AGY reasoning effort override for this auxiliary call purpose. */
+  reasoningEffort?: AgyReasoningEffortConfig
+}
+
+export interface PurposeRoutesConfig {
+  compaction?: PurposeRouteConfig
+  sessionTitle?: PurposeRouteConfig
+}
 
 export interface ModelConfig {
   /** Exact model id passed to AGY. */
@@ -64,6 +94,22 @@ const ModelConfig = z.object({
   description: z.string(),
   contextWindow: z.natural().min(1).max(10_000_000),
 }) as unknown as z<ModelConfig>
+
+const RetryPolicyConfig = z.object({
+  maxRetries: z.natural().max(2).default(0),
+  retryableCodes: z.array(z.union(AGY_RETRYABLE_CODES)).default([...AGY_RETRYABLE_CODES]),
+}) as unknown as z<AgyRetryPolicyConfig>
+
+const PurposeRoute = z.object({
+  model: z.string().pattern(/^\S(?:.*\S)?$/),
+  agent: z.string().pattern(/^\S(?:.*\S)?$/),
+  reasoningEffort: z.union(['low', 'medium', 'high'] as const),
+}) as unknown as z<PurposeRouteConfig>
+
+const PurposeRoutes = z.object({
+  compaction: PurposeRoute,
+  sessionTitle: PurposeRoute,
+}) as unknown as z<PurposeRoutesConfig>
 
 export function createConfigSchema(defaults: {
   enabled?: boolean
@@ -91,6 +137,11 @@ export function createConfigSchema(defaults: {
     queueTimeoutMs: z.natural().max(3_600_000).default(30_000),
     maxOutputBytes: z.natural().min(1_024).max(64 * 1024 * 1024).default(8 * 1024 * 1024),
     maxEventLineLength: z.natural().min(1_024).max(8 * 1024 * 1024).default(1_048_576),
+    retryPolicy: RetryPolicyConfig.default({
+      maxRetries: 0,
+      retryableCodes: [...AGY_RETRYABLE_CODES],
+    }),
+    purposeRoutes: PurposeRoutes,
     response: z.string().default('AGY mock provider is ready.'),
     delayMs: z.number().min(0).max(60_000).default(0),
   })

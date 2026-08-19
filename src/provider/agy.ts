@@ -3,6 +3,7 @@ import {
   EMPTY_RESPONSE_CODE,
   LlmAdapter,
   LlmError,
+  resolveRetryPolicy,
 } from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions,
@@ -12,6 +13,7 @@ import type {
   LlmResolvedModelInfo,
   StreamChunk,
   TokenUsage,
+  ResolvedRetryPolicy,
 } from '@deepseek-ai/dsh-llm'
 import {
   AgyProcessError,
@@ -50,7 +52,17 @@ import {
   usageOf,
   type AgyJsonEvent,
 } from '../agy/parser.js'
-import { configuredModels, DEFAULT_MODEL, type Config, type ModelConfig, type ToolPolicy } from './config.js'
+import {
+  AGY_RETRYABLE_CODES,
+  configuredModels,
+  DEFAULT_MODEL,
+  type AgyRetryPolicyConfig,
+  type Config,
+  type ModelConfig,
+  type PurposeRouteConfig,
+  type PurposeRoutesConfig,
+  type ToolPolicy,
+} from './config.js'
 import {
   PERMISSION_REQUIRED_CODE,
   UNSUPPORTED_REASONING_EFFORT_CODE,
@@ -76,6 +88,12 @@ export interface AgyAdapterDependencies {
 
 interface AttemptOutcome {
   retryWithFullPrompt: boolean
+}
+
+interface EffectiveAgyRoute {
+  model: string
+  agent: string
+  reasoningEffort: AgyReasoningEffort | undefined
 }
 
 class AsyncQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
@@ -241,6 +259,56 @@ function normalizeReasoningEffort(value: unknown): AgyReasoningEffort | undefine
   )
 }
 
+function resolveAgyRetryPolicy(config: AgyRetryPolicyConfig | undefined): ResolvedRetryPolicy {
+  const maxRetries = config?.maxRetries ?? 0
+  if (!Number.isSafeInteger(maxRetries) || maxRetries < 0 || maxRetries > 2) {
+    throw new RangeError('AGY retryPolicy.maxRetries must be an integer between 0 and 2')
+  }
+  const retryableCodes = config?.retryableCodes ?? [...AGY_RETRYABLE_CODES]
+  if (retryableCodes.length === 0 || retryableCodes.some(code => !AGY_RETRYABLE_CODES.includes(code))) {
+    throw new RangeError(`AGY retryPolicy.retryableCodes must use only: ${AGY_RETRYABLE_CODES.join(', ')}`)
+  }
+  return resolveRetryPolicy({
+    mode: 'normal',
+    maxRetries,
+    retryableCodes: [...retryableCodes],
+  }, 'dsh-agy-provider.retryPolicy')
+}
+
+function addUsage(left: TokenUsage | undefined, right: TokenUsage): TokenUsage {
+  const sumOptional = (key: 'cacheReadTokens' | 'cacheWriteTokens' | 'reasoningTokens'): number | undefined => {
+    const leftValue = left?.[key]
+    const rightValue = right[key]
+    if (leftValue === undefined && rightValue === undefined) return undefined
+    return (leftValue ?? 0) + (rightValue ?? 0)
+  }
+  const cacheReadTokens = sumOptional('cacheReadTokens')
+  const cacheWriteTokens = sumOptional('cacheWriteTokens')
+  const reasoningTokens = sumOptional('reasoningTokens')
+  return {
+    inputTokens: (left?.inputTokens ?? 0) + right.inputTokens,
+    outputTokens: (left?.outputTokens ?? 0) + right.outputTokens,
+    ...(cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens }),
+    ...(cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens }),
+    ...(reasoningTokens === undefined
+      ? {}
+      : { reasoningTokens }),
+  }
+}
+
+function purposeRouteFor(
+  purpose: GenerateOptions['purpose'],
+  routes: PurposeRoutesConfig | undefined,
+): PurposeRouteConfig | undefined {
+  if (purpose === 'compaction') return routes?.compaction
+  if (purpose === 'session-title') return routes?.sessionTitle
+  return undefined
+}
+
 /** DSH text-only adapter backed by the locally authenticated AGY CLI. */
 export class AgyAdapter extends LlmAdapter {
   private readonly model: string
@@ -257,6 +325,8 @@ export class AgyAdapter extends LlmAdapter {
   private readonly logger: AgyLogger | undefined
   private readonly maxOutputBytes: number
   private readonly maxEventLineLength: number
+  private readonly retryPolicy: ResolvedRetryPolicy
+  private readonly purposeRoutes: PurposeRoutesConfig | undefined
   private readonly discovery: AgyModelDiscovery | undefined
   private currentModels: readonly ModelConfig[]
   private modelDiscoveryResult: AgyModelDiscoveryResult | undefined
@@ -281,6 +351,8 @@ export class AgyAdapter extends LlmAdapter {
     this.logger = dependencies.logger
     this.maxOutputBytes = config.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES
     this.maxEventLineLength = config.maxEventLineLength ?? DEFAULT_MAX_EVENT_LINE_LENGTH
+    this.retryPolicy = resolveAgyRetryPolicy(config.retryPolicy)
+    this.purposeRoutes = config.purposeRoutes
     this.currentModels = this.models
     this.discovery = config.modelDiscovery === 'off'
       ? undefined
@@ -320,6 +392,10 @@ export class AgyAdapter extends LlmAdapter {
 
   override providerInfo(provider: string): LlmProviderInfo {
     return { id: provider, name: 'AGY' }
+  }
+
+  override providerRetryPolicy(_provider: string): ResolvedRetryPolicy {
+    return this.retryPolicy
   }
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
@@ -384,7 +460,14 @@ export class AgyAdapter extends LlmAdapter {
         UNSUPPORTED_TOOLS_CODE,
       )
     }
-    const reasoningEffort = normalizeReasoningEffort(options.reasoningEffort)
+    const purposeRoute = purposeRouteFor(options.purpose, this.purposeRoutes)
+    const requestedReasoningEffort = normalizeReasoningEffort(options.reasoningEffort)
+    const purposeReasoningEffort = normalizeReasoningEffort(purposeRoute?.reasoningEffort)
+    const route: EffectiveAgyRoute = {
+      model: purposeRoute?.model ?? (options.model || this.model),
+      agent: purposeRoute?.agent ?? this.agent,
+      reasoningEffort: purposeReasoningEffort ?? requestedReasoningEffort,
+    }
     if (options.temperature !== undefined || options.maxTokens !== undefined || options.stop !== undefined) {
       throw new LlmError(
         'AGY text MVP does not yet map sampling, maxTokens, or stop controls',
@@ -396,11 +479,12 @@ export class AgyAdapter extends LlmAdapter {
     const telemetry: AgyTelemetry = {
       requestId: randomUUID(),
       provider: options.provider,
-      model: options.model || this.model,
-      agent: this.agent,
+      model: route.model,
+      agent: route.agent,
       toolPolicy: this.toolPolicy,
       toolSchemaCount,
-      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
+      ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
       ...(this.discovery === undefined
         ? { modelDiscoverySource: 'static' as const }
         : this.modelDiscoveryResult === undefined
@@ -414,6 +498,8 @@ export class AgyAdapter extends LlmAdapter {
       sessionId: sessionKey,
       startedAt: Date.now(),
       attempt: 1,
+      processAttemptCount: 0,
+      retryMaxRetries: this.retryPolicy.mode === 'normal' ? this.retryPolicy.maxRetries : 0,
       eventCount: 0,
       toolEventCount: 0,
       permissionEventCount: 0,
@@ -422,6 +508,7 @@ export class AgyAdapter extends LlmAdapter {
       conversationId: undefined,
       queueWaitMs: undefined,
       process: undefined,
+      usage: undefined,
       durationMs: undefined,
     }
     emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.started'))
@@ -445,7 +532,7 @@ export class AgyAdapter extends LlmAdapter {
           sessionKey,
           requestedConversationId,
           telemetry,
-          reasoningEffort,
+          route,
         )
         if (!outcome.retryWithFullPrompt) {
           telemetry.durationMs = Date.now() - telemetry.startedAt
@@ -475,8 +562,9 @@ export class AgyAdapter extends LlmAdapter {
     sessionKey: string | undefined,
     requestedConversationId: string | undefined,
     telemetry: AgyTelemetry,
-    reasoningEffort: AgyReasoningEffort | undefined,
+    route: EffectiveAgyRoute,
   ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
+    telemetry.processAttemptCount += 1
     const prompt = requestedConversationId === undefined
       ? serializeAgyPrompt(options)
       : serializeAgyTurnPrompt(options)
@@ -490,8 +578,8 @@ export class AgyAdapter extends LlmAdapter {
     let settled = false
     const request: AgyRequest = {
       prompt,
-      agent: this.agent,
-      model: options.model || this.model,
+      agent: route.agent,
+      model: route.model,
       timeoutMs: this.timeoutMs,
       maxStdoutBytes: this.maxOutputBytes,
       maxStderrBytes: this.maxOutputBytes,
@@ -500,7 +588,7 @@ export class AgyAdapter extends LlmAdapter {
         for (const event of parser.push(`${line}\n`)) queue.push(event)
       },
       ...(requestedConversationId === undefined ? {} : { conversation: requestedConversationId }),
-      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
       ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
     }
     const processPromise = this.run(request).then(processResultValue => {
@@ -564,10 +652,10 @@ export class AgyAdapter extends LlmAdapter {
           finalResponse = responseOf(event)
           finalStatus = statusOf(event)
           telemetry.finalStatus = finalStatus
-          finalUsage = usageOf(event)
-        } else {
-          const usage = usageOf(event)
-          if (usage !== undefined) finalUsage = usage
+        }
+        const usage = usageOf(event)
+        if (usage !== undefined) {
+          finalUsage = usage
         }
       }
       await processPromise
@@ -578,6 +666,9 @@ export class AgyAdapter extends LlmAdapter {
       await processPromise
       options.signal?.removeEventListener('abort', forwardAbort)
     }
+
+    const attemptUsage = finalUsage === undefined ? undefined : mapAgyUsage(finalUsage)
+    if (attemptUsage !== undefined) telemetry.usage = addUsage(telemetry.usage, attemptUsage)
 
     if (conversationMismatch) return { retryWithFullPrompt: true }
     if (permissionRequested) {
@@ -617,7 +708,7 @@ export class AgyAdapter extends LlmAdapter {
       throw new LlmError('AGY completed without a text response', EMPTY_RESPONSE_CODE)
     }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: visibleText } }
-    if (finalUsage !== undefined) yield { type: 'usage', usage: mapAgyUsage(finalUsage) }
+    if (attemptUsage !== undefined) yield { type: 'usage', usage: attemptUsage }
     yield { type: 'finish', reason: { kind: 'stop' } }
     return { retryWithFullPrompt: false }
   }

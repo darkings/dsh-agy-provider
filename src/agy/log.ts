@@ -2,6 +2,7 @@ import { isAgyReasoningEffort, type AgyReasoningEffort, type ProcessResult, type
 import { redactText } from './redact.js'
 import type { AgyEventCategoryCounts } from './parser.js'
 import type { ToolPolicy } from '../provider/config.js'
+import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import {
   isModelDiscoveryErrorCode,
   type ModelDiscoveryErrorCode,
@@ -37,9 +38,12 @@ export interface AgyLogRecord {
   toolPolicy: ToolPolicy
   toolSchemaCount: number
   reasoningEffort?: AgyReasoningEffort
+  purpose?: 'compaction' | 'session-title'
   modelDiscoverySource?: AgyModelDiscoveryLogSource
   modelDiscoveryWarningCode?: ModelDiscoveryErrorCode
   attempt: number
+  processAttemptCount?: number
+  retryMaxRetries?: number
   eventCount: number
   toolEventCount: number
   permissionEventCount: number
@@ -51,6 +55,7 @@ export interface AgyLogRecord {
   exitCode?: number | null
   termination?: ProcessTermination
   queueWaitMs?: number
+  usage?: TokenUsage
   errorCode?: string
 }
 
@@ -65,12 +70,15 @@ export interface AgyTelemetry {
   readonly toolPolicy: ToolPolicy
   readonly toolSchemaCount: number
   readonly reasoningEffort?: AgyReasoningEffort
+  readonly purpose?: 'compaction' | 'session-title'
   readonly modelDiscoverySource?: AgyModelDiscoveryLogSource
   readonly modelDiscoveryWarningCode?: ModelDiscoveryErrorCode
   readonly sessionId: string | undefined
   readonly startedAt: number
   durationMs: number | undefined
   attempt: number
+  processAttemptCount: number
+  retryMaxRetries: number
   eventCount: number
   toolEventCount: number
   permissionEventCount: number
@@ -79,6 +87,7 @@ export interface AgyTelemetry {
   conversationId: string | undefined
   queueWaitMs: number | undefined
   process: ProcessResult | undefined
+  usage: TokenUsage | undefined
 }
 
 function baseRecord(telemetry: AgyTelemetry): AgyLogRecord {
@@ -91,9 +100,12 @@ function baseRecord(telemetry: AgyTelemetry): AgyLogRecord {
     toolPolicy: telemetry.toolPolicy,
     toolSchemaCount: telemetry.toolSchemaCount,
     ...(telemetry.reasoningEffort === undefined ? {} : { reasoningEffort: telemetry.reasoningEffort }),
+    ...(telemetry.purpose === undefined ? {} : { purpose: telemetry.purpose }),
     ...(telemetry.modelDiscoverySource === undefined ? {} : { modelDiscoverySource: telemetry.modelDiscoverySource }),
     ...(telemetry.modelDiscoveryWarningCode === undefined ? {} : { modelDiscoveryWarningCode: telemetry.modelDiscoveryWarningCode }),
     attempt: telemetry.attempt,
+    processAttemptCount: telemetry.processAttemptCount,
+    retryMaxRetries: telemetry.retryMaxRetries,
     eventCount: telemetry.eventCount,
     toolEventCount: telemetry.toolEventCount,
     permissionEventCount: telemetry.permissionEventCount,
@@ -115,6 +127,7 @@ export function buildAgyLogRecord(
     ...(telemetry.conversationId === undefined ? {} : { conversationId: telemetry.conversationId }),
     ...(telemetry.queueWaitMs === undefined ? {} : { queueWaitMs: telemetry.queueWaitMs }),
     ...(telemetry.finalStatus === undefined ? {} : { finalStatus: telemetry.finalStatus }),
+    ...(telemetry.usage === undefined ? {} : { usage: telemetry.usage }),
     ...(process === undefined ? {} : {
       exitCode: process.exitCode,
       termination: process.termination,
@@ -129,6 +142,22 @@ export function buildAgyLogRecord(
 
 /** Apply a final whitelist-only safety pass before the host logger receives metadata. */
 export function sanitizeAgyLogRecord(record: AgyLogRecord): AgyLogRecord {
+  const usage = record.usage
+  const safeUsage: TokenUsage | undefined = usage === undefined
+    ? undefined
+    : {
+        inputTokens: safeNonNegativeNumber(usage.inputTokens),
+        outputTokens: safeNonNegativeNumber(usage.outputTokens),
+        ...(usage.cacheReadTokens === undefined
+          ? {}
+          : { cacheReadTokens: safeNonNegativeNumber(usage.cacheReadTokens) }),
+        ...(usage.cacheWriteTokens === undefined
+          ? {}
+          : { cacheWriteTokens: safeNonNegativeNumber(usage.cacheWriteTokens) }),
+        ...(usage.reasoningTokens === undefined
+          ? {}
+          : { reasoningTokens: safeNonNegativeNumber(usage.reasoningTokens) }),
+      }
   return {
     event: record.event,
     requestId: redactText(record.requestId, 256),
@@ -138,6 +167,7 @@ export function sanitizeAgyLogRecord(record: AgyLogRecord): AgyLogRecord {
     toolPolicy: record.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject',
     toolSchemaCount: record.toolSchemaCount,
     ...(isAgyReasoningEffort(record.reasoningEffort) ? { reasoningEffort: record.reasoningEffort } : {}),
+    ...(record.purpose === 'compaction' || record.purpose === 'session-title' ? { purpose: record.purpose } : {}),
     ...(isModelDiscoveryLogSource(record.modelDiscoverySource)
       ? { modelDiscoverySource: record.modelDiscoverySource }
       : {}),
@@ -145,6 +175,8 @@ export function sanitizeAgyLogRecord(record: AgyLogRecord): AgyLogRecord {
       ? { modelDiscoveryWarningCode: record.modelDiscoveryWarningCode }
       : {}),
     attempt: record.attempt,
+    processAttemptCount: safeNonNegativeNumber(record.processAttemptCount ?? record.attempt),
+    retryMaxRetries: safeNonNegativeNumber(record.retryMaxRetries ?? 0),
     eventCount: record.eventCount,
     toolEventCount: record.toolEventCount,
     permissionEventCount: record.permissionEventCount,
@@ -165,9 +197,14 @@ export function sanitizeAgyLogRecord(record: AgyLogRecord): AgyLogRecord {
     ...(record.exitCode === undefined ? {} : { exitCode: record.exitCode }),
     ...(record.termination === undefined ? {} : { termination: record.termination }),
     ...(record.queueWaitMs === undefined ? {} : { queueWaitMs: record.queueWaitMs }),
+    ...(safeUsage === undefined ? {} : { usage: safeUsage }),
     ...(record.errorCode === undefined ? {} : { errorCode: redactText(record.errorCode, 128) }),
     ...(record.finalStatus === undefined ? {} : { finalStatus: redactText(record.finalStatus, 128) }),
   }
+}
+
+function safeNonNegativeNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
 }
 
 export function emitAgyLog(logger: AgyLogger | undefined, record: AgyLogRecord): void {

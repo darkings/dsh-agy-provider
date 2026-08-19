@@ -44,6 +44,24 @@ const request = {
   messages: [{ role: 'user', content: [{ type: 'text', text: 'reply 123' }] }],
 }
 
+test('AgyAdapter exposes quota-safe bounded retry policy', () => {
+  const defaultAdapter = new AgyAdapter({})
+  assert.deepEqual(defaultAdapter.providerRetryPolicy('agy-test'), {
+    mode: 'normal',
+    maxRetries: 0,
+    retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'],
+    initialDelayMs: 500,
+    maxDelayMs: 10_000,
+    jitterRatio: 0.1,
+  })
+
+  const optInAdapter = new AgyAdapter({
+    retryPolicy: { maxRetries: 2, retryableCodes: ['RATE_LIMIT'] },
+  })
+  assert.equal(optInAdapter.providerRetryPolicy('agy-test').maxRetries, 2)
+  assert.deepEqual(optInAdapter.providerRetryPolicy('agy-test').retryableCodes, ['RATE_LIMIT'])
+})
+
 test('AgyAdapter maps AGY text deltas, final response, usage, and finish', async () => {
   const captured = []
   const adapter = new AgyAdapter({
@@ -91,6 +109,38 @@ test('AgyAdapter exposes and forwards the supported reasoning efforts', async ()
     error => error.code === 'UNSUPPORTED_REASONING_EFFORT',
   )
   assert.equal(captured.length, 1)
+})
+
+test('AgyAdapter applies purpose routes only to matching auxiliary calls', async () => {
+  const captured = []
+  const adapter = new AgyAdapter({
+    model: 'gemini-default',
+    agent: 'deepseek-proxy',
+    purposeRoutes: {
+      compaction: {
+        model: 'gemini-3.7-flash-low',
+        agent: 'deepseek-proxy',
+        reasoningEffort: 'low',
+      },
+    },
+  }, {
+    runAgyProcess: fakeRunner([
+      { event: 'result', result: { status: 'SUCCESS', response: 'ok' } },
+    ], captured),
+  })
+
+  for await (const _chunk of adapter.stream({
+    ...request,
+    purpose: 'compaction',
+  })) {}
+  for await (const _chunk of adapter.stream(request)) {}
+
+  assert.equal(captured[0]?.model, 'gemini-3.7-flash-low')
+  assert.equal(captured[0]?.agent, 'deepseek-proxy')
+  assert.equal(captured[0]?.reasoningEffort, 'low')
+  assert.equal(captured[1]?.model, 'gemini-test')
+  assert.equal(captured[1]?.agent, 'deepseek-proxy')
+  assert.equal(captured[1]?.reasoningEffort, undefined)
 })
 
 test('official DSH runtime validates reasoning effort before AGY spawn', async () => {

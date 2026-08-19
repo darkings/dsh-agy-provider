@@ -10,6 +10,8 @@ DSH Web/headless 使用独立 profile。请通过 DSH 原生 plugin 命令安装
 npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.5.0
 ```
 
+DSH `plugin` 命令会转发给 pnpm，请先确保 `pnpm` 已在 PATH 中。
+
 普通 `npm install dsh-agy-provider` 仍只适用于 Node.js 代码导入，不会把包加入 DSH profile，也不会触发 postinstall 自动改写用户配置。
 
 ## 默认值变化

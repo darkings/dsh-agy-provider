@@ -4,6 +4,7 @@
 
 - Windows 11（当前实机验证平台）。
 - Node.js `>=20` 和 npm。
+- pnpm（DSH `plugin --profile ... add` 会将插件管理转发给 pnpm）。
 - AGY CLI 已安装并完成登录，`agy agents` 能列出 `deepseek-proxy`。
 - DSH 使用与插件兼容的 `@deepseek-ai/dsh-llm` runtime。
 

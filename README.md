@@ -41,6 +41,7 @@
 当前 0.5.0 profile onboarding：
 
 - DSH Web/headless 必须通过 `dsh plugin --profile <profile> add dsh-agy-provider@0.5.0` 安装；普通 `npm install` 只用于 Node.js 代码导入，不会修改 DSH profile。
+- DSH `plugin add` 会转发给 pnpm；使用 profile 安装前需确保 `pnpm` 已在 PATH 中。
 - profile bundle patch 默认使用 `enabled: true` 与 `toolPolicy: agy-owned`，因此 DSH Web 的默认 tool schemas 不会触发 `UNSUPPORTED_TOOLS`；AGY 仍是唯一工具执行者。
 - 直接库调用的 `Config({})` 仍为 `enabled: false`、`toolPolicy: reject`；需要严格模式时，可在 profile patch 中显式覆盖 bundle 配置。
 - 安装后可运行 `npx dsh-agy-provider doctor --profile web --json`；doctor 只执行 AGY 版本、Agent、模型目录和 DSH config dump 检查，不发送 Prompt，`quotaUsed` 固定为 `false`。

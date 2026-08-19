@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.0] - 2026-08-20
+
+### Added
+
+- DSH-owned tool bridge：DSH `read`、`write`、`edit`、`glob`、`grep`、shell、local web 和 MCP 工具继续由 DSH ToolRuntime、Session workspace、sandbox 与 approval 执行。
+- request-scoped DSH context snapshot、doctor v3、permission/approval/tool bridge capability report 和 allowlisted telemetry。
+- prompt-contract tool-call 校验、参数/结果边界、未知工具拒绝、原型污染防护、abort/timeout/cleanup 和稳定 `UNSUPPORTED_TOOLS`/`PERMISSION_REQUIRED` 错误。
+- 公开 0.7.0 迁移说明与 RC/release checklist；packed artifact、Web/headless、跨平台和 registry smoke 门禁。
+
+### Changed
+
+- DSH bundle 默认从 0.6.x legacy `agy-owned` 切换为 `dsh-owned`；AGY 只负责模型文本推理和受约束的 tool-call 生成。
+- 项目目录和权限不再通过 Provider 的静态 `workspaceRoot` 或 AGY 参数猜测；以 DSH 当前 Session `cwd`、permission preset、sandbox 和 approval 为唯一权威。
+- Provider 不传 `--dangerously-skip-permissions`，不执行文件、shell、网络或 MCP 工具；`agy-owned` 保留为显式 legacy 兼容模式并由 doctor 警告。
+
+### Security
+
+- 公共 CI、fake adapter、local HTTP/MCP fixture 和 doctor 全部保持 `quotaUsed=false`；CI 不调用 AGY、不访问公网 fixture、不读取用户 profile/config。
+- 工具 schema/图片 staging 临时文件使用 `0600`，成功、失败和取消路径均清理；pack 不包含规划文件、测试、fixture、日志、Prompt/response 或凭据。
+
+### Release result
+
+- 版本 bump、verify、benchmark、61-file pack dry-run、141/141 tests 和 Windows/Ubuntu/macOS × Node 20/22/24 / DSH Node 22/24 CI 已通过。
+- 通过精确 `v0.7.0` tag 触发 npm Trusted Publishing；发布 run 和 registry smoke 将在发布后补充到本节。
+
 ## [0.6.1] - 2026-08-19
 
 ### Fixed

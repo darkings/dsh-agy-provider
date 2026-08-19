@@ -10,7 +10,7 @@
 
 0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
 
-当前仓库正在开发 0.7.0：npm `latest` 仍是 0.6.1，0.7.0 尚未发布。源码中的 DSH-owned bridge、权限矩阵、doctor v3、telemetry 和跨平台 quota-free CI 已完成，当前进入 V7-M6 release candidate packed-artifact 与发布门禁。
+0.7.0 已完成 release candidate 门禁并进入 Trusted Publishing 发布：它把 DSH bundle 默认切换为 `dsh-owned`，由 DSH Session、ToolRuntime、sandbox 和 approval 控制项目、权限与工具。发布后的 registry 版本、tag 和隔离安装结果会写入 CHANGELOG 与兼容性矩阵。
 
 0.6.0 的公开能力重点是：
 
@@ -18,7 +18,7 @@
 - DSH Session 与 AGY Conversation 的安全映射。
 - agy models 动态模型发现、缓存和静态 fallback。
 - low/medium/high reasoning effort 显式映射。
-- AGY-owned 工具策略、Agent capability presets 和 doctor v2。
+- DSH-owned 工具桥接、Agent capability presets 和 doctor v3；0.6.1 的 AGY-owned 路径保留为 legacy 兼容模式。
 - 默认零自动重试、quota-free 诊断和跨平台测试门禁。
 
 图片输入已经有受限的 experimental bridge，但公开模型目录仍然只声明 inputModalities: ['text']。在 DSH Web 的 AttachmentStore、AGY view_file 和真实像素答案闭环被验证前，项目不会把它宣传为正式识图能力。
@@ -94,7 +94,7 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 
 已有模板默认拒绝覆盖；需要保留旧文件时显式增加 --backup。
 
-### 5. Doctor v3 与安全诊断（0.7.0 源码）
+### 5. Doctor v3 与安全诊断（0.7.0）
 
 发布包提供 profile-aware doctor：
 
@@ -121,10 +121,10 @@ imageInput: experimental 已支持：
 
 ### 7. 质量门禁
 
-- npm run verify：typecheck、110 个测试和 pack dry-run。
+- npm run verify：typecheck、141 个测试和 pack dry-run。
 - npm run benchmark：Parser、serializer、limiter 的无额度基线。
 - npm run smoke:dsh:self-contained：隔离 DSH Web/headless plugin-add、doctor 和 Mock response。
-- GitHub Actions：Node.js 20/22/24 × Windows/Ubuntu/macOS，并包含 DSH self-contained smoke。
+- GitHub Actions：Provider Node.js 20/22/24 × Windows/Ubuntu/macOS，DSH 原生 Node 22/24 × Windows/Ubuntu/macOS，并包含 self-contained smoke。
 - 公共 CI、doctor、benchmark 和 Mock smoke 均不调用真实 AGY 模型。
 
 ## 当前能力矩阵
@@ -136,7 +136,7 @@ imageInput: experimental 已支持：
 | 动态模型发现 | 已实现 | modelDiscovery: auto |
 | reasoning effort | 已实现 | 不设置隐式 effort |
 | AGY 自有工具 | 已实现（0.6.1 legacy） | 0.6.1 profile 为 agy-owned |
-| DSH tool-call bridge | 0.7.0 开发中已完成基础闭环，尚未发布 | 源码 bundle 为 dsh-owned |
+| DSH tool-call bridge | 0.7.0 已实现并通过跨平台门禁 | 0.7.0 bundle 为 dsh-owned |
 | read-only Agent | 已实现 | 显式安装/配置 |
 | workspace-write Agent | 已实现 | 必须显式 workspaceRoot |
 | 图片 staging bridge | experimental | imageInput: off |
@@ -156,24 +156,24 @@ imageInput: experimental 已支持：
 普通 npm install 只安装 Node.js 包，不会把 Provider 写入 DSH profile。DSH Web/headless 应使用原生 plugin manager：
 
 ~~~powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
-npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.7.0
+npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.7.0
 ~~~
 
-0.6.1 已发布包的 profile bundle 默认相当于：
+0.7.0 已发布包的 profile bundle 默认相当于：
 
 ~~~yaml
 enabled: true
 provider: agy
 agent: deepseek-proxy
-toolPolicy: agy-owned
+toolPolicy: dsh-owned
 sessionMode: full
 imageInput: off
 ~~~
 
 直接使用库的 Config({}) 则保持 enabled: false、toolPolicy: reject，不会因为 import 包而修改用户 DSH profile。
 
-0.7.0 未发布源码的 bundle 默认改为 `toolPolicy: dsh-owned`；它不要求重复配置 `workspaceRoot`，项目目录、read/write、shell、网络、MCP 和 approval 均由 DSH 当前 Session 与 ToolRuntime 控制。
+0.6.1 的 `toolPolicy: agy-owned` 仍可作为 legacy 回滚路径，但 doctor 会给出迁移 warning；0.7.0 不要求重复配置 `workspaceRoot`，项目目录、read/write、shell、网络、MCP 和 approval 均由 DSH 当前 Session 与 ToolRuntime 控制。
 
 ### Agent preset 配置
 
@@ -238,10 +238,10 @@ npm run smoke:dsh:self-contained
 
 未来版本会继续以“可验证、可回退、额度可控”为前提，重点包括：
 
-### 0.7.0：由 DSH 控制项目、权限与工具（开发中，尚未发布）
+### 0.7.0：由 DSH 控制项目、权限与工具（已实现）
 
-- DSH-owned tool bridge 基础闭环已完成：AGY 只产生经过本地严格校验的 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
-- V7-M4 权限矩阵和跨平台 CI、V7-M5 doctor v3/allowlisted telemetry/安全回归均已完成；V7-M6 正在验证 packed artifact、Web/headless 隔离安装、三种权限和发布阻断条件。
+- DSH-owned tool bridge 已完成：AGY 只产生经过本地严格校验的 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
+- V7-M4 权限矩阵、V7-M5 doctor v3/allowlisted telemetry/安全回归、V7-M6 packed artifact/Web/headless/跨平台发布门禁均已完成。
 - 直接采用 DSH Session 的项目 `cwd`，以及 `read-only`、`workspace-write`、`danger-full-access` 权限选择，不在插件内复制第二套开关。
 - 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
 - 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。
@@ -294,6 +294,8 @@ dsh-agy-provider/
 - [发布检查清单](docs/release-checklist.md)
 - [CHANGELOG](CHANGELOG.md)
 - [0.7.0 开发计划](docs/v0.7.0-development-plan.md)
+- [0.7.0 迁移说明](docs/migration-0.7.0.md)
+- [0.7.0 release checklist](docs/v0.7.0-release-checklist.md)
 - [0.6.0 开发计划](docs/v0.6.0-development-plan.md)
 - [DSH Provider 契约](docs/dsh-provider-contract.md)
 - [性能基线](docs/performance-baseline.md)

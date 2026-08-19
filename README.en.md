@@ -10,7 +10,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 Version 0.6.1 is publicly released as the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible. The `v0.6.1` tag, GitHub Actions CI, and npm Trusted Publishing have passed.
 
-The repository is now developing 0.7.0. npm `latest` is still 0.6.1 and 0.7.0 has not been published. The DSH-owned bridge, permission matrix, doctor v3, telemetry, and cross-platform quota-free CI gates are complete; the current stage validates the V7-M6 release-candidate packed artifact and release gates.
+Version 0.7.0 has completed the release-candidate gates and is entering Trusted Publishing release. Its DSH bundle defaults to `dsh-owned`, with the active DSH Session, ToolRuntime, sandbox, and approval services controlling the project, permissions, and tools. The final registry version, tag, and isolated-install evidence will be recorded in the changelog and compatibility matrix after publishing.
 
 The 0.6.0 focus is:
 
@@ -18,7 +18,7 @@ The 0.6.0 focus is:
 - Safe DSH Session to AGY Conversation mapping.
 - agy models discovery with TTL, cache, and static fallback.
 - Explicit low/medium/high reasoning effort forwarding.
-- AGY-owned tool policy, Agent capability presets, and doctor v2.
+- DSH-owned tool bridge, Agent capability presets, and doctor v3; the 0.6.1 AGY-owned path remains available as a legacy compatibility mode.
 - Zero automatic retries by default, quota-free diagnostics, and cross-platform gates.
 
 A restricted experimental image bridge exists, but the public model catalog still declares inputModalities: ['text']. The project will not advertise production image understanding until the DSH Web AttachmentStore, AGY view_file, and real pixel-answer path are all verified.
@@ -67,7 +67,7 @@ The Provider starts AGY with spawn(executable, args), without shell command comp
 The project keeps one tool executor:
 
 - Programmatic Provider defaults to toolPolicy: reject and returns UNSUPPORTED_TOOLS for DSH tool schemas.
-- The published 0.6.1 profile bundle defaults to toolPolicy: agy-owned. The 0.7.0 development branch switches the bundle to toolPolicy: dsh-owned; DSH schemas are bounded and validated locally, while DSH ToolRuntime remains the only executor.
+- The published 0.7.0 profile bundle defaults to toolPolicy: dsh-owned; DSH schemas are bounded and validated locally, while DSH ToolRuntime remains the only executor. The 0.6.1 profile remains the explicit agy-owned legacy path.
 - Permission requests return PERMISSION_REQUIRED and terminate the request. The Provider never auto-approves permissions or uses --dangerously-skip-permissions.
 
 ### Agent capability presets and read/write access
@@ -94,7 +94,7 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 
 Existing templates are not overwritten by default. Use --backup explicitly when the previous file must be preserved.
 
-### Doctor v3 and safe diagnostics (0.7.0 source)
+### Doctor v3 and safe diagnostics (0.7.0)
 
 The package provides a profile-aware doctor:
 
@@ -102,7 +102,7 @@ The package provides a profile-aware doctor:
 npx dsh-agy-provider doctor --profile web --json
 ~~~
 
-The 0.7.0 source doctor reports `profileSchemaVersion: 3` and audits the effective provider, model, Agent, retry, purpose routes, workspace, DSH context probe state, and DSH-owned bridge capability. It distinguishes dump timeouts, non-zero exits, and parse failures, and emits a deprecated warning for `agy-owned`; profile doctor is read-only and never presents a static dump as a live Session.
+The 0.7.0 doctor reports `profileSchemaVersion: 3` and audits the effective provider, model, Agent, retry, purpose routes, workspace, DSH context probe state, and DSH-owned bridge capability. It distinguishes dump timeouts, non-zero exits, and parse failures, and emits a deprecated warning for `agy-owned`; profile doctor is read-only and never presents a static dump as a live Session.
 
 The runtime `diagnoseDshContext()` API returns only session/workspace/sandbox/permission/approval availability, allowlisted permission modes, and stable issue codes such as `DSH_SESSION_UNKNOWN` and `DSH_WORKSPACE_MISMATCH`. It never returns paths, Session IDs, prompts, or tool arguments. Telemetry is limited to `permissionPreset`, `sandboxMode`, `approvalPolicy`, `toolSchemaCount`, `toolCallCount`, and bridge outcome.
 
@@ -121,10 +121,10 @@ This is a protocol experiment, not a public image capability. listModels() remai
 
 ### Quality gates
 
-- npm run verify: typecheck, 110 tests, and pack dry-run.
+- npm run verify: typecheck, 141 tests, and pack dry-run.
 - npm run benchmark: quota-free Parser, serializer, and limiter baselines.
 - npm run smoke:dsh:self-contained: isolated DSH Web/headless plugin-add, doctor, and Mock response.
-- GitHub Actions: Node.js 20/22/24 on Windows/Ubuntu/macOS, including the DSH self-contained smoke.
+- GitHub Actions: Provider Node.js 20/22/24 on Windows/Ubuntu/macOS, DSH-native Node 22/24 on Windows/Ubuntu/macOS, and the self-contained smoke.
 - CI, doctor, benchmark, and Mock smoke do not call a real AGY model.
 
 ## Capability matrix
@@ -136,7 +136,7 @@ This is a protocol experiment, not a public image capability. listModels() remai
 | Dynamic model discovery | Implemented | modelDiscovery: auto |
 | Reasoning effort | Implemented | No implicit effort |
 | AGY-owned tools | Implemented (0.6.1 legacy) | agy-owned in the 0.6.1 profile bundle |
-| DSH tool-call bridge | Base loop implemented in unreleased 0.7.0 | dsh-owned in the source bundle |
+| DSH tool-call bridge | Implemented and covered by cross-platform gates in 0.7.0 | dsh-owned in the 0.7.0 bundle |
 | read-only Agent | Implemented | Explicit installation/configuration |
 | workspace-write Agent | Implemented | Requires explicit workspaceRoot |
 | Image staging bridge | Experimental | imageInput: off |
@@ -156,24 +156,24 @@ This is a protocol experiment, not a public image capability. listModels() remai
 A normal npm install only installs the Node.js package. It does not modify a DSH profile. Use the native DSH plugin manager:
 
 ~~~powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
-npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.7.0
+npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.7.0
 ~~~
 
-The published 0.6.1 profile bundle defaults are equivalent to:
+The published 0.7.0 profile bundle defaults are equivalent to:
 
 ~~~yaml
 enabled: true
 provider: agy
 agent: deepseek-proxy
-toolPolicy: agy-owned
+toolPolicy: dsh-owned
 sessionMode: full
 imageInput: off
 ~~~
 
 Direct library Config({}) remains enabled: false and toolPolicy: reject. Importing the package does not modify a user's DSH profile.
 
-The unreleased 0.7.0 source bundle defaults to `toolPolicy: dsh-owned`; it does not require a duplicate `workspaceRoot`. The active DSH Session and ToolRuntime control the project, read/write, shell, network, MCP, and approval behavior.
+The 0.6.1 `toolPolicy: agy-owned` path remains available for legacy rollback, and doctor reports a migration warning. The 0.7.0 bundle does not require a duplicate `workspaceRoot`; the active DSH Session and ToolRuntime control the project, read/write, shell, network, MCP, and approval behavior.
 
 ### Agent preset configuration
 
@@ -238,10 +238,10 @@ Experiments that call a real AGY model never run automatically. The image experi
 
 Future work follows the same rules: verifiable behavior, safe fallback, and bounded quota use.
 
-### 0.7.0: DSH-controlled workspace, permissions, and tools (in development)
+### 0.7.0: DSH-controlled workspace, permissions, and tools (implemented)
 
 - The base DSH-owned tool bridge is implemented: AGY emits locally validated DSH tool calls, while DSH ToolRuntime executes filesystem, shell, network, and MCP tools.
-- The V7-M4 permission matrix and cross-platform CI plus the V7-M5 doctor v3, allowlisted telemetry, and security regressions are complete; V7-M6 validates the packed artifact, isolated Web/headless installation, three permission presets, and release blockers.
+- The V7-M4 permission matrix and cross-platform CI, V7-M5 doctor v3/allowlisted telemetry/security regressions, and V7-M6 packed artifact/Web/headless/release gates are complete.
 - Use the DSH Session project `cwd` and its `read-only`, `workspace-write`, or `danger-full-access` selection instead of duplicating switches in this plugin.
 - Keep sandboxing, approval, MCP credentials, and side effects inside DSH; the Provider does not pass `--dangerously-skip-permissions`.
 - See the [0.7.0 development plan](docs/v0.7.0-development-plan.md) for scope, security gates, quota budget, and milestones.
@@ -294,6 +294,8 @@ dsh-agy-provider/
 - [Release checklist](docs/release-checklist.md)
 - [CHANGELOG](CHANGELOG.md)
 - [0.7.0 development plan](docs/v0.7.0-development-plan.md)
+- [0.7.0 migration guide](docs/migration-0.7.0.md)
+- [0.7.0 release checklist](docs/v0.7.0-release-checklist.md)
 - [0.6.0 development plan](docs/v0.6.0-development-plan.md)
 - [DSH Provider contract](docs/dsh-provider-contract.md)
 - [Performance baseline](docs/performance-baseline.md)

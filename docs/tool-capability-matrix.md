@@ -18,9 +18,9 @@ Provider 不把 AGY 内部工具重新包装成 DSH `tool-call`，也不让 DSH 
 
 0.6.1 registry 包仍使用上述 AGY-owned profile bundle。直接调用库的 `Config({})` 仍是 `reject`；用户显式通过 0.6.1 `dsh plugin add` 安装 profile bundle 后，`cordis.patch.yml` 默认选择 `agy-owned`。
 
-## 0.7.0 当前源代码决策
+## 0.7.0 已发布决策
 
-未发布的 0.7.0 源码将 bundle 默认切换为 `dsh-owned`：AGY 只接收 bounded prompt contract 并返回经本地严格校验的 DSH tool call，文件、shell、网络和 MCP 仍由 DSH ToolRuntime、sandbox 与 approval 执行。Provider 不直接调用 `ctx.tools.execute()`，也不复制 DSH 权限开关。
+0.7.0 bundle 默认使用 `dsh-owned`：AGY 只接收 bounded prompt contract 并返回经本地严格校验的 DSH tool call，文件、shell、网络和 MCP 仍由 DSH ToolRuntime、sandbox 与 approval 执行。Provider 不直接调用 `ctx.tools.execute()`，也不复制 DSH 权限开关。
 
 ## 能力边界
 
@@ -47,12 +47,22 @@ Provider 不把 AGY 内部工具重新包装成 DSH `tool-call`，也不让 DSH 
 
 ## 0.7.0 bridge 门禁状态
 
-V7-M2b 已完成 prompt-contract 可靠性与 disposable DSH ToolRuntime round-trip 门禁。继续扩大能力矩阵前仍必须完成：
+V7-M2b 已完成 prompt-contract 可靠性与 disposable DSH ToolRuntime round-trip 门禁；V7-M3–M6 已完成生产 context、权限矩阵、doctor v3、安全审计、packed artifact、跨平台 CI 和 registry smoke：
 
-- DSH tool call、permission、tool result 的脱敏 fixture 和完整 schema。
-- 每个工具的唯一执行所有者和幂等/重试策略。
-- 权限 UI 或 headless 审批协议。
-- 工具参数、工作区路径和取消信号的双向校验。
+- DSH tool call、permission、tool result 的脱敏 fixture 和完整 schema 已通过。
+- 每个工具的唯一执行所有者和幂等/重试策略已由 DSH ToolRuntime/Provider bridge 边界固定。
+- 权限 UI/headless 审批由 DSH profile 服务控制；Provider 不自动批准。
+- 工具参数、工作区路径和取消信号的双向校验已通过；Provider argv 不包含 `--dangerously-skip-permissions`。
+
+## DSH permission preset 行为
+
+| DSH preset | 文件/搜索 | shell | web/MCP | 越界写入 |
+|---|---|---|---|---|
+| `read-only` | read/search 可用，write/edit 被拒绝 | 写入被拒绝 | 由 DSH profile/approval 决定 | 拒绝 |
+| `workspace-write` | workspace 内 write/edit 可用 | workspace 内命令受 DSH 控制 | 由 DSH profile/approval 决定 | 拒绝或要求 DSH approval |
+| `danger-full-access` | 由 DSH 明确选择后可越过 workspace | 由 DSH 明确选择后执行 | 由 DSH profile 控制 | 允许范围由 DSH 选择决定 |
+
+三种模式的项目目录均来自 live Session `cwd`，不是 Provider 配置、AGY prompt 或 `process.cwd()`。完整 packed-artifact 证据见 [0.7.0 release checklist](v0.7.0-release-checklist.md)。
 
 ## 0.6.0 Agent capability presets
 

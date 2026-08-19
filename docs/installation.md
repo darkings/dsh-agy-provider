@@ -12,7 +12,7 @@
 不要只在业务项目目录执行 `npm install dsh-agy-provider`。DSH Web 使用独立的 profile 依赖目录，必须通过 DSH 的 plugin 命令安装：
 
 ```powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.4.0
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.5.0
 ```
 
 该命令会将包加入 `web` profile 的依赖和 `dsh.profile.bundles`。验证是否已加载：
@@ -27,12 +27,12 @@ npx @deepseek-ai/dsh --profile web --dump-config | Select-String dsh-agy-provide
 npx @deepseek-ai/dsh web
 ```
 
-安装后 Provider 默认仍为 `enabled: false`。确认 AGY 已登录、`deepseek-proxy` 可用后，在 `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` 写入：
+0.5.0 起，显式通过 `dsh plugin add` 安装的 bundle 默认是 `enabled: true`、`toolPolicy: agy-owned`。这不会在安装阶段发送模型请求；确认 AGY 已登录、`deepseek-proxy` 可用后即可启动 Web：
 
 ```yaml
 - id: dsh-agy-provider
   config:
-    enabled: true
+    enabled: false
     provider: agy
     agent: deepseek-proxy
     model: gemini-3.1-pro-high
@@ -40,12 +40,12 @@ npx @deepseek-ai/dsh web
     sessionMode: full
 ```
 
-保存后重新启动 DSH Web。这样可以避免未配置 AGY 时插件加载失败或意外消耗额度。
+上面的 patch 仅用于需要严格拒绝 DSH tool schemas 的用户；不需要严格模式时不要添加这段覆盖配置，直接使用 bundle 默认值即可。无论哪种模式，插件启动都不会自动发送模型请求。
 
 如果只需要在普通 Node.js 项目中导入 Provider，而不是让 DSH Web 加载 bundle，才使用：
 
 ```powershell
-npm install dsh-agy-provider@0.4.0
+npm install dsh-agy-provider@0.5.0
 ```
 
 ## 从 GitHub 安装源码包
@@ -58,9 +58,9 @@ npx @deepseek-ai/dsh plugin --profile web add github:darkings/dsh-agy-provider
 
 ## 版本与发布状态
 
-当前 npm registry 的 `latest` 为 `0.4.0`。0.3.0 的已完成能力已随 0.4.0 一并发布；需要稳定版本时直接安装 npm 包，需要验证最新源码时才从 GitHub 安装。
+当前源码 package version 为 `0.5.0`，npm registry 的 `latest` 暂为 `0.4.0`。0.3.0 的已完成能力已随 0.4.0 一并发布；0.5.0 发布前，稳定 registry 安装仍使用 0.4.0，验证 0.5.0 则从当前源码/tarball 安装。
 
-0.4.0 已通过 `npm publish --access public` 发布。后续版本发布前仍需先完成版本 bump、`npm run verify`、registry/DSH Mock 复验，并避免使用已发布版本重复触发 publish workflow。
+0.4.0 已通过 `npm publish --access public` 发布。0.5.0 发布前仍需完成跨平台 CI、Trusted Publisher/tag 条件和 registry 全新安装复验；当前未执行 `npm publish`。
 
 ## 配置
 
@@ -122,6 +122,18 @@ npm run diagnose
 npm run diagnose -- --json
 ```
 
+从 npm 安装产物运行 profile-aware doctor：
+
+```powershell
+npx dsh-agy-provider doctor --profile web --json
+```
+
+如果 DSH CLI 不在 profile 或 PATH 中，显式传入 DSH JavaScript entry：
+
+```powershell
+npx dsh-agy-provider doctor --profile web --dsh-bin C:\path\to\node_modules\@deepseek-ai\dsh\lib\bin.js --json
+```
+
 可用以下环境变量覆盖检查目标。`AGY_MODELS` 必须是 JSON 数组：
 
 ```powershell
@@ -159,7 +171,7 @@ npm pack --dry-run
 npm run smoke:dsh:self-contained
 ```
 
-该脚本在临时目录安装固定 `@deepseek-ai/dsh@0.1.0-rc.7`，安装当前 Provider tarball，追加 Provider bundle 到临时 `headless` profile，执行 `--dump-config` 和 `agy-mock` 文本请求后自动清理。它不会调用 AGY，结果固定标记 `quotaUsed: false`。
+该脚本在临时目录安装固定 `@deepseek-ai/dsh@0.1.0-rc.7`，使用 DSH 原生 `plugin --profile web/headless add` 安装当前 Provider tarball，检查 Web bundle defaults、运行 doctor，并在 headless profile 执行 `agy-mock` 文本请求后自动清理。它不会调用 AGY，结果固定标记 `quotaUsed: false`。
 
 这些命令不会发送模型 Prompt；`diagnose` 只读取 AGY 版本、Agent 和模型目录，`benchmark` 与测试使用本地数据或 fake runner。完整的版本 bump、tag、Trusted Publisher 和 registry 复验步骤见 [发布检查清单](release-checklist.md)。
 

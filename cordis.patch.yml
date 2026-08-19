@@ -1,13 +1,13 @@
-# Bundle entry is inert by default; users enable it after configuring AGY.
+# Bundle entry is enabled by default when installed through dsh plugin add.
 # Install this package into a DSH profile with:
-# npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.4.0
+# npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.5.0
 - insert:
     - id: dsh-agy-provider
       name: dsh-agy-provider
       config:
-        enabled: false
+        enabled: true
         provider: agy
         model: gemini-3.1-pro-high
-        toolPolicy: reject
+        toolPolicy: agy-owned
         agent: deepseek-proxy
         sessionMode: full

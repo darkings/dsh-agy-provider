@@ -1,6 +1,6 @@
 {
   "name": "dsh-agy-provider",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -21,9 +21,13 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
+  "bin": {
+    "dsh-agy-provider": "./bin/dsh-agy-provider.js"
+  },
   "files": [
     "lib/**/*.js",
     "lib/**/*.d.ts",
+    "bin/**/*.js",
     "cordis.patch.yml"
   ],
   "license": "MIT",

@@ -4,14 +4,14 @@
 
 ## 当前状态
 
-`0.4.0` 已完成 V2–V4 计划中的源码交付，并已发布到 npm（`latest=0.4.0`）；registry、隔离 DSH Mock 和跨平台 CI 复验通过。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
+`0.5.0` 当前为 release candidate 工作树：V5-M1–M5 的源码、doctor CLI、原生 DSH profile smoke 和无额度验证已完成，npm registry 暂仍为 `latest=0.4.0`，待发布授权后再 bump/tag/publish。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 80 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 89 个全部通过；bundle dry-run 可见 `cordis.patch.yml`、`lib` 和 doctor CLI 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
 0.4.0 已完成 V4-M1/V4-M4；真实 AGY 协议采样和自包含 DSH Mock smoke 已验证。V4-M2/V4-M3 因未证明同一 AGY 进程的多轮 stdin 留存，以有证据的 negative result 关闭，正式路径继续使用 one-shot，不暴露 persistent transport 配置。详见 [0.4.0 开发计划](docs/v0.4.0-development-plan.md)。
@@ -37,6 +37,13 @@
 - 显式设置 `toolPolicy: agy-owned` 时忽略 DSH tool schemas，只把文本上下文交给 AGY；schema 不会按 DSH 工具协议发送给模型。
 - AGY 内部工具由 AGY 独占执行，不转换为 DSH tool calls。
 - 两种策略检测到权限请求时都立即终止并返回 `PERMISSION_REQUIRED`，不会自动批准或加入 `--dangerously-skip-permissions`。
+
+当前 0.5.0 profile onboarding：
+
+- DSH Web/headless 必须通过 `dsh plugin --profile <profile> add dsh-agy-provider@0.5.0` 安装；普通 `npm install` 只用于 Node.js 代码导入，不会修改 DSH profile。
+- profile bundle patch 默认使用 `enabled: true` 与 `toolPolicy: agy-owned`，因此 DSH Web 的默认 tool schemas 不会触发 `UNSUPPORTED_TOOLS`；AGY 仍是唯一工具执行者。
+- 直接库调用的 `Config({})` 仍为 `enabled: false`、`toolPolicy: reject`；需要严格模式时，可在 profile patch 中显式覆盖 bundle 配置。
+- 安装后可运行 `npx dsh-agy-provider doctor --profile web --json`；doctor 只执行 AGY 版本、Agent、模型目录和 DSH config dump 检查，不发送 Prompt，`quotaUsed` 固定为 `false`。
 
 当前 M7 配置、安全和可观测性：
 
@@ -84,12 +91,11 @@
 - reasoning effort、tool policy 和 model discovery 的日志字段只允许白名单枚举；日志 sanitizer 不会转发运行时附加字段。
 - 完整用户路径、spawn 失败 executable path、Prompt、stderr 和凭据不会进入诊断或结构化日志。
 
-当前 0.4.0 发布状态：
+当前 0.5.0 发布状态：
 
-- 当前 package version 为 `0.4.0`，npm registry 的 `latest` 为 `0.4.0`。
+- 当前源码 package version 为 `0.5.0`；npm registry 的 `latest` 仍为 `0.4.0`，因此 registry 安装请继续使用已发布版本，或等待 0.5.0 发布。
 - `.github/workflows/publish.yml` 要求 `v*.*.*` tag 与 `package.json` 版本完全匹配，并使用 npm Trusted Publishing，不在仓库保存长期 token。
-- 已完成版本 bump、`npm run verify`、pack/registry/隔离 DSH Mock 复验，并执行 `npm publish --access public` 发布 `0.4.0`。
-- 版本提交 `a6fb5b1` 的 GitHub Actions CI run `32199878143` 已 11/11 成功。
+- 0.5.0 已完成本地版本 bump、`npm run verify`、pack/原生 plugin-add smoke 预检；尚未执行 npm publish。
 
 当前明确不支持：
 
@@ -124,19 +130,22 @@ dsh-agy-provider/
 │  ├─ development-plan.md
 │  ├─ compatibility-matrix.md
 │  ├─ performance-baseline.md
-│  └─ verified-baseline.md
+│  ├─ verified-baseline.md
+│  └─ migration-0.5.0.md
 ├─ src/
 │  ├─ agy/          # 子进程、参数、事件解析、模型发现、诊断、限流和脱敏
 │  │  ├─ experimental-transport.ts # V3-M4 隔离持久 worker prototype
 │  │  └─ redact.ts / log.ts / models.ts # V3-M5 脱敏、日志和目录诊断边界
 │  ├─ diagnostics.ts # Provider/DSH/Node.js/AGY 聚合诊断
+│  ├─ doctor.ts      # 发布包可直接运行的 profile-aware doctor
 │  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
 │  ├─ session/      # DSH Session 与 AGY Conversation 映射
 │  └─ index.ts
 ├─ scripts/
 │  ├─ benchmark.mjs  # 不调用 AGY 的本地性能基线
 │  ├─ diagnose.mjs    # 只读 AGY 版本/Agent 诊断
-│  ├─ dsh-smoke.mjs   # 隔离 DSH bundle/Mock runtime smoke test
+│  ├─ dsh-smoke.mjs   # 已安装 profile 的 DSH bundle/Mock runtime smoke test
+│  ├─ dsh-smoke-self-contained.mjs # 原生 plugin add 的 Web/headless smoke
 │  └─ quota-experiment.mjs # 人工触发的 full/resume quota 对照
 ├─ tests/
 ├─ task_plan.md
@@ -186,7 +195,7 @@ modelDiscoveryTimeoutMs: 10000
 
 `reasoningEffort` 是请求级能力，不是 Provider 配置项。可选值为 `low`、`medium`、`high`；未指定时保持 AGY/模型自身默认值，`temperature`、`stop` 和 `maxTokens` 仍会被拒绝。
 
-`toolPolicy` 是 Provider 配置项，默认 `reject`。只有确认由 AGY Agent 独占工具执行时才设置 `agy-owned`；此时 DSH `tools` 仅作为上游已携带的 schema 元数据被忽略，文本上下文仍按原路径交给 AGY，AGY 内部工具事件不会转换为 DSH tool chunks。
+`toolPolicy` 是 Provider 配置项，程序化默认值为 `reject`。通过 0.5.0 bundle 安装到 DSH profile 后，`cordis.patch.yml` 显式使用 `agy-owned`，因为该场景已确定由 AGY Agent 独占工具执行；DSH `tools` 仅作为上游 schema 元数据被忽略，文本上下文仍按原路径交给 AGY，AGY 内部工具事件不会转换为 DSH tool chunks。
 
 在项目目录执行：
 
@@ -230,6 +239,6 @@ npm run smoke:dsh:self-contained
 
 输出包含 DSH/Provider 版本、模型、`toolPolicy`、bundle inventory 和 `quotaUsed: false`；该流程不登录、不调用 AGY、不使用模型额度。
 
-安装、升级和发布检查见 [安装文档](docs/installation.md)、[0.2.0 迁移说明](docs/migration-0.2.0.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。在 DSH 中使用时，必须把包安装到目标 profile：`npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.4.0`；仅在普通项目目录执行 `npm install` 不会自动修改 DSH profile。
+安装、升级和发布检查见 [安装文档](docs/installation.md)、[0.2.0 迁移说明](docs/migration-0.2.0.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md)、[0.5.0 迁移说明](docs/migration-0.5.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。在 DSH 中使用时，必须把包安装到目标 profile：`npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.5.0`；仅在普通项目目录执行 `npm install` 不会自动修改 DSH profile。
 
-详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md)、[0.3.0 开发计划](docs/v0.3.0-development-plan.md) 和 [0.4.0 开发计划](docs/v0.4.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。
+详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md)、[0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.4.0 开发计划](docs/v0.4.0-development-plan.md) 和 [0.5.0 开发计划](docs/v0.5.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

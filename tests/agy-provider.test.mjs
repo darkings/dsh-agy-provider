@@ -192,7 +192,7 @@ test('AgyAdapter merges quota-free AGY model discovery with static metadata', as
   assert.equal(adapter.getModelDiscoveryStatus().source, 'merged')
 })
 
-test('AgyAdapter rejects DSH tools in the text-only MVP', async () => {
+test('AgyAdapter rejects DSH tools in the text-only MVP with actionable guidance', async () => {
   const adapter = new AgyAdapter({}, { runAgyProcess: fakeRunner([], []) })
   await assert.rejects(
     async () => {
@@ -201,7 +201,7 @@ test('AgyAdapter rejects DSH tools in the text-only MVP', async () => {
         tools: [{ name: 'fixture', description: 'fixture', parameters: {} }],
       })) {}
     },
-    error => error.code === 'UNSUPPORTED_TOOLS',
+    error => error.code === 'UNSUPPORTED_TOOLS' && error.message.includes('toolPolicy: agy-owned'),
   )
 })
 
@@ -241,7 +241,7 @@ test('official DSH runtime accepts tool schemas only with explicit AGY ownership
   await root.fiber.dispose()
 })
 
-test('AgyAdapter fails fast on an AGY permission request under both tool policies', async () => {
+test('AgyAdapter fails fast on an AGY permission request under both tool policies with actionable guidance', async () => {
   for (const toolPolicy of ['reject', 'agy-owned']) {
     const adapter = new AgyAdapter({ toolPolicy }, {
       runAgyProcess: async requestValue => {
@@ -254,7 +254,7 @@ test('AgyAdapter fails fast on an AGY permission request under both tool policie
       async () => {
         for await (const _chunk of adapter.stream({ ...request, messages: [], system: 'reply' })) {}
       },
-      error => error.code === 'PERMISSION_REQUIRED',
+      error => error.code === 'PERMISSION_REQUIRED' && error.message.includes('Adjust AGY Agent permissions'),
     )
   }
 })

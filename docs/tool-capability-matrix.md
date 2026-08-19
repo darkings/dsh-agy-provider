@@ -16,12 +16,15 @@ AGY deepseek-proxy Agent
 
 Provider 不把 AGY 内部工具重新包装成 DSH `tool-call`，也不让 DSH Agent loop 同时执行同一工具。
 
+安装模式与策略默认值分开：直接调用库的 `Config({})` 仍是 `reject`；用户显式通过 0.5.0 `dsh plugin add` 安装 profile bundle 后，`cordis.patch.yml` 默认选择 `agy-owned`，以匹配 DSH Web 的工具 schema 入口。
+
 ## 能力边界
 
 | 能力 | DSH 输入/事件 | AGY 行为 | V1 处理 | 执行所有者 |
 |------|---------------|----------|---------|------------|
 | 普通文本 | `messages`、`system` | 生成文本 | 映射为 `text-delta` | AGY |
-| DSH 原生工具 schema（默认） | `GenerateOptions.tools` | 可能与 AGY 工具重复 | `toolPolicy: reject` 时返回 `UNSUPPORTED_TOOLS` | 无，避免双 loop |
+| DSH 原生工具 schema（程序化/严格模式） | `GenerateOptions.tools` | 可能与 AGY 工具重复 | `toolPolicy: reject` 时返回 `UNSUPPORTED_TOOLS`，提示切换策略 | 无，避免双 loop |
+| DSH 原生工具 schema（0.5.0 profile bundle 默认） | `GenerateOptions.tools` | DSH Web 默认携带 schema | `toolPolicy: agy-owned` 时忽略 schema，只发送文本 | AGY |
 | DSH 原生工具 schema（显式 AGY-owned） | `GenerateOptions.tools` | schema 仅属于 DSH 上下文入口 | 忽略 schema，只发送文本，不生成 DSH tool chunk | AGY |
 | AGY 内置工具调用 | `step_update.step_type=tool` | AGY 自己调用工具 | 作为内部事件透传给解析层，不生成 DSH tool chunk | AGY |
 | AGY 工具结果 | AGY `tool` step 后续状态 | AGY 内部消费 | 不暴露为 DSH tool result | AGY |

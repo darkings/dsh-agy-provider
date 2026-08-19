@@ -10,12 +10,14 @@
 | Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | V2-M4 GitHub Actions 矩阵 |
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
 | DSH tools policy | `reject` 默认；显式 `agy-owned` | 通过无额度验证 | 官方 DSH runtime schema、工具事件、权限 fail-fast 和日志白名单测试 |
+| DSH profile onboarding | `@deepseek-ai/dsh@0.1.0-rc.7` + `dsh plugin add` | 通过无额度验证 | V5-M4 Web/headless 原生 plugin-add smoke，`quotaUsed=false` |
+| Doctor CLI | npm package `bin/dsh-agy-provider` | 通过无额度验证 | V5-M2 tarball smoke、profile/config/AGY 诊断测试 |
 | AGY | `1.1.13` | 通过 | M0–M6 真实文本、会话和工具采样 |
 | AGY | `1.1.14` | 通过诊断与动态目录发现 | `npm run diagnose -- --json`；版本、Agent 和 `agy models` 检查通过，实测发现 14 个模型 |
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
 | AGY models | `agy models` plain text | 通过 | V3-M1 解析、去重、显式目录合并和 fallback 测试通过 |
 | Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
-| npm registry | `dsh-agy-provider@0.4.0`, `latest=0.4.0` | 通过 | `npm view`、发布产物检查和自包含 DSH Mock smoke；0.3.0 未单独发布 |
+| npm registry | `dsh-agy-provider@0.4.0`, `latest=0.4.0` | 已发布基线 | `npm view`、发布产物检查；0.5.0 release candidate 尚未发布 |
 | Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 已具备安全闸门 | `.github/workflows/publish.yml`；账号级 2FA/Trusted Publisher 待配置 |
 
 ## 版本策略
@@ -57,4 +59,4 @@
 
 - macOS/Linux 已完成路径、命令、进程树、构建、测试和包预览验证；尚未在这些平台安装真实 AGY CLI。
 - AGY `1.1.14` 的完整文本/会话/工具回归仍需在 M8 的真实额度窗口中补采样；当前已完成无额度诊断和代码回归。
-- DSH SDK 的后续 breaking release 需要重新验证 `LlmAdapter` 和 bundle contract。
+- DSH SDK 的后续 breaking release 需要重新验证 `LlmAdapter`、profile `plugin add` 和 bundle contract。

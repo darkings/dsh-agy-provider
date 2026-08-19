@@ -65,28 +65,42 @@ const ModelConfig = z.object({
   contextWindow: z.natural().min(1).max(10_000_000),
 }) as unknown as z<ModelConfig>
 
-export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(false),
-  provider: z.string().default('agy'),
-  model: z.string().default(DEFAULT_MODEL),
-  models: z.array(ModelConfig).default([]),
-  modelDiscovery: z.union(['auto', 'off'] as const).default('auto'),
-  modelDiscoveryTtlMs: z.number().min(1_000).max(3_600_000).default(300_000),
-  modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000),
-  toolPolicy: z.union(['reject', 'agy-owned'] as const).default('reject'),
-  agent: z.string().default('deepseek-proxy'),
-  agyPath: z.string().default(''),
-  timeoutMs: z.number().min(1).max(3_600_000).default(120_000),
-  sessionMode: z.union(['resume', 'full'] as const).default('full'),
-  minimumAgyVersion: z.string().pattern(/^\d+\.\d+\.\d+$/).default('1.1.13'),
-  maxConcurrent: z.natural().min(1).max(64).default(4),
-  maxQueue: z.natural().max(256).default(32),
-  queueTimeoutMs: z.natural().max(3_600_000).default(30_000),
-  maxOutputBytes: z.natural().min(1_024).max(64 * 1024 * 1024).default(8 * 1024 * 1024),
-  maxEventLineLength: z.natural().min(1_024).max(8 * 1024 * 1024).default(1_048_576),
-  response: z.string().default('AGY mock provider is ready.'),
-  delayMs: z.number().min(0).max(60_000).default(0),
-})
+export function createConfigSchema(defaults: {
+  enabled?: boolean
+  toolPolicy?: ToolPolicy
+} = {}): z<Config> {
+  const defaultEnabled = defaults.enabled ?? false
+  const defaultToolPolicy = defaults.toolPolicy ?? 'reject'
+
+  return z.object({
+    enabled: z.boolean().default(defaultEnabled),
+    provider: z.string().default('agy'),
+    model: z.string().default(DEFAULT_MODEL),
+    models: z.array(ModelConfig).default([]),
+    modelDiscovery: z.union(['auto', 'off'] as const).default('auto'),
+    modelDiscoveryTtlMs: z.number().min(1_000).max(3_600_000).default(300_000),
+    modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000),
+    toolPolicy: z.union(['reject', 'agy-owned'] as const).default(defaultToolPolicy),
+    agent: z.string().default('deepseek-proxy'),
+    agyPath: z.string().default(''),
+    timeoutMs: z.number().min(1).max(3_600_000).default(120_000),
+    sessionMode: z.union(['resume', 'full'] as const).default('full'),
+    minimumAgyVersion: z.string().pattern(/^\d+\.\d+\.\d+$/).default('1.1.13'),
+    maxConcurrent: z.natural().min(1).max(64).default(4),
+    maxQueue: z.natural().max(256).default(32),
+    queueTimeoutMs: z.natural().max(3_600_000).default(30_000),
+    maxOutputBytes: z.natural().min(1_024).max(64 * 1024 * 1024).default(8 * 1024 * 1024),
+    maxEventLineLength: z.natural().min(1_024).max(8 * 1024 * 1024).default(1_048_576),
+    response: z.string().default('AGY mock provider is ready.'),
+    delayMs: z.number().min(0).max(60_000).default(0),
+  })
+}
+
+/** Programmatic library default: enabled=false, toolPolicy=reject */
+export const Config: z<Config> = createConfigSchema({ enabled: false, toolPolicy: 'reject' })
+
+/** Bundle default for DSH profile plugin add: enabled=true, toolPolicy=agy-owned */
+export const BundleConfig: z<Config> = createConfigSchema({ enabled: true, toolPolicy: 'agy-owned' })
 
 /**
  * Resolve the effective catalog while keeping the 0.1.0 `model` setting

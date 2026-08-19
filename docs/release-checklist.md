@@ -66,3 +66,32 @@
 - [x] 版本提交 `a6fb5b1` 的 GitHub Actions CI run `32199878143` 通过 11/11。
 
 > 0.3.0 未单独发布；其已完成能力随 0.4.0 一并发布。未创建 `v0.4.0` tag，避免现有 tag publish workflow 对已发布版本重复执行。
+
+## `0.5.0` release candidate
+
+### 已完成
+
+- [x] `package.json` 和 `package-lock.json` 已同步为 `0.5.0`，package `bin` 已包含 `dsh-agy-provider` doctor CLI。
+- [x] `cordis.patch.yml` 已提供 profile bundle ready defaults：`enabled=true`、`toolPolicy=agy-owned`。
+- [x] `Config({})`/`ConfigSchema({})` 安全默认值保持 `enabled=false`、`toolPolicy=reject`，`BundleConfig` 回归测试通过。
+- [x] `UNSUPPORTED_TOOLS`、`PERMISSION_REQUIRED` 增加可执行修复提示，稳定 error code 未改变。
+- [x] Doctor profile 检查覆盖 package、bundle、enabled、tool policy、provider/model、路径边界和 Windows `.cmd` shim。
+- [x] 自包含 smoke 使用 DSH 原生 `plugin --profile web/headless add`，本机通过且输出 `quotaUsed=false`；不依赖用户 `DSH_HOME`/`DSH_BIN`，不调用 AGY 模型。
+- [x] Doctor CLI 已从当前 tarball 安装目录执行，package inventory 包含 `bin`、`lib`、types 和 bundle patch。
+
+### 发布前验证
+
+- [x] 本地 `npm run verify`（89/89、typecheck、43 文件 pack）、`npm run benchmark` 和 `npm run diagnose -- --json` 均通过；diagnose 返回 `quotaUsed=false`。
+- [x] `git diff --check` 和敏感字段/用户路径审计通过；tarball 未包含规划文件、测试、日志或本机 profile。
+- [ ] Windows/Ubuntu/macOS × Node.js 20/22/24 CI 一次通过；Ubuntu/macOS Node 24 原生 plugin-add smoke 通过。
+- [ ] 从全新 registry profile 安装 0.5.0，复验 doctor、Web bundle defaults 和 headless Mock smoke。
+- [ ] npm package settings 中 Trusted Publisher 已指向 `darkings/dsh-agy-provider` 的 `publish.yml`，并先做 tag 发布 dry-run 级别核对。
+- [ ] 真实 AGY Web 请求仅在用户再次明确授权后执行，最多 2 请求 / 12,000 input tokens / 1,000 output tokens；公共 CI 保持 0 请求。
+
+### 当前发布闸门
+
+- [ ] 创建并推送与 package version 完全匹配的 `v0.5.0` tag。
+- [ ] 执行 npm Trusted Publishing 发布；若 Trusted Publisher 未完成，先停止并请求用户确认是否使用本机 2FA 发布。
+- [ ] 发布后确认 `npm view dsh-agy-provider version dist-tags` 为 `0.5.0` / `latest=0.5.0`，再从 registry 做隔离安装复验。
+
+> 当前 0.5.0 仍是 release candidate，npm registry `latest` 保持 `0.4.0`；本轮不执行 publish 或 tag。

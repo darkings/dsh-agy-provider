@@ -2,10 +2,10 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, parse } from 'node:path'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh@0.1.0-rc.7'
-const EXPECTED_RESPONSE = 'V4-M4 self-contained mock smoke passed'
+const EXPECTED_RESPONSE = 'V5-M4 self-contained mock smoke passed'
 const COMMAND_TIMEOUT_MS = 10 * 60_000
 const OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024
 
@@ -111,8 +111,17 @@ async function packageVersion(path) {
   return { name: metadata.name, version: metadata.version }
 }
 
+function smokeTempParent() {
+  const configured = process.env.DSH_SMOKE_TEMP_ROOT?.trim()
+  if (configured !== undefined && configured.length > 0) return configured
+  // DSH resolves bundles from the dsh install anchor before the profile. On
+  // Windows, a user-level node_modules ancestor can therefore shadow the
+  // profile tarball; use the drive root for a clean resolution boundary.
+  return process.platform === 'win32' ? parse(process.cwd()).root : tmpdir()
+}
+
 async function main() {
-  const workDir = await mkdtemp(join(tmpdir(), 'dsh-agy-provider-v4-smoke-'))
+  const workDir = await mkdtemp(join(smokeTempParent(), 'dsh-agy-provider-v5-smoke-'))
   const isolatedHome = join(workDir, 'dsh-home')
   const installRoot = join(workDir, 'dsh-install')
   const providerTarballDir = join(workDir, 'provider-tarball')
@@ -138,25 +147,78 @@ async function main() {
     assertSuccess(dshVersionResult, 'DSH_VERSION_FAILED')
     const dshVersion = safeVersion(dshVersionResult.stdout)
 
-    const bootstrap = await runNode(dshEntry, ['--profile', 'headless', '--dump-config'], {
+    // 1. Native plugin add to web profile
+    const addWebResult = await runNode(dshEntry, ['plugin', '--profile', 'web', 'add', providerTarball], {
       cwd: installRoot,
       env: dshEnv,
     })
-    assertSuccess(bootstrap, 'DSH_PROFILE_BOOTSTRAP_FAILED')
-    const profileRoot = join(isolatedHome, 'profiles', 'headless')
-    if (!existsSync(profileRoot)) throw new Error('DSH_PROFILE_NOT_CREATED')
+    assertSuccess(addWebResult, 'DSH_PLUGIN_ADD_WEB_FAILED')
 
-    await runNpm([
-      'install', '--prefix', profileRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',
-      '--no-audit', '--no-fund', providerTarball,
-    ], { cwd: installRoot, env: dshEnv }).then(result => assertSuccess(result, 'PROVIDER_PROFILE_INSTALL_FAILED'))
+    const webProfileRoot = join(isolatedHome, 'profiles', 'web')
+    if (!existsSync(webProfileRoot)) throw new Error('DSH_WEB_PROFILE_NOT_CREATED')
 
-    const profilePackagePath = join(profileRoot, 'package.json')
-    const profilePackage = JSON.parse(await readFile(profilePackagePath, 'utf8'))
-    const bundles = profilePackage.dsh?.profile?.bundles
-    if (!Array.isArray(bundles)) throw new Error('DSH_PROFILE_BUNDLES_MISSING')
-    if (!bundles.includes('dsh-agy-provider')) bundles.push('dsh-agy-provider')
-    await writeFile(profilePackagePath, `${JSON.stringify(profilePackage, null, 2)}\n`, 'utf8')
+    const webPackage = JSON.parse(await readFile(join(webProfileRoot, 'package.json'), 'utf8'))
+    if (!webPackage.dependencies?.['dsh-agy-provider']) throw new Error('WEB_PROFILE_DEPENDENCY_MISSING')
+    if (!Array.isArray(webPackage.dsh?.profile?.bundles) || !webPackage.dsh.profile.bundles.includes('dsh-agy-provider')) {
+      throw new Error('WEB_PROFILE_BUNDLE_DECLARATION_MISSING')
+    }
+
+    // Verify web profile dump-config has ready agy-owned defaults without manual patch
+    const webDumpConfig = await runNode(dshEntry, ['--profile', 'web', '--dump-config'], {
+      cwd: installRoot,
+      env: dshEnv,
+    })
+    assertSuccess(webDumpConfig, 'DSH_WEB_DUMP_CONFIG_FAILED')
+    const webChecks = [
+      '# == dsh-agy-provider',
+      'enabled: true',
+      'toolPolicy: agy-owned',
+      'provider: agy',
+      'model: gemini-3.1-pro-high',
+    ]
+    if (!webChecks.every(value => webDumpConfig.stdout.includes(value))) {
+      const webConfigSummary = webDumpConfig.stdout
+        .split(/\r?\n/)
+        .filter(line => /# == dsh-agy-provider|enabled:|toolPolicy:|provider:|model:/.test(line))
+        .map(line => line.trim().replace(/\s+/g, ' '))
+        .slice(0, 12)
+      process.stderr.write(`Web bundle config summary: ${JSON.stringify(webConfigSummary)}\n`)
+      process.stderr.write(`Missing web bundle checks: ${JSON.stringify(webChecks.filter(v => !webDumpConfig.stdout.includes(v)))}\n`)
+      throw new Error('WEB_PROFILE_BUNDLE_DEFAULTS_MISMATCH')
+    }
+
+    // Run Doctor CLI check against the web profile
+    const installedProviderRoot = join(webProfileRoot, 'node_modules', 'dsh-agy-provider')
+    const doctorCliEntry = join(installedProviderRoot, 'bin', 'dsh-agy-provider.js')
+    const doctorResult = await runNode(doctorCliEntry, [
+      'doctor', '--profile', 'web', '--dsh-home', isolatedHome, '--dsh-bin', dshEntry, '--json',
+    ], {
+      cwd: webProfileRoot,
+      env: dshEnv,
+    })
+    if (doctorResult.exitCode !== 0 && doctorResult.exitCode !== 1) {
+      throw new Error('DOCTOR_CLI_EXECUTION_FAILED')
+    }
+    const doctorParsed = JSON.parse(doctorResult.stdout)
+    if (doctorParsed.quotaUsed !== false
+      || doctorParsed.profile?.packageInstalled !== true
+      || doctorParsed.profile?.bundleDeclared !== true
+      || doctorParsed.profile?.bundleEnabled !== true
+      || doctorParsed.profile?.toolPolicy !== 'agy-owned'
+      || doctorParsed.profile?.effectiveProvider !== 'agy'
+      || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro-high') {
+      throw new Error('DOCTOR_PROFILE_DIAGNOSTIC_MISMATCH')
+    }
+
+    // 2. Native plugin add to headless profile and test mock response
+    const addHeadlessResult = await runNode(dshEntry, ['plugin', '--profile', 'headless', 'add', providerTarball], {
+      cwd: installRoot,
+      env: dshEnv,
+    })
+    assertSuccess(addHeadlessResult, 'DSH_PLUGIN_ADD_HEADLESS_FAILED')
+
+    const headlessProfileRoot = join(isolatedHome, 'profiles', 'headless')
+    if (!existsSync(headlessProfileRoot)) throw new Error('DSH_HEADLESS_PROFILE_NOT_CREATED')
 
     await writeFile(patchPath, `- id: agent-default-model
   config:
@@ -167,23 +229,16 @@ async function main() {
     enabled: true
     provider: agy-mock
     model: agy-mock-model
-    toolPolicy: reject
+    toolPolicy: agy-owned
     response: ${EXPECTED_RESPONSE}
 `, 'utf8')
 
     const commonArgs = ['--profile', 'headless', '--patch', patchPath]
-    const config = await runNode(dshEntry, [...commonArgs, '--dump-config'], {
+    const headlessDumpConfig = await runNode(dshEntry, [...commonArgs, '--dump-config'], {
       cwd: installRoot,
       env: dshEnv,
     })
-    assertSuccess(config, 'DSH_CONFIG_SMOKE_FAILED')
-    const configChecks = [
-      '# == dsh-agy-provider',
-      'provider: agy-mock',
-      'model: agy-mock-model',
-      'toolPolicy: reject',
-    ]
-    if (!configChecks.every(value => config.stdout.includes(value))) throw new Error('DSH_CONFIG_PATCH_NOT_ACTIVE')
+    assertSuccess(headlessDumpConfig, 'DSH_HEADLESS_CONFIG_SMOKE_FAILED')
 
     const response = await runNode(dshEntry, [...commonArgs, 'Return the configured mock response without using tools.'], {
       cwd: installRoot,
@@ -192,27 +247,33 @@ async function main() {
     assertSuccess(response, 'DSH_MOCK_RESPONSE_FAILED')
     if (!response.stdout.includes(EXPECTED_RESPONSE)) throw new Error('DSH_MOCK_RESPONSE_MISMATCH')
 
-    const providerMetadata = await packageVersion(join(profileRoot, 'node_modules', 'dsh-agy-provider', 'package.json'))
+    const providerMetadata = await packageVersion(join(webProfileRoot, 'node_modules', 'dsh-agy-provider', 'package.json'))
     const dshMetadata = await packageVersion(join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
     const inventory = [
       'lib/index.js',
       'lib/index.d.ts',
+      'bin/dsh-agy-provider.js',
       'cordis.patch.yml',
     ]
-    if (!inventory.every(file => existsSync(join(profileRoot, 'node_modules', 'dsh-agy-provider', file)))) {
+    if (!inventory.every(file => existsSync(join(webProfileRoot, 'node_modules', 'dsh-agy-provider', file)))) {
       throw new Error('PROVIDER_BUNDLE_INVENTORY_FAILED')
     }
 
     process.stdout.write(JSON.stringify({
       schemaVersion: 1,
-      experiment: 'v4-m4-self-contained-dsh-mock-smoke',
+      experiment: 'v5-m4-self-contained-dsh-native-plugin-smoke',
       quotaUsed: false,
       dsh: dshMetadata,
       dshVersion,
       provider: providerMetadata,
-      profile: 'headless',
-      model: 'agy-mock-model',
-      toolPolicy: 'reject',
+      profiles: ['web', 'headless'],
+      installMethod: 'dsh plugin add',
+      bundleDefaults: {
+        enabled: true,
+        toolPolicy: 'agy-owned',
+        provider: 'agy',
+        model: 'gemini-3.1-pro-high',
+      },
       bundleInventory: inventory,
       response: EXPECTED_RESPONSE,
       cleanup: 'completed',

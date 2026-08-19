@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0] - Unreleased
+
+### Added
+
+- 发布 `dsh-agy-provider` doctor CLI，可从 npm 安装产物运行 profile-aware、quota-free 诊断。
+- Doctor 支持检查 DSH profile、Provider dependency、bundle membership、组合配置、AGY 版本、Agent 和模型目录，并提供 JSON/human 输出。
+- 自包含 smoke 改用 DSH 原生 `plugin --profile <name> add`，覆盖 Web/headless profile、bundle defaults、doctor 和 Mock 文本响应。
+
+### Changed
+
+- `cordis.patch.yml` 在用户显式执行 profile plugin add 后默认启用 Provider，并使用 `toolPolicy: agy-owned` 适配 DSH Web 默认 tool schemas。
+- 普通库调用的 `Config({})` 继续保持 `enabled=false`、`toolPolicy=reject`；`BundleConfig` 仅提供显式 ready schema。
+- `UNSUPPORTED_TOOLS` 与 `PERMISSION_REQUIRED` 错误增加可执行修复提示，稳定 error code 不变。
+- Windows Node.js doctor 支持 npm `.cmd` shim/JavaScript entry，profile 名称和诊断路径受安全边界限制。
+
+### Security
+
+- Doctor 使用 `shell=false`、有界输出、超时和进程树清理；不写 profile、不发送 Prompt、不自动批准 AGY 权限。
+- 诊断输出不包含用户完整路径、Prompt、schema 参数、stderr 原文或凭据，且始终标记 `quotaUsed=false`。
+
+### Release readiness
+
+- 源码版本和 lockfile 已更新为 `0.5.0`，但 npm registry `latest` 仍为 `0.4.0`；本版本尚未执行 `npm publish`。
+
 ## [0.4.0] - 2026-08-19
 
 ### Added

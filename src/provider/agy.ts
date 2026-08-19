@@ -380,7 +380,7 @@ export class AgyAdapter extends LlmAdapter {
     const toolSchemaCount = options.tools?.length ?? 0
     if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
       throw new LlmError(
-        'AGY text MVP does not accept DSH tool schemas; AGY owns tool execution in this phase',
+        'AGY text MVP does not accept DSH tool schemas under toolPolicy: reject; set toolPolicy: agy-owned to let AGY own tool execution',
         UNSUPPORTED_TOOLS_CODE,
       )
     }
@@ -582,7 +582,7 @@ export class AgyAdapter extends LlmAdapter {
     if (conversationMismatch) return { retryWithFullPrompt: true }
     if (permissionRequested) {
       throw new LlmError(
-        'AGY requested interactive permission; headless Provider cannot approve it',
+        'AGY requested interactive permission; headless Provider cannot approve it. Adjust AGY Agent permissions or tool configuration',
         PERMISSION_REQUIRED_CODE,
       )
     }

@@ -49,7 +49,7 @@ export interface DiagnosticModel {
   contextWindow: number | null
 }
 
-export type DiagnosticComponent = 'node' | 'bundle' | 'agy' | 'models' | 'config'
+export type DiagnosticComponent = 'node' | 'bundle' | 'agy' | 'models' | 'config' | 'profile'
 
 export interface DiagnosticIssue {
   component: DiagnosticComponent

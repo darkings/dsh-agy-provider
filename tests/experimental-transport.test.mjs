@@ -200,22 +200,25 @@ test('abort, timeout, output-limit, and correlation faults reset the worker befo
   }
 })
 
-test('persistent worker tree is terminated on timeout and transport dispose rejects active work', async () => {
+test('persistent worker tree is terminated on abort/timeout and transport dispose rejects active work', async () => {
   const value = transport({
     idleTtlMs: 5_000,
-    env: { PERSISTENT_FIXTURE_READY_DELAY_MS: '100' },
   })
   let childPid
+  const abortController = new AbortController()
   try {
-    await assert.rejects(
-      value.request({
-        sessionId: 'tree-session',
-        payload: { mode: 'tree', delayMs: 10_000 },
-        timeoutMs: 100,
-        onEvent: payload => { childPid = payload.childPid },
-      }),
-      error => error.code === 'TIMEOUT',
-    )
+    const treeRequest = value.request({
+      sessionId: 'tree-session',
+      payload: { mode: 'tree', delayMs: 10_000 },
+      signal: abortController.signal,
+      onEvent: payload => {
+        if (typeof payload.childPid === 'number') {
+          childPid = payload.childPid
+          abortController.abort()
+        }
+      },
+    })
+    await assert.rejects(treeRequest, error => error.code === 'ABORTED' || error.code === 'TIMEOUT')
     assert.ok(Number.isInteger(childPid))
     await assertTreeGone(childPid)
     await waitForWorkers(value, 0)

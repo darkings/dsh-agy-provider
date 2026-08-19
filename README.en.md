@@ -8,7 +8,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 ## Project status
 
-The main branch currently targets version 0.6.0. The source implementation is complete; the remaining release work is the public-repository CI/tag/npm Trusted Publishing closeout. Registry status must be confirmed from npm and GitHub Actions.
+Version 0.6.0 is publicly released. The exact v0.6.0 tag, GitHub Actions CI, npm Trusted Publishing, and isolated registry installation smoke all passed; the GitHub repository is now public.
 
 The 0.6.0 focus is:
 

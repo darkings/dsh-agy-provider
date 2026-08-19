@@ -115,8 +115,9 @@
 
 ### Trusted Publishing 与 registry
 
-- [ ] 在独立 release commit 上创建并推送精确 `v0.6.0` tag；不得复用旧 tag。
-- [ ] publish workflow 的 tag/version 检查和 npm Trusted Publishing 成功。
-- [ ] registry 回读确认 `dsh-agy-provider@0.6.0`、`latest=0.6.0`、tarball/bin/types 可访问。
-- [ ] 全新隔离 registry DSH profile 安装复验 Web/headless、doctor v2、Agent inventory、Mock response、text-only modality 和清理。
-- [ ] 发布结果、workflow run、registry 版本写回 README、CHANGELOG、兼容性矩阵、计划和 progress/findings。
+- [x] GitHub 仓库已按用户授权改为 public。
+- [x] 在独立 release commit `948049c` 上创建并推送精确 `v0.6.0` tag；未复用旧 tag。
+- [x] publish workflow 的 tag/version 检查和 npm Trusted Publishing 成功；run `32225108295`。
+- [x] registry 回读确认 `dsh-agy-provider@0.6.0`、`latest=0.6.0`、tarball/bin/types 可访问。
+- [x] 全新隔离 registry DSH profile 安装复验 Web/headless、doctor v2、Agent inventory、Mock response、text-only modality 和清理；`quotaUsed=false`。
+- [x] 发布结果、workflow run、registry 版本写回 README、CHANGELOG、兼容性矩阵、计划和 progress/findings。

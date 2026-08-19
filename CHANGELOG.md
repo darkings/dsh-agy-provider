@@ -21,9 +21,12 @@
 - workspace-write 不包含 shell、`run_command`、网络、浏览器、MCP、subagent 或权限跳过；doctor 不自动修改 profile/Agent。
 - 诊断、日志和实验报告不记录 Prompt、response 正文、路径、附件内容、工具参数或凭据。
 
-### Release readiness
+### Release result
 
-- 源码、文档、跨平台 CI 和 quota-free registry smoke 完成后，通过精确 `v0.6.0` tag 使用 npm Trusted Publishing 发布。
+- `v0.6.0` 已指向发布提交 `948049c`；公开仓库 GitHub Actions CI run `32224840640` 通过 11/11。
+- npm Trusted Publishing publish run `32225108295` 成功，`dsh-agy-provider@0.6.0` 已公开发布，registry `latest=0.6.0`。
+- 全新 registry 隔离 DSH Web/headless smoke 已通过 plugin add、doctor v2、Agent inventory、Mock response 和清理，`quotaUsed=false`。
+- README 已提供简体中文 `README.md` 和 English `README.en.md`；图片公开能力仍保持 text-only，experimental bridge 的 negative result 不变。
 
 ## [0.5.0] - 2026-08-19
 

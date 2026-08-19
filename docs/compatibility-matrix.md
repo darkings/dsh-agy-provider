@@ -5,9 +5,9 @@
 | 组件 | 版本/环境 | 结果 | 证据 |
 |------|-----------|------|------|
 | Windows | Windows 11 | 通过 | M0–M8 本机测试、V2-M4 进程树测试 |
-| Ubuntu | `ubuntu-latest` | 通过无额度验证 | V6-M5 GitHub Actions run `32218909067`：verify/benchmark + DSH smoke |
-| macOS | `macos-latest` | 通过无额度验证 | V6-M5 GitHub Actions run `32218909067`：verify/benchmark + DSH smoke |
-| Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | V6-M5 GitHub Actions run `32218909067`：11/11 success |
+| Ubuntu | `ubuntu-latest` | 通过无额度验证 | 0.6.0 release CI run `32224840640`：verify/benchmark + DSH smoke |
+| macOS | `macos-latest` | 通过无额度验证 | 0.6.0 release CI run `32224840640`：verify/benchmark + DSH smoke |
+| Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | 0.6.0 release CI run `32224840640`：11/11 success |
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
 | DSH tools policy | `reject` 默认；显式 `agy-owned` | 通过无额度验证 | 官方 DSH runtime schema、工具事件、权限 fail-fast 和日志白名单测试 |
 | DSH profile onboarding | `@deepseek-ai/dsh@0.1.0-rc.7` + `dsh plugin add` | 通过无额度验证 | V6-M5 Web/headless 原生 plugin-add smoke，doctor v2 effective fields，`quotaUsed=false` |
@@ -19,8 +19,10 @@
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
 | AGY models | `agy models` plain text | 通过 | V3-M1 解析、去重、显式目录合并和 fallback 测试通过 |
 | Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
-| npm registry | `dsh-agy-provider@0.6.0`, `latest=0.6.0` | 待发布后复验 | npm metadata/tarball、全新 DSH profile 安装 smoke |
-| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 待 `v0.6.0` 发布验证 | `.github/workflows/publish.yml`；不保存 npm token |
+| npm registry | `dsh-agy-provider@0.6.0`, `latest=0.6.0` | 通过 | npm metadata/tarball、全新 DSH profile 安装 smoke；registry run 后回读通过 |
+| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.6.0` → commit `948049c`；publish run `32225108295`；不保存 npm token |
+
+0.6.0 发布后证据：公开仓库 CI run `32224840640` 为 11/11 success；registry 隔离 smoke 使用 `dsh-agy-provider@0.6.0` 完成 Web/headless 原生 plugin add、doctor v2、bundle inventory 和 Mock response，`quotaUsed=false`、cleanup completed。
 
 ## 版本策略
 

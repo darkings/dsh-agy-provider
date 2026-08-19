@@ -8,7 +8,7 @@
 
 ## 项目状态
 
-当前主线代码版本为 0.6.0，正在完成公开仓库后的 tag 和 npm Trusted Publishing 收口。源码能力已经完成，registry 发布状态以 npm 和 GitHub Actions 的实际结果为准。
+0.6.0 已公开发布。精确 tag 为 v0.6.0，GitHub Actions CI、npm Trusted Publishing 和 registry 隔离安装复验均已通过；GitHub 仓库现为 public。
 
 0.6.0 的公开能力重点是：
 

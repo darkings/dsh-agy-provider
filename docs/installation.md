@@ -59,7 +59,7 @@ npx @deepseek-ai/dsh plugin --profile web add github:darkings/dsh-agy-provider
 
 ## 版本与发布状态
 
-当前 0.6.0 正在执行发布收口；registry 在发布完成前仍保持 `latest=0.5.0`。0.5.0 已通过 Trusted Publishing 发布，0.3.0 的已完成能力随 0.4.0 一并发布。
+当前 0.6.0 已公开发布；精确 tag 为 `v0.6.0`，registry 为 `dsh-agy-provider@0.6.0` 且 `latest=0.6.0`。发布使用 npm Trusted Publishing，0.3.0 的已完成能力随 0.4.0 一并发布。
 
 ## 配置
 

@@ -63,6 +63,11 @@ jobs:
       - name: Install provider dependencies
         run: npm ci
 
+      - name: Prepare DSH runtime directory
+        run: node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
+        env:
+          DSH_INSTALL_DIR: ${{ runner.temp }}/dsh-install
+
       - name: Install DSH runtime
         run: pnpm add --dir "${{ runner.temp }}/dsh-install" --ignore-scripts --config.node-linker=hoisted --config.auto-install-peers=true @deepseek-ai/dsh@0.1.0-rc.7
 
@@ -99,6 +104,11 @@ jobs:
 
       - name: Install provider dependencies
         run: npm ci
+
+      - name: Prepare DSH runtime directory
+        run: node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
+        env:
+          DSH_INSTALL_DIR: ${{ runner.temp }}/dsh-install
 
       - name: Install DSH runtime
         run: pnpm add --dir "${{ runner.temp }}/dsh-install" --ignore-scripts --config.node-linker=hoisted --config.auto-install-peers=true @deepseek-ai/dsh@0.1.0-rc.7

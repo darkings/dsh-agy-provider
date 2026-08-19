@@ -8,7 +8,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 ## Project status
 
-Version 0.6.0 is publicly released. The exact v0.6.0 tag, GitHub Actions CI, npm Trusted Publishing, and isolated registry installation smoke all passed; the GitHub repository is now public.
+Version 0.6.1 is the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible.
 
 The 0.6.0 focus is:
 
@@ -152,8 +152,8 @@ This is a protocol experiment, not a public image capability. listModels() remai
 A normal npm install only installs the Node.js package. It does not modify a DSH profile. Use the native DSH plugin manager:
 
 ~~~powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.0
-npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.0
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
+npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.1
 ~~~
 
 The profile bundle defaults are equivalent to:

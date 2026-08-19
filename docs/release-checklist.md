@@ -121,3 +121,19 @@
 - [x] registry 回读确认 `dsh-agy-provider@0.6.0`、`latest=0.6.0`、tarball/bin/types 可访问。
 - [x] 全新隔离 registry DSH profile 安装复验 Web/headless、doctor v2、Agent inventory、Mock response、text-only modality 和清理；`quotaUsed=false`。
 - [x] 发布结果、workflow run、registry 版本写回 README、CHANGELOG、兼容性矩阵、计划和 progress/findings。
+
+## `0.6.1` AttachmentStore 修复版发布
+
+### 源码与本地门禁
+
+- [x] 修复 Cordis optional `AttachmentStore` 读取，增加官方 DSH runtime 回归测试。
+- [x] `package.json` 与 `package-lock.json` 版本 bump 到 `0.6.1`，未复用 `0.6.0`。
+- [ ] `npm run verify`、`npm run benchmark`、`npm run smoke:dsh:self-contained` 和 pack inventory 通过。
+- [ ] release commit CI 11/11 success；公共 CI 不调用真实 AGY。
+
+### Trusted Publishing 与 registry
+
+- [ ] 创建并推送精确 `v0.6.1` tag；tag 必须指向已通过 CI 的 release commit。
+- [ ] npm Trusted Publishing workflow 成功完成 `npm publish --access public`。
+- [ ] registry 回读确认 `dsh-agy-provider@0.6.1` 与 `latest=0.6.1`。
+- [ ] 全新 DSH Web/headless profile 安装 `0.6.1`，确认 loader 不再出现 `cannot get property "attachments" without inject`，并完成 cleanup。

@@ -8,7 +8,7 @@
 
 ## 项目状态
 
-0.6.0 已公开发布。精确 tag 为 v0.6.0，GitHub Actions CI、npm Trusted Publishing 和 registry 隔离安装复验均已通过；GitHub 仓库现为 public。
+0.6.1 是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。
 
 0.6.0 的公开能力重点是：
 
@@ -152,8 +152,8 @@ imageInput: experimental 已支持：
 普通 npm install 只安装 Node.js 包，不会把 Provider 写入 DSH profile。DSH Web/headless 应使用原生 plugin manager：
 
 ~~~powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.0
-npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.0
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
+npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.1
 ~~~
 
 profile bundle 默认相当于：

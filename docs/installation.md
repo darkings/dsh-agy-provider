@@ -13,7 +13,7 @@
 不要只在业务项目目录执行 `npm install dsh-agy-provider`。DSH Web 使用独立的 profile 依赖目录，必须通过 DSH 的 plugin 命令安装：
 
 ```powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.0
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
 ```
 
 该命令会将包加入 `web` profile 的依赖和 `dsh.profile.bundles`。验证是否已加载：
@@ -46,7 +46,7 @@ npx @deepseek-ai/dsh web
 如果只需要在普通 Node.js 项目中导入 Provider，而不是让 DSH Web 加载 bundle，才使用：
 
 ```powershell
-npm install dsh-agy-provider@0.6.0
+npm install dsh-agy-provider@0.6.1
 ```
 
 ## 从 GitHub 安装源码包
@@ -59,7 +59,7 @@ npx @deepseek-ai/dsh plugin --profile web add github:darkings/dsh-agy-provider
 
 ## 版本与发布状态
 
-当前 0.6.0 已公开发布；精确 tag 为 `v0.6.0`，registry 为 `dsh-agy-provider@0.6.0` 且 `latest=0.6.0`。发布使用 npm Trusted Publishing，0.3.0 的已完成能力随 0.4.0 一并发布。
+当前 0.6.1 是 0.6.0 的兼容性修复版；修复 DSH profile 缺少 `AttachmentStore` 时的插件 loader 启动错误。发布使用 npm Trusted Publishing。
 
 ## 配置
 

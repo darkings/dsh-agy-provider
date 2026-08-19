@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.1] - 2026-08-19
+
+### Fixed
+
+- 修复 Cordis plugin loader 启动错误：可选的 DSH `AttachmentStore` 改用 `ctx.get('attachments')` 读取，不再把未声明的 `ctx.attachments` 当作必需注入。
+- 增加无 `AttachmentStore` 服务时的官方 DSH runtime 回归测试；text-only Provider 可以正常加载。
+
+### Release result
+
+- 修复提交 `74cc914` 的本地 111/111 测试、自包含 DSH Web/headless smoke 与 CI 已通过；本版本不新增真实 AGY 请求。
+
 ## [0.6.0] - 2026-08-19
 
 ### Added

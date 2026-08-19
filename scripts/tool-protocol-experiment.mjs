@@ -5,12 +5,12 @@ import { runAgyProcess } from '../lib/agy/process.js'
 import { mapAgyUsage } from '../lib/provider/agy.js'
 import { DEFAULT_MODEL } from '../lib/provider/config.js'
 
-const BUDGET = Object.freeze({
+const DEFAULT_BUDGET = Object.freeze({
   maxPhysicalRequests: 3,
   maxInputTokens: 12_000,
   maxOutputTokens: 1_500,
 })
-const AGY_AGENT = 'deepseek-proxy'
+const DEFAULT_AGENT = 'deepseek-proxy'
 const MODEL = process.env.AGY_PROTOCOL_MODEL?.trim() || 'gemini-3.7-flash-low'
 const REQUEST_TIMEOUT_MS = 120_000
 
@@ -36,20 +36,24 @@ class BudgetError extends Error {
 }
 
 class BudgetLedger {
-  physicalRequests = 0
-  inputTokens = 0
-  outputTokens = 0
+  constructor(budget, priorUsage) {
+    this.budget = budget
+    this.priorUsage = priorUsage
+    this.physicalRequests = priorUsage.physicalRequests
+    this.inputTokens = priorUsage.inputTokens
+    this.outputTokens = priorUsage.outputTokens
+  }
 
   claim() {
-    if (this.physicalRequests >= BUDGET.maxPhysicalRequests) throw new BudgetError('MAX_PHYSICAL_REQUESTS')
+    if (this.physicalRequests >= this.budget.maxPhysicalRequests) throw new BudgetError('MAX_PHYSICAL_REQUESTS')
     this.physicalRequests += 1
   }
 
   add(usage) {
     this.inputTokens += usage.inputTokens ?? 0
     this.outputTokens += usage.outputTokens ?? 0
-    if (this.inputTokens > BUDGET.maxInputTokens) throw new BudgetError('MAX_INPUT_TOKENS')
-    if (this.outputTokens > BUDGET.maxOutputTokens) throw new BudgetError('MAX_OUTPUT_TOKENS')
+    if (this.inputTokens > this.budget.maxInputTokens) throw new BudgetError('MAX_INPUT_TOKENS')
+    if (this.outputTokens > this.budget.maxOutputTokens) throw new BudgetError('MAX_OUTPUT_TOKENS')
   }
 
   snapshot() {
@@ -57,6 +61,14 @@ class BudgetLedger {
       physicalRequests: this.physicalRequests,
       inputTokens: this.inputTokens,
       outputTokens: this.outputTokens,
+    }
+  }
+
+  runSnapshot() {
+    return {
+      physicalRequests: this.physicalRequests - this.priorUsage.physicalRequests,
+      inputTokens: this.inputTokens - this.priorUsage.inputTokens,
+      outputTokens: this.outputTokens - this.priorUsage.outputTokens,
     }
   }
 }
@@ -70,6 +82,39 @@ function safeError(error) {
 
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function safeResponseShape(raw) {
+  if (typeof raw !== 'string') return { rawType: typeof raw }
+  const text = raw.trim()
+  let value
+  try {
+    value = JSON.parse(text)
+  } catch {
+    const prefix = text.startsWith('{')
+      ? 'object-like'
+      : text.startsWith('[')
+        ? 'array-like'
+        : text.startsWith('```')
+          ? 'markdown-fence'
+          : text.startsWith('"')
+            ? 'json-string-like'
+            : 'other'
+    return { json: false, chars: raw.length, prefix }
+  }
+  if (Array.isArray(value)) return { json: true, topLevel: 'array', length: value.length }
+  if (!isRecord(value)) return { json: true, topLevel: typeof value }
+  const keys = Object.keys(value).sort()
+  return {
+    json: true,
+    topLevel: 'object',
+    keys: keys.slice(0, 8),
+    extraKeyCount: Math.max(0, keys.length - 3),
+    kind: value.kind === 'message' || value.kind === 'tool_call' ? value.kind : 'other',
+    contentType: typeof value.content,
+    nameType: typeof value.name,
+    argumentsType: typeof value.arguments,
+  }
 }
 
 function extractResult(lines) {
@@ -117,16 +162,28 @@ function sampleDefinitions() {
   ]
 }
 
-async function runSample(sample, ledger) {
+function optionValue(args, name) {
+  const index = args.indexOf(name)
+  if (index < 0) return undefined
+  return args[index + 1]
+}
+
+function optionNumber(args, name, fallback) {
+  const value = optionValue(args, name)
+  return value === undefined ? fallback : Number(value)
+}
+
+async function runSample(sample, ledger, options) {
   ledger.claim()
   const protocol = createStructuredToolProtocol(sample.tools)
   const staged = await stageToolSchema(protocol)
   try {
     const process = await runAgyProcess({
       prompt: sample.prompt,
-      agent: AGY_AGENT,
+      agent: options.agent,
       model: MODEL || DEFAULT_MODEL,
       reasoningEffort: 'low',
+      ...(options.disableSlashCommands ? { disableSlashCommands: true } : {}),
       timeoutMs: REQUEST_TIMEOUT_MS,
       maxStdoutBytes: 8 * 1024 * 1024,
       maxStderrBytes: 2 * 1024 * 1024,
@@ -145,17 +202,30 @@ async function runSample(sample, ledger) {
         eventNames: result.events,
       }
     }
-    const envelope = parseStructuredEnvelope(result.response, protocol)
-    return {
-      id: sample.id,
-      ok: true,
-      status: result.status ?? 'unknown',
-      termination: process.termination,
-      envelopeKind: envelope.kind,
-      ...(envelope.kind === 'tool_call' ? { toolName: envelope.name } : {}),
-      responseChars: result.response.length,
-      usage,
-      eventNames: result.events,
+    try {
+      const envelope = parseStructuredEnvelope(result.response, protocol)
+      return {
+        id: sample.id,
+        ok: true,
+        status: result.status ?? 'unknown',
+        termination: process.termination,
+        envelopeKind: envelope.kind,
+        ...(envelope.kind === 'tool_call' ? { toolName: envelope.name } : {}),
+        responseChars: result.response.length,
+        usage,
+        eventNames: result.events,
+      }
+    } catch (error) {
+      return {
+        id: sample.id,
+        ok: false,
+        status: result.status ?? 'unknown',
+        termination: process.termination,
+        error: safeError(error),
+        responseShape: safeResponseShape(result.response),
+        usage,
+        eventNames: result.events,
+      }
     }
   } finally {
     await staged.cleanup()
@@ -164,36 +234,54 @@ async function runSample(sample, ledger) {
 
 async function main() {
   const args = process.argv.slice(2)
-  const maxRequestsIndex = args.indexOf('--max-requests')
-  const maxRequests = maxRequestsIndex < 0 ? 3 : Number(args[maxRequestsIndex + 1])
+  const maxRequests = optionNumber(args, '--max-requests', 3)
+  const agent = optionValue(args, '--agent') ?? (process.env.AGY_PROTOCOL_AGENT?.trim() || DEFAULT_AGENT)
+  const priorUsage = {
+    physicalRequests: optionNumber(args, '--prior-requests', 0),
+    inputTokens: optionNumber(args, '--prior-input-tokens', 0),
+    outputTokens: optionNumber(args, '--prior-output-tokens', 0),
+  }
+  const budget = Object.freeze({
+    maxPhysicalRequests: optionNumber(args, '--max-physical-requests', DEFAULT_BUDGET.maxPhysicalRequests),
+    maxInputTokens: optionNumber(args, '--max-input-tokens', DEFAULT_BUDGET.maxInputTokens),
+    maxOutputTokens: optionNumber(args, '--max-output-tokens', DEFAULT_BUDGET.maxOutputTokens),
+  })
+  const disableSlashCommands = args.includes('--disable-slash-commands')
   if (process.env.AGY_QUOTA_EXPERIMENT !== 'ALLOW' || !args.includes('--confirm-quota')) {
     console.error('真实协议实验需要同时提供 --confirm-quota 和 AGY_QUOTA_EXPERIMENT=ALLOW。')
     process.exitCode = 2
     return
   }
-  if (!Number.isInteger(maxRequests) || maxRequests < 1 || maxRequests > 3) {
-    console.error('最多允许 3 次真实 AGY 请求。')
+  if (!Number.isInteger(maxRequests) || maxRequests < 1 || maxRequests > 3
+    || !Number.isInteger(agent?.length) || agent.length === 0
+    || !Object.values(priorUsage).every(value => Number.isSafeInteger(value) && value >= 0)
+    || !Object.values(budget).every(value => Number.isSafeInteger(value) && value > 0)
+    || priorUsage.physicalRequests + maxRequests > budget.maxPhysicalRequests) {
+    console.error('真实 AGY 请求或额度参数无效；最多允许总计 3 次请求。')
     process.exitCode = 2
     return
   }
 
-  const ledger = new BudgetLedger()
+  const ledger = new BudgetLedger(budget, priorUsage)
   const report = {
     schemaVersion: 1,
     experiment: 'v7-m2-structured-tool-protocol',
     quotaUsed: true,
-    budget: BUDGET,
+    budget,
+    priorUsage,
+    runRequestLimit: maxRequests,
     model: MODEL || DEFAULT_MODEL,
-    agent: AGY_AGENT,
+    agent,
+    disableSlashCommands,
     samples: [],
   }
   try {
     for (const sample of sampleDefinitions().slice(0, maxRequests)) {
       try {
-        report.samples.push(await runSample(sample, ledger))
+        report.samples.push(await runSample(sample, ledger, { agent, disableSlashCommands }))
       } catch (error) {
         report.samples.push({ id: sample.id, ok: false, error: safeError(error) })
-        report.stopReason = ledger.physicalRequests >= maxRequests ? 'SAMPLE_FAILED' : 'EARLY_STOP_SAMPLE_FAILED'
+        report.stopReason = ledger.physicalRequests >= budget.maxPhysicalRequests ? 'SAMPLE_FAILED' : 'EARLY_STOP_SAMPLE_FAILED'
         break
       }
     }
@@ -201,6 +289,7 @@ async function main() {
     report.stopReason = safeError(error).code
   }
   report.usage = ledger.snapshot()
+  report.runUsage = ledger.runSnapshot()
   report.decision = report.samples.length === 0
     ? 'NO_GO'
     : report.samples.every(sample => sample.ok === true)

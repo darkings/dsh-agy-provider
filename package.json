@@ -49,6 +49,7 @@
     "smoke:dsh": "node scripts/dsh-smoke.mjs",
     "smoke:dsh:self-contained": "npm run build && node scripts/dsh-smoke-self-contained.mjs",
     "agy:protocol": "npm run build && node scripts/agy-protocol-experiment.mjs",
+    "tool:protocol": "npm run build && node scripts/tool-protocol-experiment.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
     "quota:experiment": "npm run build && node scripts/quota-experiment.mjs",
     "image:experiment": "npm run build && node scripts/image-protocol-experiment.mjs",

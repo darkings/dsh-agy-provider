@@ -28,6 +28,14 @@ export { AgyModelDiscovery, mergeModelCatalog, parseAgyModels } from './agy/mode
 export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
 export { DshContextError, readDshContextServices, resolveDshContext } from './dsh/context.js'
+export {
+  createStructuredToolProtocol,
+  parseStructuredEnvelope,
+  StructuredResponseAccumulator,
+  ToolProtocolError,
+  TOOL_PROTOCOL_LIMITS,
+} from './provider/tool-protocol.js'
+export { stageToolSchema } from './provider/tool-schema-file.js'
 export type {
   DshApprovalPolicy,
   DshApprovalServiceLike,
@@ -46,6 +54,12 @@ export type {
   DshWorkspaceRegistryLike,
   DshWorkspaceState,
 } from './dsh/context.js'
+export type {
+  StructuredEnvelope,
+  StructuredToolProtocol,
+  ToolProtocolErrorCode,
+} from './provider/tool-protocol.js'
+export type { StagedToolSchema } from './provider/tool-schema-file.js'
 export { diagnoseProfile, runDoctor } from './doctor.js'
 export {
   AgyImageBridgeError,

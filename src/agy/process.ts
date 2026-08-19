@@ -68,6 +68,8 @@ export interface AgyRequest extends Omit<ProcessRequest, 'executable' | 'args'> 
   mode?: AgyExecutionMode
   /** Disable slash commands for bundled non-interactive presets. */
   disableSlashCommands?: boolean
+  /** Absolute temporary JSON Schema path passed to AGY's final-result validator. */
+  jsonSchemaPath?: string
 }
 
 export function defaultAgyCommand(): 'agy.exe' | 'agy' {
@@ -129,7 +131,15 @@ export function resolveAgyExecutable(explicit?: string): string {
 export function buildAgyArgs(
   request: Pick<
     AgyRequest,
-    'prompt' | 'agent' | 'model' | 'conversation' | 'reasoningEffort' | 'addDirs' | 'mode' | 'disableSlashCommands'
+    | 'prompt'
+    | 'agent'
+    | 'model'
+    | 'conversation'
+    | 'reasoningEffort'
+    | 'addDirs'
+    | 'mode'
+    | 'disableSlashCommands'
+    | 'jsonSchemaPath'
   >,
 ): string[] {
   if (request.reasoningEffort !== undefined && !isAgyReasoningEffort(request.reasoningEffort)) {
@@ -141,6 +151,9 @@ export function buildAgyArgs(
   if (request.addDirs?.some(directory => typeof directory !== 'string' || directory.trim().length === 0)) {
     throw new TypeError('AGY add-dir entries must be non-empty paths')
   }
+  if (request.jsonSchemaPath !== undefined && request.jsonSchemaPath.trim().length === 0) {
+    throw new TypeError('AGY json-schema path must be non-empty')
+  }
   return [
     '-p', request.prompt,
     ...(request.agent === undefined ? [] : ['--agent', request.agent]),
@@ -150,6 +163,7 @@ export function buildAgyArgs(
     ...(request.addDirs?.flatMap(directory => ['--add-dir', directory]) ?? []),
     ...(request.mode === undefined ? [] : ['--mode', request.mode]),
     ...(request.disableSlashCommands === true ? ['--disable-slash-commands'] : []),
+    ...(request.jsonSchemaPath === undefined ? [] : ['--json-schema', request.jsonSchemaPath]),
     '--output-format', 'stream-json',
   ]
 }

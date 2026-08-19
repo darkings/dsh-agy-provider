@@ -9,12 +9,14 @@ test('buildAgyArgs preserves prompt and conversation as separate argv items', ()
       agent: 'deepseek-proxy',
       model: 'gemini-test',
       conversation: 'conversation-fixture',
+      jsonSchemaPath: 'C:\\temp\\dsh-tool-schema.json',
     }),
     [
       '-p', 'a prompt with spaces',
       '--agent', 'deepseek-proxy',
       '--model', 'gemini-test',
       '--conversation', 'conversation-fixture',
+      '--json-schema', 'C:\\temp\\dsh-tool-schema.json',
       '--output-format', 'stream-json',
     ],
   )
@@ -69,6 +71,10 @@ test('buildAgyArgs rejects unapproved execution modes and empty directories', ()
   assert.throws(
     () => buildAgyArgs({ prompt: 'test', addDirs: [''] }),
     /add-dir entries must be non-empty/,
+  )
+  assert.throws(
+    () => buildAgyArgs({ prompt: 'test', jsonSchemaPath: '   ' }),
+    /json-schema path must be non-empty/,
   )
 })
 

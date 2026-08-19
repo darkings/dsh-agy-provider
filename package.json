@@ -51,6 +51,7 @@
     "agy:protocol": "npm run build && node scripts/agy-protocol-experiment.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
     "quota:experiment": "npm run build && node scripts/quota-experiment.mjs",
+    "image:experiment": "npm run build && node scripts/image-protocol-experiment.mjs",
     "verify": "npm run typecheck && npm test && npm pack --dry-run",
     "prepare": "npm run build"
   },

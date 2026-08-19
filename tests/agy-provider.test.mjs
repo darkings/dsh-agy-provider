@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { existsSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { AgyAdapter } from '../lib/provider/agy.js'
@@ -182,6 +184,120 @@ test('AgyAdapter requires an explicit non-root workspace for workspace-write', (
   assert.throws(
     () => new AgyAdapter({ agentPreset: 'workspace-write' }),
     /workspaceRoot is required/,
+  )
+})
+
+test('experimental image bridge stages AttachmentStore bytes, exposes a directory, and cleans up', async () => {
+  const captured = []
+  let observedImagePath
+  let imageExistedDuringRequest = false
+  const attachment = {
+    attachmentId: 'attachment-fixture',
+    mediaType: 'image/png',
+    bytes: 4,
+    width: 1,
+    height: 1,
+  }
+  const adapter = new AgyAdapter({
+    model: 'gemini-test',
+    imageInput: 'experimental',
+    agentPreset: 'read-only',
+    workspaceRoot: process.cwd(),
+  }, {
+    attachmentStore: {
+      readImage: async ref => ({ ref, data: new Uint8Array([137, 80, 78, 71]) }),
+    },
+    runAgyProcess: async requestValue => {
+      captured.push(requestValue)
+      observedImagePath = requestValue.prompt.match(/\[IMAGE_ATTACHMENT file=(\S+) /)?.[1]
+      imageExistedDuringRequest = observedImagePath !== undefined && existsSync(observedImagePath)
+      requestValue.onStdoutLine?.(JSON.stringify({
+        event: 'result',
+        result: { status: 'SUCCESS', response: 'pixel answer' },
+      }))
+      return result()
+    },
+  })
+
+  for await (const _chunk of adapter.stream({
+    ...request,
+    system: 'Describe the image using view_file.',
+    messages: [{ role: 'user', content: [{ type: 'image', attachment }] }],
+  })) {}
+
+  assert.equal(imageExistedDuringRequest, true)
+  assert.ok(observedImagePath)
+  assert.equal(existsSync(observedImagePath), false)
+  assert.equal(existsSync(dirname(observedImagePath)), false)
+  assert.equal(captured[0]?.agent, 'dsh-agy-read-only')
+  assert.equal(captured[0]?.mode, 'plan')
+  assert.equal(captured[0]?.addDirs.some(directory => directory === dirname(observedImagePath)), true)
+
+  const models = await adapter.listModels('agy-test')
+  assert.deepEqual(models[0]?.inputModalities, ['text'])
+})
+
+test('experimental image bridge fails without AttachmentStore and always cleans on runner failure', async () => {
+  const attachment = {
+    attachmentId: 'attachment-fixture',
+    mediaType: 'image/png',
+    bytes: 4,
+    width: 1,
+    height: 1,
+  }
+  const imageRequest = {
+    ...request,
+    messages: [{ role: 'user', content: [{ type: 'image', attachment }] }],
+  }
+
+  const unavailable = new AgyAdapter({ imageInput: 'experimental', agentPreset: 'read-only' }, {
+    runAgyProcess: fakeRunner([], []),
+  })
+  await assert.rejects(
+    async () => { for await (const _chunk of unavailable.stream(imageRequest)) {} },
+    error => error.code === 'IMAGE_ATTACHMENT_UNAVAILABLE',
+  )
+
+  let stagedPath
+  const failing = new AgyAdapter({ imageInput: 'experimental', agentPreset: 'read-only' }, {
+    attachmentStore: {
+      readImage: async ref => ({ ref, data: new Uint8Array([137, 80, 78, 71]) }),
+    },
+    runAgyProcess: async requestValue => {
+      stagedPath = requestValue.prompt.match(/\[IMAGE_ATTACHMENT file=(\S+) /)?.[1]
+      assert.equal(existsSync(stagedPath), true)
+      throw new Error('fake image transport failure')
+    },
+  })
+  await assert.rejects(
+    async () => { for await (const _chunk of failing.stream(imageRequest)) {} },
+    error => error.code === 'AGY_REQUEST',
+  )
+  assert.ok(stagedPath)
+  assert.equal(existsSync(dirname(stagedPath)), false)
+})
+
+test('experimental image bridge rejects an unverified custom Agent before staging', async () => {
+  const adapter = new AgyAdapter({ imageInput: 'experimental', agent: 'deepseek-proxy' }, {
+    attachmentStore: {
+      readImage: async ref => ({ ref, data: new Uint8Array([137, 80, 78, 71]) }),
+    },
+    runAgyProcess: fakeRunner([], []),
+  })
+  await assert.rejects(
+    async () => {
+      for await (const _chunk of adapter.stream({
+        ...request,
+        messages: [{
+          role: 'user',
+          content: [{
+            type: 'image',
+            attachment: { attachmentId: 'custom-agent', mediaType: 'image/png', bytes: 4, width: 1, height: 1 },
+          }],
+        }],
+      })) {}
+    },
+    error => error.code === 'IMAGE_AGENT_UNSUPPORTED',
   )
 })
 

@@ -205,6 +205,7 @@ maxEventLineLength: 1048576
 modelDiscovery: auto
 modelDiscoveryTtlMs: 300000
 modelDiscoveryTimeoutMs: 10000
+imageInput: off          # off | experimental；默认不处理图片
 ```
 
 `model` 仍表示默认请求模型，并兼容 0.1.0 配置。`models` 是可选的显式目录；目录按 `id` 去重，若默认 `model` 未列出会自动补入。未配置但由请求方明确传入的模型 ID 会原样保留，不会被静默改写成默认模型。
@@ -214,6 +215,19 @@ modelDiscoveryTimeoutMs: 10000
 `reasoningEffort` 是请求级能力，不是 Provider 配置项。可选值为 `low`、`medium`、`high`；未指定时保持 AGY/模型自身默认值，`temperature`、`stop` 和 `maxTokens` 仍会被拒绝。
 
 `toolPolicy` 是 Provider 配置项，程序化默认值为 `reject`。通过 0.5.0 bundle 安装到 DSH profile 后，`cordis.patch.yml` 显式使用 `agy-owned`，因为该场景已确定由 AGY Agent 独占工具执行；DSH `tools` 仅作为上游 schema 元数据被忽略，文本上下文仍按原路径交给 AGY，AGY 内部工具事件不会转换为 DSH tool chunks。
+
+`imageInput` 默认关闭。设置为 `experimental` 后，Provider 才会通过可选 `AttachmentStore` 读取 DSH `ImageBlock`，在每次请求的随机临时目录写入受限 PNG/JPEG/WebP/GIF 文件，并把该目录作为 `--add-dir` 传给 AGY；请求结束或失败时清理目录。该模式还要求显式选择内置 `agentPreset: read-only` 或 `agentPreset: workspace-write`，以证明 Agent 白名单含 `view_file`；`deepseek-proxy` 和未知 custom Agent 会返回 `IMAGE_AGENT_UNSUPPORTED`。没有 `AttachmentStore` 时返回 `IMAGE_ATTACHMENT_UNAVAILABLE`，不会把 base64、浏览器路径或附件引用直接写进 Prompt。当前仍只宣称 `inputModalities: ['text']`，直到 AGY `view_file` 来源和 DSH Web image 闭环完成。
+
+实验脚本默认拒绝消耗额度；只有明确授权时才运行一次受控 PNG 闸门：
+
+```powershell
+$env:AGY_IMAGE_EXPERIMENT = 'ALLOW'
+$env:AGY_IMAGE_MODEL = 'gemini-3.7-flash-low'
+npx dsh-agy-provider agents install read-only --apply
+npm run image:experiment
+```
+
+该实验只输出脱敏的结果摘要，不输出 Prompt 或临时路径；公共 CI 不运行它。
 
 在项目目录执行：
 

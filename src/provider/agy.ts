@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { realpathSync, statSync } from 'node:fs'
 import { parse as parsePath } from 'node:path'
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import {
   EMPTY_RESPONSE_CODE,
   LlmAdapter,
@@ -73,7 +74,13 @@ import {
   UNSUPPORTED_TOOLS_CODE,
 } from './error-codes.js'
 import { SessionRegistry, type SessionRecord } from '../session/store.js'
-import { AgyPromptError, serializeAgyPrompt, serializeAgyTurnPrompt } from './serialize.js'
+import { AgyPromptError, serializeAgyTurnPrompt } from './serialize.js'
+import {
+  AgyImageBridgeError,
+  prepareAgyPrompts,
+  type AgyImageAttachmentStore,
+  type PreparedAgyPrompts,
+} from './image-bridge.js'
 
 export type AgyProcessRunner = (request: AgyRequest) => Promise<ProcessResult>
 
@@ -88,6 +95,8 @@ export interface AgyAdapterDependencies {
   logger?: AgyLogger
   /** Injectable process limiter for deterministic concurrency tests. */
   concurrencyLimiter?: AgyConcurrencyLimiter
+  /** Optional DSH AttachmentStore; text-only requests do not require it. */
+  attachmentStore?: Pick<AttachmentStore, 'readImage'>
 }
 
 interface AttemptOutcome {
@@ -102,7 +111,8 @@ interface EffectiveAgyRoute {
 
 interface AgyAgentRuntime {
   agent: string
-  preset: AgentPresetId | undefined
+  agentPreset: AgentPresetId | undefined
+  agentCanViewFile: boolean
   workspaceRoot: string | undefined
   addDirs: readonly string[] | undefined
   mode: AgyExecutionMode | undefined
@@ -191,7 +201,8 @@ function resolveAgyAgentRuntime(config: Config): AgyAgentRuntime {
   }
   return {
     agent: preset?.agentName ?? config.agent ?? DEFAULT_AGENT,
-    preset: preset?.id,
+    agentPreset: preset?.id,
+    agentCanViewFile: preset?.tools.includes('view_file') === true,
     workspaceRoot,
     addDirs: workspaceRoot === undefined ? undefined : [workspaceRoot],
     mode: preset?.mode,
@@ -258,6 +269,9 @@ export function mapAgyUsage(raw: Record<string, unknown>): TokenUsage {
 function asLlmError(error: unknown): LlmError {
   if (error instanceof LlmError) return error
   if (error instanceof AgyPromptError) {
+    return new LlmError(error.message, error.code, { cause: error })
+  }
+  if (error instanceof AgyImageBridgeError) {
     return new LlmError(error.message, error.code, { cause: error })
   }
   if (error instanceof AgyParserError) {
@@ -367,6 +381,7 @@ export class AgyAdapter extends LlmAdapter {
   private readonly addDirs: readonly string[] | undefined
   private readonly mode: AgyExecutionMode | undefined
   private readonly disableSlashCommands: boolean | undefined
+  private readonly agentCanViewFile: boolean
   private readonly toolPolicy: ToolPolicy
   private readonly agyPath: string | undefined
   private readonly timeoutMs: number
@@ -380,6 +395,8 @@ export class AgyAdapter extends LlmAdapter {
   private readonly maxEventLineLength: number
   private readonly retryPolicy: ResolvedRetryPolicy
   private readonly purposeRoutes: PurposeRoutesConfig | undefined
+  private readonly imageInput: 'off' | 'experimental'
+  private readonly attachmentStore: AgyImageAttachmentStore | undefined
   private readonly discovery: AgyModelDiscovery | undefined
   private currentModels: readonly ModelConfig[]
   private modelDiscoveryResult: AgyModelDiscoveryResult | undefined
@@ -390,6 +407,7 @@ export class AgyAdapter extends LlmAdapter {
     this.models = configuredModels(config)
     const agentRuntime = resolveAgyAgentRuntime(config)
     this.agent = agentRuntime.agent
+    this.agentCanViewFile = agentRuntime.agentCanViewFile
     this.workspaceRoot = agentRuntime.workspaceRoot
     this.addDirs = agentRuntime.addDirs
     this.mode = agentRuntime.mode
@@ -411,6 +429,8 @@ export class AgyAdapter extends LlmAdapter {
     this.maxEventLineLength = config.maxEventLineLength ?? DEFAULT_MAX_EVENT_LINE_LENGTH
     this.retryPolicy = resolveAgyRetryPolicy(config.retryPolicy)
     this.purposeRoutes = config.purposeRoutes
+    this.imageInput = config.imageInput === 'experimental' ? 'experimental' : 'off'
+    this.attachmentStore = dependencies.attachmentStore
     this.currentModels = this.models
     this.discovery = config.modelDiscovery === 'off'
       ? undefined
@@ -573,7 +593,15 @@ export class AgyAdapter extends LlmAdapter {
 
     let releaseSession: (() => void) | undefined
     let releaseProcess: (() => void) | undefined
+    let preparedPrompts: PreparedAgyPrompts | undefined
     try {
+      const prepared = await prepareAgyPrompts(options, {
+        enabled: this.imageInput === 'experimental',
+        agentCanViewFile: this.agentCanViewFile,
+        attachmentStore: this.attachmentStore,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      })
+      preparedPrompts = prepared
       releaseSession = sessionKey === undefined ? undefined : await this.sessions.acquire(sessionKey)
       const queueStartedAt = Date.now()
       releaseProcess = await this.limiter.acquire(options.signal)
@@ -591,6 +619,7 @@ export class AgyAdapter extends LlmAdapter {
           requestedConversationId,
           telemetry,
           route,
+          prepared,
         )
         if (!outcome.retryWithFullPrompt) {
           telemetry.durationMs = Date.now() - telemetry.startedAt
@@ -610,6 +639,7 @@ export class AgyAdapter extends LlmAdapter {
       throw mapped
     } finally {
       telemetry.durationMs ??= Date.now() - telemetry.startedAt
+      await preparedPrompts?.cleanup()
       releaseProcess?.()
       releaseSession?.()
     }
@@ -621,11 +651,16 @@ export class AgyAdapter extends LlmAdapter {
     requestedConversationId: string | undefined,
     telemetry: AgyTelemetry,
     route: EffectiveAgyRoute,
+    prepared: PreparedAgyPrompts,
   ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
     telemetry.processAttemptCount += 1
     const prompt = requestedConversationId === undefined
-      ? serializeAgyPrompt(options)
-      : serializeAgyTurnPrompt(options)
+      ? prepared.fullPrompt
+      : prepared.turnPrompt ?? serializeAgyTurnPrompt(options)
+    const addDirs = [
+      ...(this.addDirs ?? []),
+      ...(prepared.imageDirectory === undefined ? [] : [prepared.imageDirectory]),
+    ]
     const queue = new AsyncQueue<AgyJsonEvent>()
     const parser = new AgyStreamParser({ maxLineLength: this.maxEventLineLength })
     const controller = new AbortController()
@@ -649,7 +684,7 @@ export class AgyAdapter extends LlmAdapter {
       ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
       ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
       ...(this.workspaceRoot === undefined ? {} : { cwd: this.workspaceRoot }),
-      ...(this.addDirs === undefined ? {} : { addDirs: this.addDirs }),
+      ...(addDirs.length === 0 ? {} : { addDirs }),
       ...(this.mode === undefined ? {} : { mode: this.mode }),
       ...(this.disableSlashCommands === undefined ? {} : { disableSlashCommands: this.disableSlashCommands }),
     }

@@ -34,6 +34,7 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.throws(() => Config({ retryPolicy: { retryableCodes: ['TIMEOUT'] } }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ agentPreset: 'full-access' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ workspaceRoot: '   ' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ imageInput: 'always' }), error => error.name === 'ValidationError')
 })
 
 test('Config accepts only bounded transient retry policy overrides', () => {
@@ -101,6 +102,11 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
     response: 'AGY mock provider is ready.',
     delayMs: 0,
   })
+})
+
+test('Config keeps image input opt-in and supports the experimental bridge flag', () => {
+  assert.equal(Config({}).imageInput, undefined)
+  assert.equal(Config({ imageInput: 'experimental' }).imageInput, 'experimental')
 })
 
 test('Config accepts the explicit AGY-owned tool policy', () => {

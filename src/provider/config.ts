@@ -46,6 +46,8 @@ export interface Config {
   retryPolicy?: AgyRetryPolicyConfig
   /** Optional model/Agent/effort overrides for DSH auxiliary call purposes. */
   purposeRoutes?: PurposeRoutesConfig
+  /** Experimental AttachmentStore-to-file bridge; omitted/off preserves text-only behavior. */
+  imageInput?: 'off' | 'experimental'
   /** Deterministic response used only by the M1 mock route. */
   response?: string
   /** Optional delay used only by the M1 mock route. */
@@ -149,6 +151,7 @@ export function createConfigSchema(defaults: {
       retryableCodes: [...AGY_RETRYABLE_CODES],
     }),
     purposeRoutes: PurposeRoutes,
+    imageInput: z.union(['off', 'experimental'] as const),
     response: z.string().default('AGY mock provider is ready.'),
     delayMs: z.number().min(0).max(60_000).default(0),
   })

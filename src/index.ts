@@ -6,6 +6,7 @@
  * BundleConfig is available when a caller explicitly wants bundle defaults.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { AgyAdapter } from './provider/agy.js'
 import {
   BundleConfig,
@@ -26,6 +27,13 @@ export { AgyModelDiscovery, mergeModelCatalog, parseAgyModels } from './agy/mode
 export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
 export { diagnoseProfile, runDoctor } from './doctor.js'
+export {
+  AgyImageBridgeError,
+  DEFAULT_IMAGE_MAX_BYTES,
+  DEFAULT_IMAGE_MAX_COUNT,
+  IMAGE_MEDIA_TYPES,
+  prepareAgyPrompts,
+} from './provider/image-bridge.js'
 export {
   AGENT_PRESET_IDS,
   getAgentPreset,
@@ -54,6 +62,13 @@ export type {
   AgentInstallOptions,
   AgentInstallResult,
 } from './agent-installer.js'
+export type {
+  AgyImageAttachmentStore,
+  AgyImageBridgeErrorCode,
+  AgyImageMediaType,
+  ImageBridgeOptions,
+  PreparedAgyPrompts,
+} from './provider/image-bridge.js'
 export type { ConfigType, ModelConfig, ToolPolicy }
 export interface Config extends ConfigType {}
 
@@ -65,7 +80,9 @@ export function apply(ctx: Context, config: ConfigType): void {
     return
   }
   const logger = ctx.logger('dsh-agy-provider')
+  const attachmentStore = (ctx as unknown as { attachments?: Pick<AttachmentStore, 'readImage'> }).attachments
   ctx.llm.registerAdapter([provider], new AgyAdapter(config, {
     logger: record => logger.info('%s', JSON.stringify(record)),
+    ...(attachmentStore === undefined ? {} : { attachmentStore }),
   }))
 }

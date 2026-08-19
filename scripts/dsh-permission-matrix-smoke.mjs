@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh@0.1.0-rc.7'
 const COMMAND_TIMEOUT_MS = 3 * 60_000
+const DSH_INSTALL_TIMEOUT_MS = 10 * 60_000
+const DSH_MIN_NODE_MAJOR = 22
 const OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024
 const SCENARIOS = [
   { name: 'read', permissionMode: 'read-only', target: 'read-target.txt', expected: 'read-success' },
@@ -139,7 +141,13 @@ function runCommand(executable, args, options = {}) {
 function assertSuccess(result, code) {
   if (result.timedOut || result.exitCode !== 0) {
     const error = new Error(code)
-    error.detail = `${result.stderr.slice(-2000)}\n${result.stdout.slice(-2000)}`
+    error.detail = [
+      `timedOut=${result.timedOut}`,
+      `exitCode=${result.exitCode ?? 'null'}`,
+      `signal=${result.signal ?? 'none'}`,
+      result.stderr.slice(-2000),
+      result.stdout.slice(-2000),
+    ].join('\n')
     throw error
   }
 }
@@ -318,6 +326,10 @@ async function assertObservation(observation, workspaceDir, outsidePath, shellPa
 }
 
 async function main() {
+  const nodeMajor = Number(process.versions.node.split('.')[0])
+  if (!Number.isInteger(nodeMajor) || nodeMajor < DSH_MIN_NODE_MAJOR) {
+    throw new Error(`DSH_RUNTIME_REQUIRES_NODE_${DSH_MIN_NODE_MAJOR}:${process.versions.node}`)
+  }
   const workDir = await mkdtemp(join(smokeTempParent(), 'dsh-agy-provider-v7-permission-'))
   const installRoot = join(workDir, 'dsh-install')
   const fixtureWorkspaceRoot = join(workDir, 'workspaces')
@@ -346,7 +358,8 @@ async function main() {
       await runNpm([
         'install', '--prefix', installRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',
         '--no-audit', '--no-fund', DSH_PACKAGE,
-      ], { cwd: process.cwd() }).then(result => assertSuccess(result, 'DSH_INSTALL_FAILED'))
+      ], { cwd: process.cwd(), timeoutMs: DSH_INSTALL_TIMEOUT_MS })
+        .then(result => assertSuccess(result, 'DSH_INSTALL_FAILED'))
       dshEntry = join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
     }
     if (!existsSync(dshEntry)) throw new Error('DSH_ENTRY_NOT_FOUND')

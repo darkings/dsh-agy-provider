@@ -11,6 +11,7 @@
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
 | DSH tools policy | 0.6.1 registry：`reject` 默认/显式 `agy-owned`；0.7.0 source：bundle `dsh-owned` | 通过无额度与 disposable fixture 验证 | DSH runtime schema、prompt-contract、ToolRuntime round-trip、权限 fail-fast 和日志白名单测试 |
 | DSH profile onboarding | `@deepseek-ai/dsh@0.1.0-rc.7` + `dsh plugin add` | 通过无额度验证 | 0.6.1 registry Web/headless 原生 plugin-add smoke，doctor v2 effective fields，`quotaUsed=false`；验证无 `AttachmentStore` 时可加载 |
+| DSH native capability smoke | `@deepseek-ai/dsh@0.1.0-rc.7` on Node 22/24，Windows/Ubuntu/macOS | 待 CI 重跑 | DSH rc.7 的 `dsh-code-runtime`/`dsh-mcp-client` 使用 Node 22+ API；Node 20 仅纳入 Provider verify，不宣称 DSH 原生能力兼容 |
 | Doctor CLI | npm package `bin/dsh-agy-provider` | 通过无额度验证 | V6-M5 profile dump failure codes、frontmatter/workspace/image checks 和 tarball smoke |
 | Agent presets | `tool-free`/`read-only`/`workspace-write` | 通过 fake/无额度验证 | 工具白名单、argv、workspace boundary 和显式 installer tests |
 | Image input | DSH raster `ImageBlock` + experimental bridge | negative result；公开仍 text-only | M4 2/2 受控请求；无 verified `view_file` event source/DSH Web attachment closure |

@@ -11,8 +11,8 @@
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
 | DSH tools policy | 0.6.1 registry：`reject` 默认/显式 `agy-owned`；0.7.0 source：bundle `dsh-owned` | 通过无额度与 disposable fixture 验证 | DSH runtime schema、prompt-contract、ToolRuntime round-trip、权限 fail-fast 和日志白名单测试 |
 | DSH profile onboarding | `@deepseek-ai/dsh@0.1.0-rc.7` + `dsh plugin add` | 通过无额度验证 | 0.6.1 registry Web/headless 原生 plugin-add smoke，doctor v2 effective fields，`quotaUsed=false`；验证无 `AttachmentStore` 时可加载 |
-| DSH native capability smoke | `@deepseek-ai/dsh@0.1.0-rc.7` on Node 22/24，Windows/Ubuntu/macOS | 待 CI 重跑 | DSH rc.7 的 `dsh-code-runtime`/`dsh-mcp-client` 使用 Node 22+ API；Node 20 仅纳入 Provider verify，不宣称 DSH 原生能力兼容 |
-| Doctor CLI | npm package `bin/dsh-agy-provider` | 通过无额度验证 | V6-M5 profile dump failure codes、frontmatter/workspace/image checks 和 tarball smoke |
+| DSH native capability smoke | `@deepseek-ai/dsh@0.1.0-rc.7` on Node 22/24，Windows/Ubuntu/macOS | 通过无额度验证 | DSH rc.7 的 `dsh-code-runtime`/`dsh-mcp-client` 使用 Node 22+ API；Node 20 仅纳入 Provider verify，不宣称 DSH 原生能力兼容；run `32259451243` attempt 2 的 native 6/6 success |
+| Doctor CLI | npm package `bin/dsh-agy-provider` | 通过无额度验证 | V7-M5 source profileSchemaVersion 3、profile dump failure codes、DSH context probe、bridge capability、frontmatter/workspace/image checks |
 | Agent presets | `tool-free`/`read-only`/`workspace-write` | 通过 fake/无额度验证 | 工具白名单、argv、workspace boundary 和显式 installer tests |
 | Image input | DSH raster `ImageBlock` + experimental bridge | negative result；公开仍 text-only | M4 2/2 受控请求；无 verified `view_file` event source/DSH Web attachment closure |
 | AGY | `1.1.13` | 通过 | M0–M6 真实文本、会话和工具采样 |
@@ -23,7 +23,7 @@
 | npm registry | `dsh-agy-provider@0.6.1`, `latest=0.6.1` | 通过 | npm metadata/tarball、全新 DSH profile 安装 smoke；registry run 后回读通过 |
 | Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.6.1` → commit `333adc8`；publish run `32230568514`；不保存 npm token |
 
-0.6.1 发布后证据：公开仓库 CI run `32230018799` 为 11/11 success；Trusted Publishing run `32230568514` 成功；registry 隔离 smoke 使用 `dsh-agy-provider@0.6.1` 完成 Web/headless 原生 plugin add、doctor v2、bundle inventory 和 Mock response，`quotaUsed=false`、cleanup completed。当前未发布源码的 0.7.0 bundle defaults smoke 已额外验证 `toolPolicy=dsh-owned`，不改变 registry `latest=0.6.1`。
+0.6.1 发布后证据：公开仓库 CI run `32230018799` 为 11/11 success；Trusted Publishing run `32230568514` 成功；registry 隔离 smoke 使用 `dsh-agy-provider@0.6.1` 完成 Web/headless 原生 plugin add、doctor v2、bundle inventory 和 Mock response，`quotaUsed=false`、cleanup completed。当前未发布源码的 0.7.0 bundle defaults smoke 已额外验证 `toolPolicy=dsh-owned`；V7-M4 后续 CI run `32259451243` attempt 2 为 17/17 success，不改变 registry `latest=0.6.1`。
 
 ## 版本策略
 

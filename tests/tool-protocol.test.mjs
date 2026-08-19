@@ -9,7 +9,7 @@ import {
   ToolProtocolError,
   TOOL_PROTOCOL_LIMITS,
 } from '../lib/provider/tool-protocol.js'
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, stat } from 'node:fs/promises'
 import { stageToolSchema } from '../lib/provider/tool-schema-file.js'
 
 const tools = [
@@ -134,6 +134,39 @@ test('structured tool protocol rejects unsupported schema features and duplicate
   )
 })
 
+test('structured tool protocol rejects prototype-pollution keys at every schema boundary', () => {
+  const unsafeRoot = JSON.parse('{"type":"object","__proto__":{"polluted":true}}')
+  assert.throws(
+    () => createStructuredToolProtocol([{
+      name: 'unsafe',
+      description: 'unsafe',
+      parameters: unsafeRoot,
+    }]),
+    error => error instanceof ToolProtocolError && error.code === 'TOOL_PROTOCOL_SCHEMA_INVALID',
+  )
+
+  const unsafeProperty = JSON.parse('{"type":"object","properties":{"__proto__":{"type":"string"}}}')
+  assert.throws(
+    () => createStructuredToolProtocol([{
+      name: 'unsafe',
+      description: 'unsafe',
+      parameters: unsafeProperty,
+    }]),
+    error => error instanceof ToolProtocolError && error.code === 'TOOL_PROTOCOL_SCHEMA_INVALID',
+  )
+})
+
+test('structured tool protocol enforces UTF-8 message and final-result limits', () => {
+  assert.deepEqual(
+    parseStructuredEnvelope({ kind: 'message', content: '你好，DSH 工具桥 🌉' }, tools),
+    { kind: 'message', content: '你好，DSH 工具桥 🌉' },
+  )
+  assert.throws(
+    () => parseStructuredEnvelope('x'.repeat(TOOL_PROTOCOL_LIMITS.maxResultBytes + 1), tools),
+    error => error instanceof ToolProtocolError && error.code === 'TOOL_PROTOCOL_RESPONSE_LIMIT',
+  )
+})
+
 test('structured tool protocol is message-capable with no DSH tools', () => {
   const protocol = createStructuredToolProtocol([])
   assert.deepEqual(parseStructuredEnvelope({ kind: 'message', content: 'plain text' }, protocol), {
@@ -152,6 +185,9 @@ test('structured tool schema staging is private, outside the workspace, and clea
   try {
     assert.notEqual(staged.path, process.cwd())
     assert.deepEqual(JSON.parse(await readFile(staged.path, 'utf8')), protocol.schema)
+    if (process.platform !== 'win32') {
+      assert.equal((await stat(staged.path)).mode & 0o777, 0o600)
+    }
   } finally {
     await staged.cleanup()
     await assert.rejects(() => access(staged.path))

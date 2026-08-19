@@ -10,7 +10,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 Version 0.6.1 is publicly released as the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible. The `v0.6.1` tag, GitHub Actions CI, and npm Trusted Publishing have passed.
 
-The repository is now developing 0.7.0. npm `latest` is still 0.6.1 and 0.7.0 has not been published. The source tree has passed the prompt-contract, DSH ToolRuntime round-trip, and quota-free local gates for the DSH-owned bridge, while the permission matrix, cross-platform regression, and release gates remain.
+The repository is now developing 0.7.0. npm `latest` is still 0.6.1 and 0.7.0 has not been published. The DSH-owned bridge, permission matrix, and cross-platform quota-free CI gates are complete; the current stage hardens doctor v3, telemetry, and security regressions.
 
 The 0.6.0 focus is:
 
@@ -94,7 +94,7 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 
 Existing templates are not overwritten by default. Use --backup explicitly when the previous file must be preserved.
 
-### Doctor v2 and safe diagnostics
+### Doctor v3 and safe diagnostics (0.7.0 source)
 
 The package provides a profile-aware doctor:
 
@@ -102,7 +102,9 @@ The package provides a profile-aware doctor:
 npx dsh-agy-provider doctor --profile web --json
 ~~~
 
-doctor v2 reports profileSchemaVersion: 2 and audits the effective provider, model, Agent, Session, retry, purpose routes, workspace, image, and model capabilities. It distinguishes dump timeouts, non-zero exits, and parse failures and returns read-only repairSuggestions.
+The 0.7.0 source doctor reports `profileSchemaVersion: 3` and audits the effective provider, model, Agent, retry, purpose routes, workspace, DSH context probe state, and DSH-owned bridge capability. It distinguishes dump timeouts, non-zero exits, and parse failures, and emits a deprecated warning for `agy-owned`; profile doctor is read-only and never presents a static dump as a live Session.
+
+The runtime `diagnoseDshContext()` API returns only session/workspace/sandbox/permission/approval availability, allowlisted permission modes, and stable issue codes such as `DSH_SESSION_UNKNOWN` and `DSH_WORKSPACE_MISMATCH`. It never returns paths, Session IDs, prompts, or tool arguments. Telemetry is limited to `permissionPreset`, `sandboxMode`, `approvalPolicy`, `toolSchemaCount`, `toolCallCount`, and bridge outcome.
 
 doctor only runs agy --version, agy agents, agy models, and a DSH config dump. It never sends a model prompt or executes tools, and quotaUsed is always false.
 
@@ -239,6 +241,7 @@ Future work follows the same rules: verifiable behavior, safe fallback, and boun
 ### 0.7.0: DSH-controlled workspace, permissions, and tools (in development)
 
 - The base DSH-owned tool bridge is implemented: AGY emits locally validated DSH tool calls, while DSH ToolRuntime executes filesystem, shell, network, and MCP tools.
+- The V7-M4 permission matrix and cross-platform CI are complete; V7-M5 is hardening doctor v3, allowlisted telemetry, protocol limits, prototype-pollution/Unicode checks, symlink/junction handling, and temporary-file cleanup.
 - Use the DSH Session project `cwd` and its `read-only`, `workspace-write`, or `danger-full-access` selection instead of duplicating switches in this plugin.
 - Keep sandboxing, approval, MCP credentials, and side effects inside DSH; the Provider does not pass `--dangerously-skip-permissions`.
 - See the [0.7.0 development plan](docs/v0.7.0-development-plan.md) for scope, security gates, quota budget, and milestones.
@@ -272,7 +275,7 @@ dsh-agy-provider/
 │  ├─ provider/       # DSH Adapter, config, serialization, image bridge
 │  ├─ agy/            # process, argv, stream-json, discovery, redaction
 │  ├─ session/        # DSH Session to AGY Conversation mapping
-│  ├─ doctor.ts       # profile-aware doctor v2
+│  ├─ doctor.ts       # profile-aware doctor v3
 │  └─ agent-*.ts      # presets, installer, and agents CLI
 ├─ agents/            # tool-free/read-only/workspace-write templates
 ├─ scripts/           # verify, benchmark, diagnose, and DSH smoke

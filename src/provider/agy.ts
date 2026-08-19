@@ -39,6 +39,7 @@ import { AgyConcurrencyLimiter, AgyQueueError } from '../agy/limiter.js'
 import {
   buildAgyLogRecord,
   emitAgyLog,
+  type AgyBridgeOutcome,
   type AgyLogger,
   type AgyTelemetry,
 } from '../agy/log.js'
@@ -341,6 +342,33 @@ function isSuccessStatus(status: string | undefined): boolean {
   return status === undefined || status.toUpperCase() === 'SUCCESS'
 }
 
+function bridgeOutcomeForError(code: string, current: AgyBridgeOutcome): AgyBridgeOutcome {
+  if (code.startsWith('DSH_')) return 'context-rejected'
+  if (code === PERMISSION_REQUIRED_CODE) return 'permission-required'
+  if (code === 'TOOL_PROTOCOL_SCHEMA_INVALID' || code === 'TOOL_PROTOCOL_SCHEMA_LIMIT') {
+    return 'schema-rejected'
+  }
+  if (code.startsWith('TOOL_PROTOCOL_')) return 'protocol-rejected'
+  if (code === UNSUPPORTED_TOOLS_CODE) {
+    if (current === 'agy-internal-tool' || current === 'schema-rejected') return current
+    return 'failed'
+  }
+  return current === 'dsh-pending' ? 'failed' : current
+}
+
+function setDshTelemetrySnapshot(
+  telemetry: AgyTelemetry,
+  snapshot: DshContextSnapshot,
+): void {
+  if (snapshot.permissionPreset === 'read-only'
+    || snapshot.permissionPreset === 'workspace-write'
+    || snapshot.permissionPreset === 'danger-full-access') {
+    telemetry.permissionPreset = snapshot.permissionPreset
+  }
+  if (snapshot.sandboxMode !== undefined) telemetry.sandboxMode = snapshot.sandboxMode
+  if (snapshot.approvalPolicy !== undefined) telemetry.approvalPolicy = snapshot.approvalPolicy
+}
+
 function normalizeReasoningEffort(value: unknown): AgyReasoningEffort | undefined {
   if (value === undefined) return undefined
   if (isAgyReasoningEffort(value)) return value
@@ -567,19 +595,6 @@ export class AgyAdapter extends LlmAdapter {
     const sessionKey = options.sessionId === undefined ? undefined : String(options.sessionId)
     let toolProtocol: StructuredToolProtocol | undefined
     let dshContextSnapshot: DshContextSnapshot | undefined
-    if (toolSchemaCount > 0 && this.toolPolicy === 'dsh-owned') {
-      dshContextSnapshot = await resolveDshContext(this.dshContext, {
-        ...(sessionKey === undefined ? {} : { sessionId: sessionKey }),
-        toolSchemaCount,
-      })
-      toolProtocol = createStructuredToolProtocol(options.tools ?? [])
-    }
-    if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
-      throw new LlmError(
-        'AGY text MVP does not accept DSH tool schemas under toolPolicy: reject; set toolPolicy: dsh-owned or agy-owned explicitly',
-        UNSUPPORTED_TOOLS_CODE,
-      )
-    }
     const purposeRoute = purposeRouteFor(options.purpose, this.purposeRoutes)
     const requestedReasoningEffort = normalizeReasoningEffort(options.reasoningEffort)
     const purposeReasoningEffort = normalizeReasoningEffort(purposeRoute?.reasoningEffort)
@@ -587,12 +602,6 @@ export class AgyAdapter extends LlmAdapter {
       model: purposeRoute?.model ?? (options.model || this.model),
       agent: purposeRoute?.agent ?? this.agent,
       reasoningEffort: purposeReasoningEffort ?? requestedReasoningEffort,
-    }
-    if (options.temperature !== undefined || options.maxTokens !== undefined || options.stop !== undefined) {
-      throw new LlmError(
-        'AGY text MVP does not yet map sampling, maxTokens, or stop controls',
-        'UNSUPPORTED_OPTIONS',
-      )
     }
 
     const telemetry: AgyTelemetry = {
@@ -602,6 +611,12 @@ export class AgyAdapter extends LlmAdapter {
       agent: route.agent,
       toolPolicy: this.toolPolicy,
       toolSchemaCount,
+      toolCallCount: 0,
+      bridgeOutcome: toolSchemaCount === 0
+        ? 'text-only'
+        : this.toolPolicy === 'dsh-owned'
+          ? 'dsh-pending'
+          : this.toolPolicy === 'agy-owned' ? 'agy-owned' : 'schema-rejected',
       ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
       ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
       ...(this.discovery === undefined
@@ -636,6 +651,31 @@ export class AgyAdapter extends LlmAdapter {
     let releaseProcess: (() => void) | undefined
     let preparedPrompts: PreparedAgyPrompts | undefined
     try {
+      if (toolSchemaCount > 0 && this.toolPolicy === 'dsh-owned') {
+        dshContextSnapshot = await resolveDshContext(this.dshContext, {
+          ...(sessionKey === undefined ? {} : { sessionId: sessionKey }),
+          toolSchemaCount,
+        })
+        setDshTelemetrySnapshot(telemetry, dshContextSnapshot)
+        try {
+          toolProtocol = createStructuredToolProtocol(options.tools ?? [])
+        } catch (error) {
+          telemetry.bridgeOutcome = 'schema-rejected'
+          throw error
+        }
+      }
+      if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
+        throw new LlmError(
+          'AGY text MVP does not accept DSH tool schemas under toolPolicy: reject; set toolPolicy: dsh-owned or agy-owned explicitly',
+          UNSUPPORTED_TOOLS_CODE,
+        )
+      }
+      if (options.temperature !== undefined || options.maxTokens !== undefined || options.stop !== undefined) {
+        throw new LlmError(
+          'AGY text MVP does not yet map sampling, maxTokens, or stop controls',
+          'UNSUPPORTED_OPTIONS',
+        )
+      }
       const prepared = await prepareAgyPrompts(options, {
         enabled: this.imageInput === 'experimental',
         agentCanViewFile: this.agentCanViewFile,
@@ -677,6 +717,7 @@ export class AgyAdapter extends LlmAdapter {
       )
     } catch (error) {
       const mapped = asLlmError(error)
+      telemetry.bridgeOutcome = bridgeOutcomeForError(mapped.code, telemetry.bridgeOutcome)
       telemetry.durationMs = Date.now() - telemetry.startedAt
       emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.failed', mapped.code))
       throw mapped
@@ -770,6 +811,7 @@ export class AgyAdapter extends LlmAdapter {
         telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
         if (isToolEvent(event)) telemetry.toolEventCount += 1
         if (toolProtocol !== undefined && isToolEvent(event)) {
+          telemetry.bridgeOutcome = 'agy-internal-tool'
           controller.abort()
           throw new LlmError(
             'AGY emitted an internal tool event while DSH-owned tools were enabled',
@@ -791,6 +833,7 @@ export class AgyAdapter extends LlmAdapter {
         }
         if (conversationMismatch) continue
         if (isPermissionEvent(event)) {
+          if (toolProtocol !== undefined) telemetry.bridgeOutcome = 'permission-required'
           permissionRequested = true
           controller.abort()
           continue
@@ -835,6 +878,7 @@ export class AgyAdapter extends LlmAdapter {
 
     if (conversationMismatch) return { retryWithFullPrompt: true }
     if (permissionRequested) {
+      if (toolProtocol !== undefined) telemetry.bridgeOutcome = 'permission-required'
       throw new LlmError(
         'AGY requested interactive permission; headless Provider cannot approve it. Adjust AGY Agent permissions or tool configuration',
         PERMISSION_REQUIRED_CODE,
@@ -859,6 +903,7 @@ export class AgyAdapter extends LlmAdapter {
       }
       const envelope = parseStructuredEnvelope(finalResponse, toolProtocol)
       if (envelope.kind === 'message') {
+        telemetry.bridgeOutcome = 'dsh-message'
         yield { type: 'block-start', index: 0, blockType: 'text' }
         if (envelope.content.length > 0) yield { type: 'text-delta', index: 0, text: envelope.content }
         yield { type: 'block-end', index: 0, block: { type: 'text', text: envelope.content } }
@@ -868,6 +913,8 @@ export class AgyAdapter extends LlmAdapter {
       }
       const callId = CallId(randomUUID())
       const argumentsJson = JSON.stringify(envelope.arguments)
+      telemetry.toolCallCount += 1
+      telemetry.bridgeOutcome = 'dsh-tool-call'
       yield { type: 'block-start', index: 0, blockType: 'tool-call' }
       yield {
         type: 'tool-call-delta',

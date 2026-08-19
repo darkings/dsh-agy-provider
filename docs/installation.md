@@ -115,7 +115,7 @@ modelDiscoveryTimeoutMs: 10000
 npm run diagnose
 ```
 
-诊断只执行 `agy --version`、`agy agents`、`agy models` 和可选 DSH `--dump-config`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力、`modelCatalog.source`、`modelCatalog.stale`、`modelCatalog.warning`、`modelCatalog.warningCode` 和稳定错误码。指定 profile 时额外包含 `profileSchemaVersion: 2`、effective Agent/session/retry/purpose/workspace/image 状态和只读 repair suggestions。
+诊断只执行 `agy --version`、`agy agents`、`agy models` 和可选 DSH `--dump-config`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力、`modelCatalog.source`、`modelCatalog.stale`、`modelCatalog.warning`、`modelCatalog.warningCode` 和稳定错误码。0.7.0 源码指定 profile 时额外包含 `profileSchemaVersion: 3`、effective Agent/DSH context/bridge/retry/purpose/workspace/image 状态和只读 repair suggestions；静态 doctor 不伪造 live Session。
 
 ```powershell
 npm run diagnose -- --json

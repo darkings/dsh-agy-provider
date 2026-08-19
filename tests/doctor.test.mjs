@@ -224,7 +224,7 @@ test('runDoctor combines provider and profile diagnostics into unified report', 
   }
 })
 
-test('doctor v2 reports effective profile capabilities without exposing workspace paths', async () => {
+test('doctor v3 reports effective DSH bridge capabilities without exposing workspace paths', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'dsh-doctor-effective-'))
   try {
     const dshHome = join(tempDir, 'dsh-home')
@@ -248,7 +248,7 @@ test('doctor v2 reports effective profile capabilities without exposing workspac
         stderr: '',
         stdout: `# == dsh-agy-provider
   enabled: true
-  toolPolicy: agy-owned
+  toolPolicy: dsh-owned
   provider: agy
   model: gemini-3.7-flash-low
   agent: dsh-agy-read-only
@@ -268,7 +268,7 @@ test('doctor v2 reports effective profile capabilities without exposing workspac
       }),
     })
 
-    assert.equal(result.profileSchemaVersion, 2)
+    assert.equal(result.profileSchemaVersion, 3)
     assert.equal(result.effective.dumpStatus, 'ok')
     assert.equal(result.effective.agent, 'dsh-agy-read-only')
     assert.equal(result.effective.agentPreset, 'read-only')
@@ -277,6 +277,12 @@ test('doctor v2 reports effective profile capabilities without exposing workspac
     assert.deepEqual(result.effective.retryPolicy?.retryableCodes, ['RATE_LIMIT', 'SERVER', 'TRANSPORT'])
     assert.equal(result.effective.purposeRoutes.compaction?.complete, true)
     assert.equal(result.effective.workspaceRootStatus, 'configured')
+    assert.equal(result.effective.dshContext.session.state, 'not-probed')
+    assert.equal(result.effective.dshContext.workspace.configured, true)
+    assert.equal(result.effective.bridgeCapability.owner, 'dsh')
+    assert.equal(result.effective.bridgeCapability.agent, 'dsh-agy-tool-free')
+    assert.equal(result.effective.bridgeCapability.schemaCapability, 'prompt-contract-v1')
+    assert.equal(result.effective.bridgeCapability.internalTools, 'empty')
     assert.equal(result.effective.agentCapability.frontmatterValid, true)
     assert.equal(result.effective.agentCapability.viewFile, true)
     assert.equal(result.effective.agentCapability.writeTools, false)
@@ -290,7 +296,7 @@ test('doctor v2 reports effective profile capabilities without exposing workspac
   }
 })
 
-test('doctor v2 emits stable dump failure codes and read-only repair suggestions', async () => {
+test('doctor v3 emits stable dump failure codes and read-only repair suggestions', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'dsh-doctor-dump-failure-'))
   try {
     const dshHome = join(tempDir, 'dsh-home')
@@ -335,7 +341,7 @@ test('doctor v2 emits stable dump failure codes and read-only repair suggestions
   }
 })
 
-test('doctor v2 flags unsafe effective Agent combinations without modifying the profile', async () => {
+test('doctor v3 flags unsafe effective Agent combinations without modifying the profile', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'dsh-doctor-effective-unsafe-'))
   try {
     const dshHome = join(tempDir, 'dsh-home')

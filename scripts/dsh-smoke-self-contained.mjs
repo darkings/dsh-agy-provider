@@ -238,7 +238,7 @@ async function main() {
       || doctorParsed.profile?.toolPolicy !== 'dsh-owned'
       || doctorParsed.profile?.effectiveProvider !== 'agy'
       || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro-high'
-      || doctorParsed.profile?.profileSchemaVersion !== 2
+      || doctorParsed.profile?.profileSchemaVersion !== 3
       || doctorParsed.profile?.effective?.dumpStatus !== 'ok'
       || doctorParsed.profile?.effective?.provider !== 'agy'
       || doctorParsed.profile?.effective?.model !== 'gemini-3.1-pro-high'

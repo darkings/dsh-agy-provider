@@ -71,6 +71,41 @@ export type DshSessionState = 'not-required' | 'trusted'
 export type DshWorkspaceState = 'not-required' | 'trusted'
 export type DshSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 export type DshApprovalPolicy = 'ask' | 'never'
+export type DshPermissionPreset = DshSandboxMode | 'unknown'
+export type DshServiceAvailability = 'available' | 'missing'
+
+export interface DshContextDiagnostic {
+  readonly schemaVersion: 1
+  readonly requested: boolean
+  readonly toolSchemaCount: number
+  readonly services: {
+    readonly sessions: DshServiceAvailability
+    readonly workspaceRegistry: DshServiceAvailability
+    readonly sandboxPolicy: DshServiceAvailability
+    readonly permissionPresets: DshServiceAvailability
+    readonly approval: DshServiceAvailability
+  }
+  readonly session: {
+    readonly state: 'not-required' | 'required' | 'available' | 'unknown' | 'invalid' | 'unavailable'
+    readonly idPresent: boolean
+  }
+  readonly workspace: {
+    readonly state: 'not-required' | 'trusted' | 'mismatch' | 'unavailable' | 'invalid'
+  }
+  readonly sandbox: {
+    readonly state: 'not-required' | 'available' | 'unavailable'
+    readonly mode: DshSandboxMode | null
+  }
+  readonly permission: {
+    readonly state: 'not-required' | 'available' | 'unavailable'
+    readonly preset: DshPermissionPreset | null
+  }
+  readonly approval: {
+    readonly state: 'not-required' | 'available' | 'unavailable'
+    readonly policy: DshApprovalPolicy | null
+  }
+  readonly issueCodes: readonly string[]
+}
 
 /**
  * Request-scoped, immutable capability metadata. Deliberately contains no cwd,
@@ -184,6 +219,135 @@ function validSandboxMode(value: unknown): value is DshSandboxMode {
 
 function validApprovalPolicy(value: unknown): value is DshApprovalPolicy {
   return value === 'ask' || value === 'never'
+}
+
+function safePermissionPreset(value: string | undefined): DshPermissionPreset | null {
+  if (value === undefined) return null
+  if (validSandboxMode(value)) return value
+  return 'unknown'
+}
+
+function serviceAvailability(value: unknown): DshServiceAvailability {
+  return value === undefined ? 'missing' : 'available'
+}
+
+function emptyContextDiagnostic(
+  services: DshContextServices,
+  count: number,
+): DshContextDiagnostic {
+  const requested = count > 0
+  return {
+    schemaVersion: 1,
+    requested,
+    toolSchemaCount: count,
+    services: {
+      sessions: serviceAvailability(services.sessions),
+      workspaceRegistry: serviceAvailability(services.workspaceRegistry),
+      sandboxPolicy: serviceAvailability(services.sandboxPolicy),
+      permissionPresets: serviceAvailability(services.permissionPresets),
+      approval: serviceAvailability(services.approval),
+    },
+    session: { state: requested ? 'unavailable' : 'not-required', idPresent: false },
+    workspace: { state: requested ? 'unavailable' : 'not-required' },
+    sandbox: { state: requested ? 'unavailable' : 'not-required', mode: null },
+    permission: { state: requested ? 'unavailable' : 'not-required', preset: null },
+    approval: { state: requested ? 'unavailable' : 'not-required', policy: null },
+    issueCodes: [],
+  }
+}
+
+function diagnosticForContextError(
+  base: DshContextDiagnostic,
+  code: DshContextErrorCode,
+  idPresent: boolean,
+): DshContextDiagnostic {
+  const next = {
+    ...base,
+    session: { ...base.session, idPresent },
+    issueCodes: [code],
+  }
+  switch (code) {
+    case DSH_SESSION_REQUIRED_CODE:
+      return { ...next, session: { state: 'required', idPresent: false } }
+    case DSH_SESSION_UNKNOWN_CODE:
+      return { ...next, session: { state: 'unknown', idPresent } }
+    case DSH_SESSION_INVALID_CODE:
+      return { ...next, session: { state: 'invalid', idPresent } }
+    case DSH_SESSION_UNAVAILABLE_CODE:
+      return { ...next, session: { state: 'unavailable', idPresent } }
+    case DSH_WORKSPACE_MISMATCH_CODE:
+      return { ...next, session: { state: 'available', idPresent }, workspace: { state: 'mismatch' } }
+    case DSH_WORKSPACE_UNAVAILABLE_CODE:
+      return { ...next, session: { state: 'available', idPresent }, workspace: { state: 'unavailable' } }
+    case DSH_SANDBOX_UNAVAILABLE_CODE:
+      return {
+        ...next,
+        session: { state: 'available', idPresent },
+        workspace: { state: 'trusted' },
+        sandbox: { state: 'unavailable', mode: null },
+      }
+    case DSH_PERMISSION_UNAVAILABLE_CODE:
+      return {
+        ...next,
+        session: { state: 'available', idPresent },
+        workspace: { state: 'trusted' },
+        sandbox: { state: 'available', mode: null },
+        permission: { state: 'unavailable', preset: null },
+      }
+    case DSH_APPROVAL_UNAVAILABLE_CODE:
+      return {
+        ...next,
+        session: { state: 'available', idPresent },
+        workspace: { state: 'trusted' },
+        sandbox: { state: 'available', mode: null },
+        permission: { state: 'available', preset: null },
+        approval: { state: 'unavailable', policy: null },
+      }
+    default:
+      return next
+  }
+}
+
+/**
+ * Probe only the DSH capability services needed by a tool request. The report
+ * contains labels and allowlisted modes only; it never includes session IDs,
+ * cwd/workspace paths, events, prompts, arguments, or service error text.
+ */
+export async function diagnoseDshContext(
+  context: DshContextLookup | undefined,
+  options: { readonly sessionId?: string; readonly toolSchemaCount?: number },
+): Promise<DshContextDiagnostic> {
+  const count = toolCount(options.toolSchemaCount)
+  const services = readDshContextServices(context)
+  const base = emptyContextDiagnostic(services, count)
+  if (count === 0) return base
+
+  const sessionId = options.sessionId?.trim()
+  if (sessionId === undefined || sessionId.length === 0) {
+    return diagnosticForContextError(base, DSH_SESSION_REQUIRED_CODE, false)
+  }
+
+  try {
+    const snapshotValue = await resolveDshContext(context, {
+      sessionId,
+      toolSchemaCount: count,
+    })
+    return {
+      ...base,
+      session: { state: 'available', idPresent: true },
+      workspace: { state: 'trusted' },
+      sandbox: { state: 'available', mode: snapshotValue.sandboxMode ?? null },
+      permission: {
+        state: 'available',
+        preset: safePermissionPreset(snapshotValue.permissionPreset),
+      },
+      approval: { state: 'available', policy: snapshotValue.approvalPolicy ?? null },
+      issueCodes: [],
+    }
+  } catch (error) {
+    const code = error instanceof DshContextError ? error.code : DSH_CONTEXT_UNAVAILABLE_CODE
+    return diagnosticForContextError(base, code, true)
+  }
 }
 
 function sessionIdOf(session: DshSessionLike, requested: string): string | undefined {

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
-import { realpath } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 import { AgyAdapter } from '../lib/provider/agy.js'
-import { DshContextError, resolveDshContext } from '../lib/dsh/context.js'
+import { diagnoseDshContext, DshContextError, resolveDshContext } from '../lib/dsh/context.js'
 
 function lookup(services) {
   return {
@@ -178,6 +180,81 @@ test('resolveDshContext rejects a workspace that does not account for the sessio
     () => resolveDshContext(services, { sessionId: 'session-1', toolSchemaCount: 1 }),
     error => error instanceof DshContextError && error.code === 'DSH_WORKSPACE_MISMATCH',
   )
+})
+
+test('diagnoseDshContext returns only allowlisted capability labels', async () => {
+  const { context, cwd } = await trustedContext()
+  const report = await diagnoseDshContext(context, { sessionId: 'session-1', toolSchemaCount: 2 })
+
+  assert.equal(report.schemaVersion, 1)
+  assert.equal(report.session.state, 'available')
+  assert.equal(report.session.idPresent, true)
+  assert.equal(report.workspace.state, 'trusted')
+  assert.equal(report.sandbox.mode, 'workspace-write')
+  assert.equal(report.permission.preset, 'workspace-write')
+  assert.equal(report.approval.policy, 'ask')
+  assert.deepEqual(report.issueCodes, [])
+  assert.equal(JSON.stringify(report).includes(cwd), false)
+  assert.equal(JSON.stringify(report).includes('session-1'), false)
+})
+
+test('diagnoseDshContext classifies missing services and unknown sessions without paths', async () => {
+  const unknown = await diagnoseDshContext(lookup({
+    sessions: { get: () => undefined },
+  }), { sessionId: 'missing-session', toolSchemaCount: 1 })
+  assert.equal(unknown.session.state, 'unknown')
+  assert.deepEqual(unknown.issueCodes, ['DSH_SESSION_UNKNOWN'])
+
+  const unavailable = await diagnoseDshContext(lookup({}), {
+    sessionId: 'session-1',
+    toolSchemaCount: 1,
+  })
+  assert.equal(unavailable.session.state, 'unavailable')
+  assert.deepEqual(unavailable.issueCodes, ['DSH_SESSION_UNAVAILABLE'])
+  assert.equal(JSON.stringify(unavailable).includes('session-1'), false)
+
+  const required = await diagnoseDshContext(undefined, { toolSchemaCount: 1 })
+  assert.equal(required.session.state, 'required')
+  assert.deepEqual(required.issueCodes, ['DSH_SESSION_REQUIRED'])
+})
+
+test('resolveDshContext canonicalizes symlinked workspace and sandbox roots', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-context-symlink-'))
+  try {
+    const realWorkspace = join(root, 'real-workspace')
+    const linkedWorkspace = join(root, 'linked-workspace')
+    await mkdir(realWorkspace, { recursive: true })
+    try {
+      await symlink(realWorkspace, linkedWorkspace, process.platform === 'win32' ? 'junction' : 'dir')
+    } catch (error) {
+      if (process.platform === 'win32' && error?.code === 'EPERM') {
+        t.skip('symlink/junction creation is unavailable in this Windows runner')
+        return
+      }
+      throw error
+    }
+
+    const session = {
+      id: 'session-symlink',
+      header: { id: 'session-symlink', cwd: linkedWorkspace },
+      events: [],
+    }
+    const context = lookup({
+      sessions: { get: () => session },
+      workspaceRegistry: {
+        resolveByPath: async path => ({ path, sessionIds: [session.id], status: async () => 'ok' }),
+      },
+      sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: realWorkspace }) },
+      permissionPresets: { current: () => 'workspace-write' },
+      approval: { config: { policy: 'ask' }, overrideOf: () => undefined },
+    })
+
+    const snapshot = await resolveDshContext(context, { sessionId: session.id, toolSchemaCount: 1 })
+    assert.equal(snapshot.workspaceState, 'trusted')
+    assert.equal(snapshot.sandboxMode, 'workspace-write')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('AgyAdapter maps an untrusted dsh-owned tool request to a stable DSH error before spawning AGY', async () => {

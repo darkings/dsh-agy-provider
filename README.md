@@ -10,7 +10,7 @@
 
 0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
 
-当前仓库正在开发 0.7.0：npm `latest` 仍是 0.6.1，0.7.0 尚未发布。源码中的 DSH-owned bridge 已通过 prompt-contract、DSH ToolRuntime round-trip 和 quota-free 本地门禁，但仍需完成权限矩阵、跨平台回归和发布门禁。
+当前仓库正在开发 0.7.0：npm `latest` 仍是 0.6.1，0.7.0 尚未发布。源码中的 DSH-owned bridge、权限矩阵和跨平台 quota-free CI 已完成，当前进入 doctor v3、telemetry 与安全回归门禁。
 
 0.6.0 的公开能力重点是：
 
@@ -94,7 +94,7 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 
 已有模板默认拒绝覆盖；需要保留旧文件时显式增加 --backup。
 
-### 5. Doctor v2 与安全诊断
+### 5. Doctor v3 与安全诊断（0.7.0 源码）
 
 发布包提供 profile-aware doctor：
 
@@ -102,7 +102,9 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 npx dsh-agy-provider doctor --profile web --json
 ~~~
 
-doctor v2 输出 profileSchemaVersion: 2，审计实际读取到的 provider、model、Agent、Session、retry、purpose route、workspace、image 和 model capability。它能区分 dump timeout、非零退出和解析失败，并输出只读的 repairSuggestions。
+0.7.0 源码中的 doctor 输出 `profileSchemaVersion: 3`，审计 provider、model、Agent、retry、purpose route、workspace、image、DSH context probe 状态和 DSH-owned bridge capability。它会区分 dump timeout、非零退出和解析失败，并对 `agy-owned` 输出 deprecated warning；profile doctor 只读，不把静态 dump 伪装成 live Session。
+
+运行时 API `diagnoseDshContext()` 会只返回 session/workspace/sandbox/permission/approval 的可用性、allowlisted 权限模式和稳定 issue code，例如 `DSH_SESSION_UNKNOWN`、`DSH_WORKSPACE_MISMATCH`，不会返回路径、Session ID、Prompt 或工具参数。telemetry 只保留 `permissionPreset`、`sandboxMode`、`approvalPolicy`、`toolSchemaCount`、`toolCallCount` 和 bridge outcome。
 
 doctor 只执行 agy --version、agy agents、agy models 和 DSH config dump，不发送模型 Prompt，不执行工具，quotaUsed 固定为 false。
 
@@ -239,6 +241,7 @@ npm run smoke:dsh:self-contained
 ### 0.7.0：由 DSH 控制项目、权限与工具（开发中，尚未发布）
 
 - DSH-owned tool bridge 基础闭环已完成：AGY 只产生经过本地严格校验的 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
+- V7-M4 权限矩阵和跨平台 CI 已完成；V7-M5 正在加固 doctor v3、allowlisted telemetry、协议上限、原型污染、Unicode、symlink/junction 和临时文件清理回归。
 - 直接采用 DSH Session 的项目 `cwd`，以及 `read-only`、`workspace-write`、`danger-full-access` 权限选择，不在插件内复制第二套开关。
 - 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
 - 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。
@@ -272,7 +275,7 @@ dsh-agy-provider/
 │  ├─ provider/       # DSH Adapter、配置、序列化、图片 bridge
 │  ├─ agy/            # 子进程、argv、stream-json、模型发现、脱敏
 │  ├─ session/        # DSH Session 与 AGY Conversation 映射
-│  ├─ doctor.ts       # profile-aware doctor v2
+│  ├─ doctor.ts       # profile-aware doctor v3
 │  └─ agent-*.ts      # preset、安装器和 agents CLI
 ├─ agents/            # tool-free/read-only/workspace-write 模板
 ├─ scripts/           # verify、benchmark、diagnose、DSH smoke

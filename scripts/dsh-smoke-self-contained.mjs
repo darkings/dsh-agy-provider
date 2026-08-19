@@ -90,7 +90,13 @@ function runCommand(executable, args, options = {}) {
 
 function assertSuccess(result, code) {
   if (result.timedOut || result.exitCode !== 0) {
-    throw new Error(code)
+    const details = [
+      result.timedOut ? 'timed out' : `exitCode=${result.exitCode ?? 'null'}`,
+      result.signal === null || result.signal === undefined ? undefined : `signal=${result.signal}`,
+      result.stderr.trim().length === 0 ? undefined : `stderr=${result.stderr.trim().slice(-4000)}`,
+      result.stdout.trim().length === 0 ? undefined : `stdout=${result.stdout.trim().slice(-2000)}`,
+    ].filter(Boolean).join('\n')
+    throw new Error(`${code}\n${details}`)
   }
 }
 
@@ -162,7 +168,9 @@ async function main() {
       providerSource = join(providerTarballDir, tarballs[0])
     }
 
-    let dshEntry = await findCachedDshEntry()
+    let dshEntry = process.env.DSH_SMOKE_DSH_ENTRY?.trim()
+    if (dshEntry !== undefined && dshEntry.length === 0) dshEntry = undefined
+    if (dshEntry === undefined) dshEntry = await findCachedDshEntry()
     if (dshEntry === undefined) {
       await runNpm([
         'install', '--prefix', installRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',

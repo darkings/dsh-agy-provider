@@ -7,22 +7,53 @@
 - AGY CLI 已安装并完成登录，`agy agents` 能列出 `deepseek-proxy`。
 - DSH 使用与插件兼容的 `@deepseek-ai/dsh-llm` runtime。
 
-## 从 npm 安装
+## 安装到 DSH profile
 
-公开包可以直接安装：
+不要只在业务项目目录执行 `npm install dsh-agy-provider`。DSH Web 使用独立的 profile 依赖目录，必须通过 DSH 的 plugin 命令安装：
 
 ```powershell
-npm install dsh-agy-provider
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.4.0
 ```
 
-安装包会通过 `dsh.bundle.patch` 暴露插件入口。pnpm 用户需要按自己的 pnpm 版本允许该依赖的构建脚本。
+该命令会将包加入 `web` profile 的依赖和 `dsh.profile.bundles`。验证是否已加载：
+
+```powershell
+npx @deepseek-ai/dsh --profile web --dump-config | Select-String dsh-agy-provider
+```
+
+然后重启 DSH Web：
+
+```powershell
+npx @deepseek-ai/dsh web
+```
+
+安装后 Provider 默认仍为 `enabled: false`。确认 AGY 已登录、`deepseek-proxy` 可用后，在 `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` 写入：
+
+```yaml
+- id: dsh-agy-provider
+  config:
+    enabled: true
+    provider: agy
+    agent: deepseek-proxy
+    model: gemini-3.1-pro-high
+    toolPolicy: reject
+    sessionMode: full
+```
+
+保存后重新启动 DSH Web。这样可以避免未配置 AGY 时插件加载失败或意外消耗额度。
+
+如果只需要在普通 Node.js 项目中导入 Provider，而不是让 DSH Web 加载 bundle，才使用：
+
+```powershell
+npm install dsh-agy-provider@0.4.0
+```
 
 ## 从 GitHub 安装源码包
 
-开发分支也可以直接安装：
+开发分支也可以直接安装到 DSH profile：
 
 ```powershell
-npm install github:darkings/dsh-agy-provider
+npx @deepseek-ai/dsh plugin --profile web add github:darkings/dsh-agy-provider
 ```
 
 ## 版本与发布状态

@@ -1,4 +1,6 @@
 # Bundle entry is inert by default; users enable it after configuring AGY.
+# Install this package into a DSH profile with:
+# npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.4.0
 - insert:
     - id: dsh-agy-provider
       name: dsh-agy-provider

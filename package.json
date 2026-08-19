@@ -22,7 +22,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "dsh-agy-provider": "./bin/dsh-agy-provider.js"
+    "dsh-agy-provider": "bin/dsh-agy-provider.js"
   },
   "files": [
     "lib/**/*.js",

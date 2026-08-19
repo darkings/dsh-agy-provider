@@ -83,3 +83,17 @@ test('public Config remains safe while BundleConfig exposes ready defaults', () 
   assert.equal(ExportedConfigSchema({}).enabled, false)
   assert.equal(ExportedConfigSchema({}).toolPolicy, 'reject')
 })
+
+test('package manifest exposes the doctor CLI with npm-normalized bin metadata', async () => {
+  const fs = await import('node:fs/promises')
+  const { fileURLToPath } = await import('node:url')
+  const packageJson = JSON.parse(await fs.readFile(
+    fileURLToPath(new URL('../package.json', import.meta.url)),
+    'utf8',
+  ))
+
+  assert.deepEqual(packageJson.bin, {
+    'dsh-agy-provider': 'bin/dsh-agy-provider.js',
+  })
+  assert.ok(packageJson.files.includes('bin/**/*.js'))
+})

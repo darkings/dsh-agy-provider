@@ -81,7 +81,7 @@
 
 ### 发布前验证
 
-- [x] 本地 `npm run verify`（89/89、typecheck、43 文件 pack）、`npm run benchmark` 和 `npm run diagnose -- --json` 均通过；diagnose 返回 `quotaUsed=false`。
+- [x] 本地 `npm run verify`（90/90、typecheck、43 文件 pack）、`npm run benchmark` 和 `npm run diagnose -- --json` 均通过；diagnose 返回 `quotaUsed=false`。
 - [x] `git diff --check` 和敏感字段/用户路径审计通过；tarball 未包含规划文件、测试、日志或本机 profile。
 - [x] Windows/Ubuntu/macOS × Node.js 20/22/24 CI 一次通过；Ubuntu/macOS 原生 plugin-add smoke 通过；run `32209089784` 为 11/11 success。
 - [ ] 从全新 registry profile 安装 0.5.0，复验 doctor、Web bundle defaults 和 headless Mock smoke。

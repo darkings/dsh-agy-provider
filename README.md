@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`0.5.0` 当前为 release candidate 工作树：V5-M1–M5 的源码、doctor CLI、原生 DSH profile smoke 和无额度验证已完成，npm registry 暂仍为 `latest=0.4.0`，待发布授权后再 bump/tag/publish。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
+`0.5.0` 已公开发布：V5-M1–M6 的源码、doctor CLI、原生 DSH profile smoke、Trusted Publishing 和 registry 隔离复验均已完成，npm registry 为 `latest=0.5.0`。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
@@ -94,9 +94,9 @@
 
 当前 0.5.0 发布状态：
 
-- 当前源码 package version 为 `0.5.0`；npm registry 的 `latest` 仍为 `0.4.0`，因此 registry 安装请继续使用已发布版本，或等待 0.5.0 发布。
+- 当前源码 package version 和 npm registry 均为 `0.5.0`；npm registry 的 `latest` 已指向 `0.5.0`。
 - `.github/workflows/publish.yml` 要求 `v*.*.*` tag 与 `package.json` 版本完全匹配，并使用 npm Trusted Publishing，不在仓库保存长期 token。
-- 0.5.0 已完成本地版本 bump、`npm run verify`、pack/原生 plugin-add smoke 预检；尚未执行 npm publish。
+- `v0.5.0` 已指向发布提交 `e4d0bf4`，publish workflow run `32211523708` 成功；registry 安装复验覆盖 Web/headless、doctor 和 Mock response。
 
 当前明确不支持：
 

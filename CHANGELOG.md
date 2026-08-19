@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-08-19
 
 ### Added
 
@@ -20,9 +20,12 @@
 - Doctor 使用 `shell=false`、有界输出、超时和进程树清理；不写 profile、不发送 Prompt、不自动批准 AGY 权限。
 - 诊断输出不包含用户完整路径、Prompt、schema 参数、stderr 原文或凭据，且始终标记 `quotaUsed=false`。
 
-### Release readiness
+### Release result
 
-- 源码版本和 lockfile 已更新为 `0.5.0`，但 npm registry `latest` 仍为 `0.4.0`；本版本尚未执行 `npm publish`。
+- `v0.5.0` 已指向发布提交 `e4d0bf4`；GitHub Actions publish run `32211523708` 通过 npm Trusted Publishing 成功发布。
+- npm registry 已确认 `dsh-agy-provider@0.5.0` 存在，`latest=0.5.0`，doctor `bin` 和 tarball 可访问。
+- 全新隔离 registry DSH profile 复验已通过 Web/headless plugin add、bundle defaults、doctor 和 headless Mock response；`quotaUsed=false`。
+- 本次发布未发起真实 AGY 模型请求。
 
 ## [0.4.0] - 2026-08-19
 

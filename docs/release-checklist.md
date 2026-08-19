@@ -67,7 +67,7 @@
 
 > 0.3.0 未单独发布；其已完成能力随 0.4.0 一并发布。未创建 `v0.4.0` tag，避免现有 tag publish workflow 对已发布版本重复执行。
 
-## `0.5.0` release candidate
+## `0.5.0` 发布结果
 
 ### 已完成
 
@@ -84,14 +84,14 @@
 - [x] 本地 `npm run verify`（90/90、typecheck、43 文件 pack）、`npm run benchmark` 和 `npm run diagnose -- --json` 均通过；diagnose 返回 `quotaUsed=false`。
 - [x] `git diff --check` 和敏感字段/用户路径审计通过；tarball 未包含规划文件、测试、日志或本机 profile。
 - [x] Windows/Ubuntu/macOS × Node.js 20/22/24 CI 一次通过；Ubuntu/macOS 原生 plugin-add smoke 通过；run `32209089784` 为 11/11 success。
-- [ ] 从全新 registry profile 安装 0.5.0，复验 doctor、Web bundle defaults 和 headless Mock smoke。
-- [ ] npm package settings 中 Trusted Publisher 已指向 `darkings/dsh-agy-provider` 的 `publish.yml`，并先做 tag 发布 dry-run 级别核对。
-- [ ] 真实 AGY Web 请求仅在用户再次明确授权后执行，最多 2 请求 / 12,000 input tokens / 1,000 output tokens；公共 CI 保持 0 请求。
+- [x] 从全新 registry profile 安装 `dsh-agy-provider@0.5.0`，复验 doctor、Web bundle defaults 和 headless Mock smoke；`quotaUsed=false`。
+- [x] npm package settings 中 Trusted Publisher 已指向 `darkings/dsh-agy-provider` 的 `publish.yml`，权限为 `npm publish`。
+- [x] 真实 AGY Web 请求本次未执行；发布及 registry smoke 共 0 次模型请求，公共 CI 保持 0 请求。
 
 ### 当前发布闸门
 
-- [ ] 创建并推送与 package version 完全匹配的 `v0.5.0` tag。
-- [ ] 执行 npm Trusted Publishing 发布；若 Trusted Publisher 未完成，先停止并请求用户确认是否使用本机 2FA 发布。
-- [ ] 发布后确认 `npm view dsh-agy-provider version dist-tags` 为 `0.5.0` / `latest=0.5.0`，再从 registry 做隔离安装复验。
+- [x] 创建并推送与 package version 完全匹配的 `v0.5.0` tag；tag 指向发布提交 `e4d0bf4`。
+- [x] 通过 npm Trusted Publishing 发布；GitHub Actions publish run `32211523708` 成功。
+- [x] 发布后确认 registry `version=0.5.0`、`latest=0.5.0`，并完成隔离安装复验。
 
-> 当前 0.5.0 仍是 release candidate，npm registry `latest` 保持 `0.4.0`；本轮不执行 publish 或 tag。
+> 0.5.0 已完成公开发布。后续若修改源码/文档，应使用新的版本号，不得复用 `v0.5.0` 或重复触发发布 workflow。

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, parse } from 'node:path'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh@0.1.0-rc.7'
+const PROVIDER_SPEC = process.env.DSH_SMOKE_PROVIDER_SPEC?.trim()
 const EXPECTED_RESPONSE = 'V5-M4 self-contained mock smoke passed'
 const COMMAND_TIMEOUT_MS = 10 * 60_000
 const OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024
@@ -128,13 +129,16 @@ async function main() {
   const patchPath = join(workDir, 'mock.patch.yml')
   const dshEnv = { DSH_HOME: isolatedHome }
   try {
-    await mkdir(providerTarballDir, { recursive: true })
-    await runNpm([
-      'pack', '--ignore-scripts', '--pack-destination', providerTarballDir,
-    ], { cwd: process.cwd() }).then(result => assertSuccess(result, 'PROVIDER_PACK_FAILED'))
-    const tarballs = (await readdir(providerTarballDir)).filter(name => name.endsWith('.tgz'))
-    if (tarballs.length !== 1) throw new Error('PROVIDER_TARBALL_NOT_FOUND')
-    const providerTarball = join(providerTarballDir, tarballs[0])
+    let providerSource = PROVIDER_SPEC
+    if (providerSource === undefined) {
+      await mkdir(providerTarballDir, { recursive: true })
+      await runNpm([
+        'pack', '--ignore-scripts', '--pack-destination', providerTarballDir,
+      ], { cwd: process.cwd() }).then(result => assertSuccess(result, 'PROVIDER_PACK_FAILED'))
+      const tarballs = (await readdir(providerTarballDir)).filter(name => name.endsWith('.tgz'))
+      if (tarballs.length !== 1) throw new Error('PROVIDER_TARBALL_NOT_FOUND')
+      providerSource = join(providerTarballDir, tarballs[0])
+    }
 
     await runNpm([
       'install', '--prefix', installRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',
@@ -148,7 +152,7 @@ async function main() {
     const dshVersion = safeVersion(dshVersionResult.stdout)
 
     // 1. Native plugin add to web profile
-    const addWebResult = await runNode(dshEntry, ['plugin', '--profile', 'web', 'add', providerTarball], {
+    const addWebResult = await runNode(dshEntry, ['plugin', '--profile', 'web', 'add', providerSource], {
       cwd: installRoot,
       env: dshEnv,
     })
@@ -211,7 +215,7 @@ async function main() {
     }
 
     // 2. Native plugin add to headless profile and test mock response
-    const addHeadlessResult = await runNode(dshEntry, ['plugin', '--profile', 'headless', 'add', providerTarball], {
+    const addHeadlessResult = await runNode(dshEntry, ['plugin', '--profile', 'headless', 'add', providerSource], {
       cwd: installRoot,
       env: dshEnv,
     })
@@ -266,8 +270,9 @@ async function main() {
       dsh: dshMetadata,
       dshVersion,
       provider: providerMetadata,
+      providerSource: PROVIDER_SPEC ?? 'local-pack',
       profiles: ['web', 'headless'],
-      installMethod: 'dsh plugin add',
+      installMethod: PROVIDER_SPEC === undefined ? 'dsh plugin add' : 'dsh plugin add (registry spec)',
       bundleDefaults: {
         enabled: true,
         toolPolicy: 'agy-owned',

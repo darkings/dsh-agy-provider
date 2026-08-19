@@ -64,7 +64,8 @@ jobs:
         run: npm ci
 
       - name: Prepare DSH runtime directory
-        run: node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
+        run: >-
+          node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
         env:
           DSH_INSTALL_DIR: ${{ runner.temp }}/dsh-install
 
@@ -106,7 +107,8 @@ jobs:
         run: npm ci
 
       - name: Prepare DSH runtime directory
-        run: node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
+        run: >-
+          node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
         env:
           DSH_INSTALL_DIR: ${{ runner.temp }}/dsh-install
 

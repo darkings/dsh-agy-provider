@@ -80,7 +80,10 @@ export function apply(ctx: Context, config: ConfigType): void {
     return
   }
   const logger = ctx.logger('dsh-agy-provider')
-  const attachmentStore = (ctx as unknown as { attachments?: Pick<AttachmentStore, 'readImage'> }).attachments
+  // AttachmentStore is optional for the text-only path. Use the reflection
+  // lookup instead of reading ctx.attachments directly: Cordis requires every
+  // direct service property access to be declared in `inject`.
+  const attachmentStore = ctx.get('attachments') as Pick<AttachmentStore, 'readImage'> | undefined
   ctx.llm.registerAdapter([provider], new AgyAdapter(config, {
     logger: record => logger.info('%s', JSON.stringify(record)),
     ...(attachmentStore === undefined ? {} : { attachmentStore }),

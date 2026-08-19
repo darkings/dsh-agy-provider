@@ -60,3 +60,24 @@ test('Mock Provider exposes a configured multi-model catalog through the officia
   assert.equal(models[0]?.name, 'Fast Mock')
   await root.fiber.dispose()
 })
+
+test('AGY Provider loads when the optional AttachmentStore is not installed', async () => {
+  const root = new Context()
+  await root.plugin(LlmRuntime)
+  await root.plugin({
+    name: 'dsh-agy-provider-optional-attachment-smoke',
+    inject: ['llm'],
+    apply(ctx) {
+      apply(ctx, {
+        enabled: true,
+        provider: 'agy-optional-attachment-smoke',
+        model: 'gemini-test',
+        modelDiscovery: 'off',
+      })
+    },
+  })
+
+  const models = await root.llm.listModels('agy-optional-attachment-smoke')
+  assert.equal(models[0]?.id, 'gemini-test')
+  await root.fiber.dispose()
+})

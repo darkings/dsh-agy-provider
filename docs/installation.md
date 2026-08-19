@@ -27,9 +27,9 @@ npm install github:darkings/dsh-agy-provider
 
 ## 版本与发布状态
 
-当前 npm registry 的 `latest` 为 `0.2.0`。仓库 `main` 已包含 0.3.0 的开发中能力，但 `0.3.0` 尚未发布；需要稳定版本时请安装 npm 包，需要验证未发布代码时才从 GitHub 安装。
+当前 npm registry 的 `latest` 为 `0.4.0`。0.3.0 的已完成能力已随 0.4.0 一并发布；需要稳定版本时直接安装 npm 包，需要验证最新源码时才从 GitHub 安装。
 
-0.3.0 发布必须先完成 npm 账号级 2FA 和 Trusted Publisher 配置，再使用匹配的 `v0.3.0` tag 触发 `.github/workflows/publish.yml`。开发阶段不要手动修改已发布版本，也不要执行未经授权的 `npm publish`。
+0.4.0 已通过 `npm publish --access public` 发布。后续版本发布前仍需先完成版本 bump、`npm run verify`、registry/DSH Mock 复验，并避免使用已发布版本重复触发 publish workflow。
 
 ## 配置
 

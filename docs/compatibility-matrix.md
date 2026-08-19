@@ -15,7 +15,7 @@
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
 | AGY models | `agy models` plain text | 通过 | V3-M1 解析、去重、显式目录合并和 fallback 测试通过 |
 | Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
-| npm registry | `dsh-agy-provider@0.2.0`, `latest=0.2.0` | 通过 | `npm view`、历史干净安装和 DSH Mock smoke；`0.3.0` 尚未发布 |
+| npm registry | `dsh-agy-provider@0.4.0`, `latest=0.4.0` | 通过 | `npm view`、发布产物检查和自包含 DSH Mock smoke；0.3.0 未单独发布 |
 | Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 已具备安全闸门 | `.github/workflows/publish.yml`；账号级 2FA/Trusted Publisher 待配置 |
 
 ## 版本策略

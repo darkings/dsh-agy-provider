@@ -22,14 +22,20 @@
 
 ### Release readiness
 
-- 当前源码包含 0.3.0 V3-M1–V3-M5 实现，但 package version 仍为 `0.2.0`，npm `latest` 仍为 `0.2.0`；`0.3.0` 尚未发布。
-- 0.3.0 发布必须使用与 package version 匹配的 `v0.3.0` tag，并通过 GitHub Actions 的 npm Trusted Publishing；账号级 2FA/Trusted Publisher 未完成前不执行 publish。
+- package version 已更新为 `0.4.0`，npm `latest` 已指向 `0.4.0`；0.3.0 未单独发布，其已完成能力随 0.4.0 一并交付。
+- 已通过 `npm publish --access public` 完成公开发布，并回读确认 `dsh-agy-provider-0.4.0.tgz` 可访问。
 
 ### 0.4.0 progress
 
 - V4-M1 已完成真实 AGY `stream-json` 最小采样：新增双重确认的 `npm run agy:protocol` 实验脚本、脱敏协议 fixture 和回放测试；未把 fixture-only 字段接入正式 Adapter。
 - V4-M2/V4-M3 暂不进入用户配置：本轮真实采样确认了 `init → step_update → result` 输出形状，但没有证明同一 AGY 进程的多轮 stdin 留存，因此不暴露 persistent transport，也不宣称性能/token 收益。
 - V4-M4 已增加自包含 `npm run smoke:dsh:self-contained`，固定安装 DSH `0.1.0-rc.7`、本地 tarball 和隔离 headless profile，Mock 结果 `quotaUsed=false`；Linux/macOS Node 24 CI smoke 已加入。
+
+### Release result
+
+- 版本提交 `a6fb5b1` 的 GitHub Actions CI run `32199878143` 已 11/11 成功。
+- 真实 AGY 额度实验仍保持 2 次尝试上限；发布过程未追加模型请求。
+- 未创建 `v0.4.0` tag，避免现有 tag publish workflow 对已发布版本重复执行。
 
 ## [0.2.0] - 2026-08-18
 

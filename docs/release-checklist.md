@@ -54,3 +54,15 @@
 - [ ] 如需真实 AGY 最小请求，单独确认请求数/token 预算和终止条件；公共 CI 不得调用 AGY。
 
 > 当前 V3-M6 只完成发布准备和无额度复验；不改变已发布 `0.2.0`，不占用 `0.3.0` registry 版本，也不绕过账号级 2FA。
+
+## `0.4.0` 发布结果
+
+- [x] `package.json` 和 `package-lock.json` 版本更新为 `0.4.0`。
+- [x] `CHANGELOG.md`、README、安装文档和兼容性矩阵同步更新。
+- [x] `npm run verify` 通过，80/80 测试通过，tarball 包含 40 个文件。
+- [x] 自包含 DSH Mock smoke 通过，Windows 本机与 Ubuntu/macOS Node 24 CI 均通过。
+- [x] 执行 `npm publish --access public`，`dsh-agy-provider@0.4.0` 已发布，`latest=0.4.0`。
+- [x] npm registry 回读确认 `dsh-agy-provider-0.4.0.tgz` 可访问。
+- [x] 版本提交 `a6fb5b1` 的 GitHub Actions CI run `32199878143` 通过 11/11。
+
+> 0.3.0 未单独发布；其已完成能力随 0.4.0 一并发布。未创建 `v0.4.0` tag，避免现有 tag publish workflow 对已发布版本重复执行。

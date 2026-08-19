@@ -4,17 +4,17 @@
 
 ## 当前状态
 
-`0.2.0` 已完成 V2-M0–V2-M6，并已发布到 npm（`latest=0.2.0`），registry/DSH Mock 复验通过。Trusted Publisher 和 tag 自动发布因 npm 账号级 2FA 暂不可用而延期。
+`0.4.0` 已完成 V2–V4 计划中的源码交付，并已发布到 npm（`latest=0.4.0`）；registry、隔离 DSH Mock 和跨平台 CI 复验通过。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 76 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
+- 当前自动化测试 80 个全部通过；bundle dry-run 可见 `cordis.patch.yml` 和 `lib` 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
-`0.3.0` 正在进行发布准备。V3-M1 quota-free 动态模型发现、V3-M2 `reasoningEffort → --effort`、V3-M3 显式 AGY-owned 工具策略、V3-M4 fixture transport 闸门和 V3-M5 诊断/安全加固已完成本地验证，并通过 GitHub Actions run `32152437868` 的 9 个跨平台 job；当前 npm `latest` 仍为 `0.2.0`，`0.3.0` 尚未发布。V3-M4 prototype 尚未接入默认 Provider，也未发起真实 AGY 模型请求。持久 stream transport 仅在真实协议、隔离和收益门槛全部通过后才可能作为显式实验能力进入版本。详见 [0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md) 和 [V3-M4 实验报告](docs/experimental-stream-transport.md)。
+0.4.0 已完成 V4-M1/V4-M4；真实 AGY 协议采样和自包含 DSH Mock smoke 已验证。V4-M2/V4-M3 因未证明同一 AGY 进程的多轮 stdin 留存，以有证据的 negative result 关闭，正式路径继续使用 one-shot，不暴露 persistent transport 配置。详见 [0.4.0 开发计划](docs/v0.4.0-development-plan.md)。
 
 当前 M4 文本 MVP 支持：
 
@@ -84,12 +84,12 @@
 - reasoning effort、tool policy 和 model discovery 的日志字段只允许白名单枚举；日志 sanitizer 不会转发运行时附加字段。
 - 完整用户路径、spawn 失败 executable path、Prompt、stderr 和凭据不会进入诊断或结构化日志。
 
-当前 V3-M6 发布准备：
+当前 0.4.0 发布状态：
 
-- 当前 package version 保持 `0.2.0`，不会因为开发分支已有 0.3.0 代码而误报或提前发布；registry `latest` 仍为 `0.2.0`。
+- 当前 package version 为 `0.4.0`，npm registry 的 `latest` 为 `0.4.0`。
 - `.github/workflows/publish.yml` 要求 `v*.*.*` tag 与 `package.json` 版本完全匹配，并使用 npm Trusted Publishing，不在仓库保存长期 token。
-- 0.3.0 发布前必须完成账号级 2FA/Trusted Publisher 配置、版本 bump、tag、`npm run verify`、pack/registry/隔离 DSH Mock 复验；本阶段不自动执行 `npm publish`。
-- V3-M6 发布准备提交 `f863464` 的跨平台 CI run `32154087579` 已 9/9 成功。
+- 已完成版本 bump、`npm run verify`、pack/registry/隔离 DSH Mock 复验，并执行 `npm publish --access public` 发布 `0.4.0`。
+- 版本提交 `a6fb5b1` 的 GitHub Actions CI run `32199878143` 已 11/11 成功。
 
 当前明确不支持：
 

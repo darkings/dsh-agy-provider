@@ -10,7 +10,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 Version 0.6.1 is publicly released as the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible. The `v0.6.1` tag, GitHub Actions CI, and npm Trusted Publishing have passed.
 
-The repository is now developing 0.7.0. npm `latest` is still 0.6.1 and 0.7.0 has not been published. The DSH-owned bridge, permission matrix, and cross-platform quota-free CI gates are complete; the current stage hardens doctor v3, telemetry, and security regressions.
+The repository is now developing 0.7.0. npm `latest` is still 0.6.1 and 0.7.0 has not been published. The DSH-owned bridge, permission matrix, doctor v3, telemetry, and cross-platform quota-free CI gates are complete; the current stage validates the V7-M6 release-candidate packed artifact and release gates.
 
 The 0.6.0 focus is:
 
@@ -241,7 +241,7 @@ Future work follows the same rules: verifiable behavior, safe fallback, and boun
 ### 0.7.0: DSH-controlled workspace, permissions, and tools (in development)
 
 - The base DSH-owned tool bridge is implemented: AGY emits locally validated DSH tool calls, while DSH ToolRuntime executes filesystem, shell, network, and MCP tools.
-- The V7-M4 permission matrix and cross-platform CI are complete; V7-M5 is hardening doctor v3, allowlisted telemetry, protocol limits, prototype-pollution/Unicode checks, symlink/junction handling, and temporary-file cleanup.
+- The V7-M4 permission matrix and cross-platform CI plus the V7-M5 doctor v3, allowlisted telemetry, and security regressions are complete; V7-M6 validates the packed artifact, isolated Web/headless installation, three permission presets, and release blockers.
 - Use the DSH Session project `cwd` and its `read-only`, `workspace-write`, or `danger-full-access` selection instead of duplicating switches in this plugin.
 - Keep sandboxing, approval, MCP credentials, and side effects inside DSH; the Provider does not pass `--dangerously-skip-permissions`.
 - See the [0.7.0 development plan](docs/v0.7.0-development-plan.md) for scope, security gates, quota budget, and milestones.

@@ -10,7 +10,7 @@
 
 0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
 
-当前仓库正在开发 0.7.0：npm `latest` 仍是 0.6.1，0.7.0 尚未发布。源码中的 DSH-owned bridge、权限矩阵和跨平台 quota-free CI 已完成，当前进入 doctor v3、telemetry 与安全回归门禁。
+当前仓库正在开发 0.7.0：npm `latest` 仍是 0.6.1，0.7.0 尚未发布。源码中的 DSH-owned bridge、权限矩阵、doctor v3、telemetry 和跨平台 quota-free CI 已完成，当前进入 V7-M6 release candidate packed-artifact 与发布门禁。
 
 0.6.0 的公开能力重点是：
 
@@ -241,7 +241,7 @@ npm run smoke:dsh:self-contained
 ### 0.7.0：由 DSH 控制项目、权限与工具（开发中，尚未发布）
 
 - DSH-owned tool bridge 基础闭环已完成：AGY 只产生经过本地严格校验的 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
-- V7-M4 权限矩阵和跨平台 CI 已完成；V7-M5 正在加固 doctor v3、allowlisted telemetry、协议上限、原型污染、Unicode、symlink/junction 和临时文件清理回归。
+- V7-M4 权限矩阵和跨平台 CI、V7-M5 doctor v3/allowlisted telemetry/安全回归均已完成；V7-M6 正在验证 packed artifact、Web/headless 隔离安装、三种权限和发布阻断条件。
 - 直接采用 DSH Session 的项目 `cwd`，以及 `read-only`、`workspace-write`、`danger-full-access` 权限选择，不在插件内复制第二套开关。
 - 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
 - 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。

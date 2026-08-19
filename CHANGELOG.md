@@ -10,6 +10,9 @@
 ### Release result
 
 - 修复提交 `74cc914` 的本地 111/111 测试、自包含 DSH Web/headless smoke 与 CI 已通过；本版本不新增真实 AGY 请求。
+- `v0.6.1` 已指向发布提交 `333adc8`；主分支 CI run `32230018799` 通过 11/11，公共 CI 未调用真实 AGY。
+- npm Trusted Publishing publish run `32230568514` 成功；registry 已确认 `dsh-agy-provider@0.6.1`、`latest=0.6.1` 和 tarball 可访问。
+- 全新 registry 隔离 DSH Web/headless smoke 已通过，确认 Provider `0.6.1` 可加载、bundle defaults/doctor/Mock response 正常，`quotaUsed=false`，cleanup completed。
 
 ## [0.6.0] - 2026-08-19
 

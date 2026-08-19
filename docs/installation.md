@@ -59,7 +59,7 @@ npx @deepseek-ai/dsh plugin --profile web add github:darkings/dsh-agy-provider
 
 ## 版本与发布状态
 
-当前 0.6.1 是 0.6.0 的兼容性修复版；修复 DSH profile 缺少 `AttachmentStore` 时的插件 loader 启动错误。发布使用 npm Trusted Publishing。
+当前 `0.6.1` 已公开发布，是 0.6.0 的兼容性修复版；修复 DSH profile 缺少 `AttachmentStore` 时的插件 loader 启动错误。发布使用 npm Trusted Publishing，registry `latest` 已指向 `0.6.1`。
 
 ## 配置
 

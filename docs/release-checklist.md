@@ -128,12 +128,12 @@
 
 - [x] 修复 Cordis optional `AttachmentStore` 读取，增加官方 DSH runtime 回归测试。
 - [x] `package.json` 与 `package-lock.json` 版本 bump 到 `0.6.1`，未复用 `0.6.0`。
-- [ ] `npm run verify`、`npm run benchmark`、`npm run smoke:dsh:self-contained` 和 pack inventory 通过。
-- [ ] release commit CI 11/11 success；公共 CI 不调用真实 AGY。
+- [x] `npm run verify`、`npm run benchmark`、`npm run smoke:dsh:self-contained` 和 pack inventory 通过；本地 verify 为 111/111。
+- [x] release commit CI 11/11 success；公共 CI 不调用真实 AGY；run `32230018799`。
 
 ### Trusted Publishing 与 registry
 
-- [ ] 创建并推送精确 `v0.6.1` tag；tag 必须指向已通过 CI 的 release commit。
-- [ ] npm Trusted Publishing workflow 成功完成 `npm publish --access public`。
-- [ ] registry 回读确认 `dsh-agy-provider@0.6.1` 与 `latest=0.6.1`。
-- [ ] 全新 DSH Web/headless profile 安装 `0.6.1`，确认 loader 不再出现 `cannot get property "attachments" without inject`，并完成 cleanup。
+- [x] 创建并推送精确 `v0.6.1` tag；tag 指向已通过 CI 的 release commit `333adc8`。
+- [x] npm Trusted Publishing workflow 成功完成 `npm publish --access public`；run `32230568514`。
+- [x] registry 回读确认 `dsh-agy-provider@0.6.1` 与 `latest=0.6.1`，tarball 可访问。
+- [x] 全新 DSH Web/headless profile 安装 `0.6.1`，确认 loader 不再出现 `cannot get property "attachments" without inject`，并完成 cleanup；`quotaUsed=false`。

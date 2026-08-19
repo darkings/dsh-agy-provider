@@ -8,7 +8,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 ## Project status
 
-Version 0.6.1 is the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible.
+Version 0.6.1 is publicly released as the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible. The `v0.6.1` tag, GitHub Actions CI, and npm Trusted Publishing have passed.
 
 The 0.6.0 focus is:
 

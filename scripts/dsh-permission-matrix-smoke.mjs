@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh@0.1.0-rc.7'
+const PROVIDER_SPEC = process.env.DSH_SMOKE_PROVIDER_SPEC?.trim()
 const COMMAND_TIMEOUT_MS = 3 * 60_000
 const DSH_INSTALL_TIMEOUT_MS = 10 * 60_000
 const DSH_MIN_NODE_MAJOR = 22
@@ -191,6 +192,17 @@ function disabledEntriesPatch() {
   return DISABLED_TOOL_ENTRIES.map(id => `- id: ${id}\n  disabled: true`).join('\n')
 }
 
+function selectedScenarios() {
+  const requested = process.env.DSH_SMOKE_SCENARIOS?.split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
+  if (requested === undefined || requested.length === 0) return SCENARIOS
+  const selected = SCENARIOS.filter(scenario => requested.includes(`${scenario.name}:${scenario.permissionMode}`))
+  const missing = requested.filter(value => !selected.some(scenario => `${scenario.name}:${scenario.permissionMode}` === value))
+  if (missing.length > 0) throw new Error(`DSH_SMOKE_SCENARIOS_UNKNOWN:${missing.join(',')}`)
+  return selected
+}
+
 function patchForFixture(fixturePath, webFixturePath, mcpServerPath) {
   const quote = value => value.replaceAll("'", "''")
   return `
@@ -223,9 +235,9 @@ ${disabledEntriesPatch()}
 `
 }
 
-function scenarioEnv(workspaceDir, scenario, outsidePath, shellPath, webUrl) {
+function scenarioEnv(workspaceDir, scenario, outsidePath, shellPath, webUrl, dshHome) {
   return {
-    DSH_HOME: join(workspaceDir, '.dsh-home'),
+    DSH_HOME: dshHome ?? join(workspaceDir, '.dsh-home'),
     DSH_PERMISSION_MODE: scenario.permissionMode,
     DSH_CAPABILITY_SCENARIO: scenario.name,
     DSH_CAPABILITY_OUTSIDE_PATH: outsidePath,
@@ -332,10 +344,14 @@ async function main() {
   }
   const workDir = await mkdtemp(join(smokeTempParent(), 'dsh-agy-provider-v7-permission-'))
   const installRoot = join(workDir, 'dsh-install')
+  const providerTarballDir = join(workDir, 'provider-tarball')
+  const webDshHome = join(workDir, 'web-dsh-home')
+  const scenarioHomeRoot = join(workDir, 'scenario-dsh-homes')
   const fixtureWorkspaceRoot = join(workDir, 'workspaces')
   const fixturePath = new URL('../tests/fixtures/dsh-capability-model-fixture.mjs', import.meta.url).href
   const webFixturePath = new URL('../tests/fixtures/dsh-web-local-provider-fixture.mjs', import.meta.url).href
   const mcpServerPath = fileURLToPath(new URL('../tests/fixtures/mcp-stdio-matrix-server.mjs', import.meta.url))
+  const scenarios = selectedScenarios()
   const rows = []
   const server = createServer((_request, response) => {
     response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
@@ -363,12 +379,51 @@ async function main() {
       dshEntry = join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
     }
     if (!existsSync(dshEntry)) throw new Error('DSH_ENTRY_NOT_FOUND')
+    await mkdir(installRoot, { recursive: true })
 
-    for (const [index, scenario] of SCENARIOS.entries()) {
+    let providerSource = PROVIDER_SPEC
+    if (providerSource === undefined) {
+      await mkdir(providerTarballDir, { recursive: true })
+      await runNpm([
+        'pack', '--ignore-scripts', '--pack-destination', providerTarballDir,
+      ], { cwd: process.cwd(), timeoutMs: DSH_INSTALL_TIMEOUT_MS })
+        .then(result => assertSuccess(result, 'PROVIDER_PACK_FAILED'))
+      const tarballs = (await readdir(providerTarballDir)).filter(name => name.endsWith('.tgz'))
+      if (tarballs.length !== 1) throw new Error('PROVIDER_TARBALL_NOT_FOUND')
+      providerSource = join(providerTarballDir, tarballs[0])
+    }
+    if (!existsSync(providerSource)) throw new Error(`PROVIDER_SOURCE_NOT_FOUND:${providerSource}`)
+
+    const addWebResult = await runNode(dshEntry, ['plugin', '--profile', 'web', 'add', providerSource], {
+      cwd: installRoot,
+      env: { DSH_HOME: webDshHome },
+    })
+    assertSuccess(addWebResult, 'DSH_PLUGIN_ADD_WEB_FAILED')
+    const webPackageJson = join(webDshHome, 'profiles', 'web', 'node_modules', 'dsh-agy-provider', 'package.json')
+    if (!existsSync(webPackageJson)) throw new Error('PACKED_PROVIDER_NOT_INSTALLED:web')
+    const webPackageInfo = JSON.parse(await readFile(webPackageJson, 'utf8'))
+    if (webPackageInfo.name !== 'dsh-agy-provider' || webPackageInfo.version === undefined) {
+      throw new Error('PACKED_PROVIDER_METADATA_INVALID:web')
+    }
+    const packedProviderVersion = webPackageInfo.version
+
+    for (const [index, scenario] of scenarios.entries()) {
       const workspaceDir = join(fixtureWorkspaceRoot, `${String(index + 1).padStart(2, '0')}-${scenario.name}-${scenario.permissionMode}`)
+      const scenarioDshHome = join(scenarioHomeRoot, `${String(index + 1).padStart(2, '0')}-${scenario.name}-${scenario.permissionMode}`)
       const outsidePath = join(workDir, `${String(index + 1).padStart(2, '0')}-outside-target.txt`)
       const shellPath = join(workspaceDir, 'shell-target.txt')
       await mkdir(workspaceDir, { recursive: true })
+      const addHeadlessResult = await runNode(dshEntry, ['plugin', '--profile', 'headless', 'add', providerSource], {
+        cwd: installRoot,
+        env: { DSH_HOME: scenarioDshHome },
+      })
+      assertSuccess(addHeadlessResult, `DSH_PLUGIN_ADD_HEADLESS_FAILED:${scenario.name}:${scenario.permissionMode}`)
+      const headlessPackageJson = join(scenarioDshHome, 'profiles', 'headless', 'node_modules', 'dsh-agy-provider', 'package.json')
+      if (!existsSync(headlessPackageJson)) throw new Error(`PACKED_PROVIDER_NOT_INSTALLED:headless:${scenario.name}`)
+      const headlessPackageInfo = JSON.parse(await readFile(headlessPackageJson, 'utf8'))
+      if (headlessPackageInfo.name !== 'dsh-agy-provider' || headlessPackageInfo.version !== packedProviderVersion) {
+        throw new Error(`PACKED_PROVIDER_METADATA_MISMATCH:headless:${scenario.name}`)
+      }
       if (scenario.name === 'read') await writeFile(join(workspaceDir, 'read-target.txt'), 'DSH_READ_MATRIX_SUCCESS\n', 'utf8')
       if (scenario.name === 'edit') await writeFile(join(workspaceDir, 'edit-target.txt'), 'before\n', 'utf8')
       if (scenario.name === 'glob' || scenario.name === 'grep') {
@@ -379,7 +434,7 @@ async function main() {
       const task = `Run the ${scenario.name} capability exactly once. After DSH executes it, report the tool result and do not call another tool.`
       const result = await runNode(dshEntry, ['--profile', 'headless', '--patch', patchPath, task], {
         cwd: workspaceDir,
-        env: scenarioEnv(workspaceDir, scenario, outsidePath, shellPath, webUrl),
+        env: scenarioEnv(workspaceDir, scenario, outsidePath, shellPath, webUrl, scenarioDshHome),
       })
       assertSuccess(result, `DSH_PERMISSION_MATRIX_REQUEST_FAILED:${scenario.name}:${scenario.permissionMode}`)
       const observation = classifyScenario(scenario, result, workspaceDir, outsidePath, shellPath)
@@ -401,10 +456,14 @@ async function main() {
 
     process.stdout.write(JSON.stringify({
       schemaVersion: 1,
-      experiment: 'v7-m4-dsh-permission-matrix',
+      experiment: 'v7-m6-packed-dsh-permission-matrix',
       quotaUsed: false,
       modelProvider: 'fixture',
       toolExecution: 'dsh-tool-runtime',
+      providerArtifact: 'packed-tgz-installed-in-web-and-isolated-headless-profiles',
+      providerVersion: packedProviderVersion,
+      workspaceSource: 'dsh-session-cwd',
+      scenarioCount: scenarios.length,
       scenarios: rows,
       cleanup: 'completed',
     }) + '\n')

@@ -1,286 +1,292 @@
 # dsh-agy-provider
 
-将本机已登录的 AGY CLI 暴露为 DSH 的模型 Provider，使 DSH 可以通过 AGY 使用其账号额度和可用模型。
+把本机已经登录的 **AGY CLI** 暴露为 [DSH](https://github.com/darkings/dsh) 的模型 Provider。
 
-## 当前状态
+它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；真正的认证、模型选择和 Agent 工具执行仍由本机 agy 负责。
 
-`0.6.0` release candidate 已完成源码、doctor v2、Agent capability presets、图片 text-only negative result 和跨平台 CI；Trusted Publishing/registry 复验正在进行，当前 npm registry 仍为 `latest=0.5.0`。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
+## 项目状态
 
-- `deepseek-proxy` Agent 可被 AGY 识别。
-- `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
-- Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
-- 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
-- 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 110 个全部通过；bundle dry-run 可见 `cordis.patch.yml`、`lib`、Agent 模板和 doctor CLI 产物。
-- V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
+当前主线代码版本为 0.6.0，正在完成公开仓库后的 tag 和 npm Trusted Publishing 收口。源码能力已经完成，registry 发布状态以 npm 和 GitHub Actions 的实际结果为准。
 
-0.4.0 已完成 V4-M1/V4-M4；真实 AGY 协议采样和自包含 DSH Mock smoke 已验证。V4-M2/V4-M3 因未证明同一 AGY 进程的多轮 stdin 留存，以有证据的 negative result 关闭，正式路径继续使用 one-shot，不暴露 persistent transport 配置。详见 [0.4.0 开发计划](docs/v0.4.0-development-plan.md)。
+0.6.0 的公开能力重点是：
 
-当前 M4 文本 MVP 支持：
+- 稳定的 AGY 子进程与 stream-json 文本流适配。
+- DSH Session 与 AGY Conversation 的安全映射。
+- agy models 动态模型发现、缓存和静态 fallback。
+- low/medium/high reasoning effort 显式映射。
+- AGY-owned 工具策略、Agent capability presets 和 doctor v2。
+- 默认零自动重试、quota-free 诊断和跨平台测试门禁。
 
-- `agyPath`、`agent`、`model`/`models`、`timeoutMs` 配置；模型目录按 `id` 去重，并保留旧版 `model` 作为 fallback。默认开启 quota-free 动态发现，显式目录的顺序与 metadata 优先。
-- DSH 文本消息确定性序列化为 AGY Prompt。
-- `step_update.text_delta` 实时映射为 `text-delta`。
-- `result.response`、`result.usage`、退出码、超时和取消映射。
+图片输入已经有受限的 experimental bridge，但公开模型目录仍然只声明 inputModalities: ['text']。在 DSH Web 的 AttachmentStore、AGY view_file 和真实像素答案闭环被验证前，项目不会把它宣传为正式识图能力。
 
-当前 M5 会话策略支持：
+## 工作方式
 
-- DSH `sessionId` 到 AGY `conversation_id` 的进程内映射。
-- `sessionMode: full`（默认）：每轮发送 DSH 完整历史，重启后自然创建新 AGY 会话。
-- `sessionMode: resume`：后续请求使用显式 `--conversation <id>`，只发送上次 assistant 之后的新消息。
-- 同一 Session 串行，不同 Session 并发。
-- AGY conversation ID 失效时自动改用完整 DSH 历史重试。
+~~~text
+用户 / DSH Web / DSH headless
+              │
+              ▼
+      dsh-agy-provider
+      ├─ DSH LlmAdapter
+      ├─ Prompt / Stream 映射
+      ├─ Session / Conversation 映射
+      ├─ Model discovery / retry / telemetry
+      └─ Agent 与 workspace 安全边界
+              │
+              ▼
+      agy --output-format stream-json
+              │
+              ▼
+      AGY 账号额度、模型和 Agent 工具
+~~~
 
-当前 M6 工具边界：
+Provider 使用 spawn(executable, args) 启动 AGY，不经过 shell 拼接命令。AGY 输出按行增量解析，再转换为 DSH 的文本、usage、finish 和稳定错误事件。
 
-- 默认 `toolPolicy: reject`，DSH 传入非空 `tools` 时仍立即返回 `UNSUPPORTED_TOOLS`，保持 0.2.0 行为。
-- 显式设置 `toolPolicy: agy-owned` 时忽略 DSH tool schemas，只把文本上下文交给 AGY；schema 不会按 DSH 工具协议发送给模型。
-- AGY 内部工具由 AGY 独占执行，不转换为 DSH tool calls。
-- 两种策略检测到权限请求时都立即终止并返回 `PERMISSION_REQUIRED`，不会自动批准或加入 `--dangerously-skip-permissions`。
+## 0.6.0 已实现
 
-当前 0.6.0 profile onboarding：
+### 1. 文本 Provider 与进程边界
 
-- DSH Web/headless 必须通过 `dsh plugin --profile <profile> add dsh-agy-provider@0.6.0` 安装；普通 `npm install` 只用于 Node.js 代码导入，不会修改 DSH profile。
-- DSH `plugin add` 会转发给 pnpm；使用 profile 安装前需确保 `pnpm` 已在 PATH 中。
-- profile bundle patch 默认使用 `enabled: true` 与 `toolPolicy: agy-owned`，因此 DSH Web 的默认 tool schemas 不会触发 `UNSUPPORTED_TOOLS`；AGY 仍是唯一工具执行者。
-- 直接库调用的 `Config({})` 仍为 `enabled: false`、`toolPolicy: reject`；需要严格模式时，可在 profile patch 中显式覆盖 bundle 配置。
-- 安装后可运行 `npx dsh-agy-provider doctor --profile web --json`；doctor 只执行 AGY 版本、Agent、模型目录和 DSH config dump 检查，不发送 Prompt，`quotaUsed` 固定为 `false`。
+- 将 DSH system prompt/messages 确定性序列化为 AGY Prompt。
+- 将 step_update.text_delta 和 result.response 映射为 DSH 文本流。
+- 支持超时、取消、退出码、解析错误、输出上限和进程树清理。
+- 日志只保留 request/session/usage/事件计数等白名单字段，不记录 Prompt、stderr 原文、凭据或完整本机路径。
 
-当前 0.6.0 Agent capability presets：
+### 2. Session、模型和 reasoning effort
 
-- 现有 `deepseek-proxy` 保持不变，仍是默认的 `tools: []` 纯文本后端。
-- 包内新增 `tool-free`、`read-only` 和 `workspace-write` 三档模板；`read-only` 只允许 `find_by_name`、`grep_search`、`view_file`、`list_dir`，`workspace-write` 另外允许三个文件替换/写入工具，不包含 shell、网络、浏览器、MCP、subagent 或权限跳过。
-- 查看模板不会消耗 AGY 额度：`npx dsh-agy-provider agents list`。
-- 安装默认为 preview，不写文件；确认后再加 `--apply`。目标目录可用 `--dir` 或 `AGY_AGENT_DIR` 指定：
+- 默认 sessionMode: full：每轮发送完整 DSH 历史，行为最容易审计。
+- 可选 sessionMode: resume：使用 AGY conversation_id 发送增量消息；恢复失败会降级为完整历史。
+- 同一 DSH Session 串行，不同 Session 可以并发。
+- 默认通过 agy models 做 quota-free 动态发现，支持 TTL、single-flight、缓存和静态 fallback。
+- 请求级 reasoningEffort 支持 low、medium、high，以独立 --effort 参数传给 AGY；未指定时不设置隐式值。
 
-```powershell
+### 3. 工具所有权与权限边界
+
+项目明确只允许一个工具执行者：
+
+- 程序化 Provider 默认 toolPolicy: reject，收到 DSH tool schema 时返回 UNSUPPORTED_TOOLS。
+- 通过 DSH profile 安装的 bundle 默认使用 toolPolicy: agy-owned，DSH schema 不会重复发送，AGY 负责自己的内部工具。
+- 发生权限请求时返回 PERMISSION_REQUIRED 并终止请求，不自动批准，不使用 --dangerously-skip-permissions。
+
+### 4. Agent capability presets 与读写能力
+
+随包提供三档 Agent 模板：
+
+| preset | 已允许能力 | 默认行为 |
+|---|---|---|
+| tool-free | 纯文本推理 | 不访问工作区 |
+| read-only | find_by_name、grep_search、view_file、list_dir | 只读工作区 |
+| workspace-write | 上述只读工具 + multi_replace_file_content、replace_file_content、write_to_file | 仅显式工作区内写入 |
+
+workspace-write 已经实现，但必须同时配置一个存在且非文件系统根目录的 workspaceRoot。它不包含 shell、网络、浏览器、MCP、subagent 或权限跳过。
+
+项目不会把未验证的 glob 工具名写进公开契约。需要文件搜索时使用 AGY 已验证的 find_by_name、grep_search 和 list_dir。
+
+模板安装默认只预览，不写入文件：
+
+~~~powershell
+npx dsh-agy-provider agents list
 npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents"
 npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents" --apply
-```
+~~~
 
-- 已存在的 Agent 文件默认拒绝覆盖；需要保留旧文件时显式使用 `--apply --backup`。
-- Provider 侧使用 `agentPreset: read-only` 或 `agentPreset: workspace-write`；`workspace-write` 必须同时配置一个已存在且非文件系统根目录的 `workspaceRoot`。Provider 会把 canonical workspace 作为 AGY `cwd` 和 `--add-dir`，并分别使用 `--mode plan` 或 `--mode accept-edits`；未配置 preset 时保持旧 argv 和 `deepseek-proxy` 路径。
+已有模板默认拒绝覆盖；需要保留旧文件时显式增加 --backup。
 
-当前 M7 配置、安全和可观测性：
+### 5. Doctor v2 与安全诊断
 
-- 配置默认 `maxConcurrent: 4`、`maxQueue: 32`、`queueTimeoutMs: 30000`，超出后分别返回 `QUEUE_FULL` 或 `QUEUE_TIMEOUT`。
-- `npm run diagnose` 只执行 `agy --version`、`agy agents` 和 `agy models`，检查路径、最低版本、配置 Agent 和模型目录，不消耗模型额度，也不执行工具。
-- AGY 请求日志通过 Cordis `ctx.logger` 输出结构化 JSON 元数据，包含 request ID、conversation ID、耗时、退出码、事件计数、`toolPolicy` 和 DSH schema 数量。
-- V2-M3 日志增加固定事件类别计数和最终 AGY status；V3-M3 只记录工具策略与 schema 数量，不输出工具参数或原始事件 payload。
-- 日志采用白名单字段并再次脱敏，不包含 Prompt、stderr 原文、环境变量、可执行文件路径或凭据。
+发布包提供 profile-aware doctor：
 
-当前 V2-M3 事件与错误兼容：
+~~~powershell
+npx dsh-agy-provider doctor --profile web --json
+~~~
 
-- 已覆盖 `init`、`step_update`、`checkpoint`、`agent_response`、`result`、工具、权限、错误和未知事件 fixture；未知事件保留并归类为 `unknown`。
-- 认证、额度、速率限制、未知模型、Agent 缺失、上下文超限、权限、超时、取消、解析和输出上限映射为稳定 `LlmError.code`。
-- 未发现稳定的 AGY 输出 reasoning envelope，因此不把思考文本猜测性映射为 `reasoning-delta`；V3-M2 仅映射 reasoning 控制参数，不改变输出事件边界。
+doctor v2 输出 profileSchemaVersion: 2，审计实际读取到的 provider、model、Agent、Session、retry、purpose route、workspace、image 和 model capability。它能区分 dump timeout、非零退出和解析失败，并输出只读的 repairSuggestions。
 
-当前 M8 测试、兼容性和性能：
+doctor 只执行 agy --version、agy agents、agy models 和 DSH config dump，不发送模型 Prompt，不执行工具，quotaUsed 固定为 false。
 
-- Parser 和 Process Adapter 有单条事件/总输出上限，恶意超长输出返回 `LINE_TOO_LONG` 或 `AGY_OUTPUT_LIMIT`。
-- 已覆盖 shell metacharacters 参数注入回归、配置边界、版本兼容、两种工具策略下的权限/工具事件和限流行为。
-- `npm run benchmark` 提供不调用 AGY 的 Parser、serializer 和 limiter 基线，结果记录在 [性能基线](docs/performance-baseline.md)。
-- AGY/DSH 的已验证组合记录在 [兼容性矩阵](docs/compatibility-matrix.md)。
-- V2-M4 CI 已覆盖 Windows、Ubuntu、macOS 与 Node.js 20/22/24；timeout/abort 使用父子 Node 进程 fixture 验证整棵进程树退出。
+### 6. 图片输入实验边界
 
-当前 V3-M2 reasoning effort 支持：
+imageInput: experimental 已支持：
 
-- `resolveModel()` 为 AGY 模型公开 `low`、`medium`、`high` 三档 reasoning metadata，不设置 `defaultEffort`。
-- 请求级 `reasoningEffort` 经过白名单校验后，以独立 `--effort <value>` argv 传给 AGY。
-- 未指定 effort 时不传入 `--effort`；非法值在启动 AGY 前返回 `UNSUPPORTED_REASONING_EFFORT`。
+- 通过可选 DSH AttachmentStore 读取图片。
+- 对 PNG/JPEG/WebP/GIF 做 MIME、字节数和数量限制。
+- 每个请求使用随机临时 staging 目录，并在成功、失败和取消时清理。
+- 只允许内置 read-only/workspace-write Agent 进入 bridge；不满足 view_file 能力时返回 IMAGE_AGENT_UNSUPPORTED。
 
-当前 V3-M3 AGY-owned 工具策略：
+这只是协议实验，不是公开图片模型能力。当前 listModels() 仍只返回文本输入能力，deepseek-proxy 和未知 custom Agent 不会被错误宣传为识图 Agent。
 
-- `toolPolicy` 默认值为 `reject`；不配置时与 0.2.0 完全一致。
-- `toolPolicy: agy-owned` 只改变 DSH schema 的入口策略，不建立 DSH ↔ AGY 双向工具桥；AGY 仍是唯一工具执行者。
-- 日志只保留 `toolPolicy` 和 `toolSchemaCount`，不会记录 schema 参数、Prompt、stderr 或凭据。
+### 7. 质量门禁
 
-当前 V3-M4 持久 stream transport 实验：
+- npm run verify：typecheck、110 个测试和 pack dry-run。
+- npm run benchmark：Parser、serializer、limiter 的无额度基线。
+- npm run smoke:dsh:self-contained：隔离 DSH Web/headless plugin-add、doctor 和 Mock response。
+- GitHub Actions：Node.js 20/22/24 × Windows/Ubuntu/macOS，并包含 DSH self-contained smoke。
+- 公共 CI、doctor、benchmark 和 Mock smoke 均不调用真实 AGY 模型。
 
-- 已在隔离 fixture 中验证 worker-per-session、NDJSON framing、request/session correlation、最大 worker、idle TTL、crash recovery、abort/timeout/output-limit 和进程树回收。
-- prototype 不接入 `AgyAdapter`、`Config` 或默认 `sessionMode`；正式路径仍是 one-shot。
-- fixture gate 不消耗 AGY 额度；真实 3+3 对照和 AGY `--input-format stream-json` 协议验证尚未执行。
+## 当前能力矩阵
 
-当前 V3-M5 诊断与安全加固：
+| 能力 | 当前状态 | 默认值 |
+|---|---|---|
+| DSH 文本对话 | 已实现 | 开启（profile bundle） |
+| AGY 额度/认证 | 已实现 | 由本机 AGY 管理 |
+| 动态模型发现 | 已实现 | modelDiscovery: auto |
+| reasoning effort | 已实现 | 不设置隐式 effort |
+| AGY 自有工具 | 已实现 | profile 为 agy-owned |
+| DSH tool-call bridge | 未实现 | 返回 UNSUPPORTED_TOOLS 或由 AGY 接管 |
+| read-only Agent | 已实现 | 显式安装/配置 |
+| workspace-write Agent | 已实现 | 必须显式 workspaceRoot |
+| 图片 staging bridge | experimental | imageInput: off |
+| 公开 image modality | 未实现 | 仍为 text-only |
+| persistent stream transport | fixture prototype | 正式路径仍为 one-shot |
 
-- `modelCatalog.source` 区分 `static`、`discovered`、`merged`、`cache` 和 `fallback`，发现失败提供稳定 `warningCode`，`quotaUsed` 始终为 `false`。
-- reasoning effort、tool policy 和 model discovery 的日志字段只允许白名单枚举；日志 sanitizer 不会转发运行时附加字段。
-- 完整用户路径、spawn 失败 executable path、Prompt、stderr 和凭据不会进入诊断或结构化日志。
+## 安装与使用
 
-当前 0.6.0 发布状态：
+### 前置条件
 
-- 当前源码 package version 为 `0.6.0`；npm registry 在发布完成前仍为 `latest=0.5.0`。
-- `.github/workflows/publish.yml` 要求 `v*.*.*` tag 与 `package.json` 版本完全匹配，并使用 npm Trusted Publishing，不在仓库保存长期 token。
-- `v0.6.0` 尚未创建；发布门禁通过后将使用 npm Trusted Publishing，并复验 Web/headless、doctor v2、Agent inventory 和 Mock response。
+- Node.js >=20。
+- 已安装并登录本机 AGY CLI，且 agy 可以在 PATH 中找到。
+- 使用 DSH profile 安装插件时，确保 pnpm 在 PATH 中，因为 DSH plugin manager 会转发到 pnpm。
 
-当前明确不支持：
+### 安装到 DSH profile
 
-- DSH tool-call bridge、公开图像 modality、采样参数、`temperature`、`stop` 和 `maxTokens`；`imageInput: experimental` 仅是受限 raster staging 实验，不改变公开 `inputModalities: ['text']`。
-- 会跨插件进程重启持久化的 AGY Conversation 映射；重启后会使用完整 DSH 历史降级创建新会话。
-- `--continue` 自动选择的最近会话；为避免多个 DSH Session 串话，Provider 不使用它。
-- 生产级持久 stream transport；当前仅有隔离实验 prototype，未形成 public 配置或兼容性承诺。
+普通 npm install 只安装 Node.js 包，不会把 Provider 写入 DSH profile。DSH Web/headless 应使用原生 plugin manager：
 
-## 目标架构
+~~~powershell
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.0
+npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.0
+~~~
 
-```text
-DSH
-  ↓
-dsh-agy-provider
-  ├─ DSH Provider Adapter
-  ├─ AGY Process Adapter
-  ├─ stream-json Parser
-  └─ Session Mapping
-  ↓
-agy.exe --agent deepseek-proxy
-  ↓
-AGY 账号额度与模型
-```
+profile bundle 默认相当于：
 
-最终运行链路保留 AGY，不直接调用 Gemini API。Python/OpenAI Proxy 仅可作为调试参考，不属于目标架构。
-
-## 项目结构
-
-```text
-dsh-agy-provider/
-├─ docs/
-│  ├─ development-plan.md
-│  ├─ compatibility-matrix.md
-│  ├─ performance-baseline.md
-│  ├─ verified-baseline.md
-│  └─ migration-0.5.0.md
-├─ src/
-│  ├─ agent-presets.ts / agent-installer.ts / agents-cli.ts # Agent 模板、安装和 quota-free CLI
-│  ├─ agy/          # 子进程、参数、事件解析、模型发现、诊断、限流和脱敏
-│  │  ├─ experimental-transport.ts # V3-M4 隔离持久 worker prototype
-│  │  └─ redact.ts / log.ts / models.ts # V3-M5 脱敏、日志和目录诊断边界
-│  ├─ diagnostics.ts # Provider/DSH/Node.js/AGY 聚合诊断
-│  ├─ doctor.ts      # 发布包可直接运行的 profile-aware doctor
-│  ├─ provider/     # DSH Provider、文本序列化和 AGY 映射
-│  ├─ session/      # DSH Session 与 AGY Conversation 映射
-│  └─ index.ts
-├─ scripts/
-│  ├─ benchmark.mjs  # 不调用 AGY 的本地性能基线
-│  ├─ diagnose.mjs    # 只读 AGY 版本/Agent 诊断
-│  ├─ dsh-smoke.mjs   # 已安装 profile 的 DSH bundle/Mock runtime smoke test
-│  ├─ dsh-smoke-self-contained.mjs # 原生 plugin add 的 Web/headless smoke
-│  └─ quota-experiment.mjs # 人工触发的 full/resume quota 对照
-├─ tests/
-├─ agents/          # 随 npm 包发布的最小能力档位模板
-├─ task_plan.md
-├─ findings.md
-└─ progress.md
-```
-
-## 开发原则
-
-- 在确认 DSH 的真实 Provider API 前，不提交猜测性的框架调用代码。
-- 通过 `spawn(executable, args)` 启动 AGY，不经过 shell 拼接命令。
-- 将 AGY 输出视为外部数据，逐行解析并验证事件结构。
-- 第一版先完成文本流、取消、超时和错误映射，再扩展工具调用与持久化会话恢复。
-- 不记录凭据、Token、完整用户 Prompt 或敏感环境变量。
-
-## 配置与诊断
-
-Provider 默认配置保持 `sessionMode: full`，并发和诊断相关配置示例：
-
-```yaml
+~~~yaml
 enabled: true
 provider: agy
 agent: deepseek-proxy
-model: gemini-3.1-pro-high
-toolPolicy: reject       # reject | agy-owned
+toolPolicy: agy-owned
+sessionMode: full
+imageInput: off
+~~~
+
+直接使用库的 Config({}) 则保持 enabled: false、toolPolicy: reject，不会因为 import 包而修改用户 DSH profile。
+
+### Agent preset 配置
+
+只读配置：
+
+~~~yaml
+agentPreset: read-only
+~~~
+
+工作区写入配置：
+
+~~~yaml
+agentPreset: workspace-write
+workspaceRoot: C:\work\my-project
+~~~
+
+写入能力只在显式 preset、显式工作区和 Agent 白名单同时满足时生效。
+
+### 配置示例
+
+~~~yaml
+enabled: true
+provider: agy
+agent: deepseek-proxy
+model: gemini-3.7-flash-high
 models:
-  - id: gemini-3.1-pro-high
-    name: Gemini 3.1 Pro High
-    description: High quality Gemini model through AGY
-    contextWindow: 1000000
-  - id: gemini-3.6-flash
-    name: Gemini 3.6 Flash
-minimumAgyVersion: 1.1.13
-maxConcurrent: 4
-maxQueue: 32
-queueTimeoutMs: 30000
-maxOutputBytes: 8388608
-maxEventLineLength: 1048576
+  - id: gemini-3.7-flash-high
+    name: Gemini 3.7 Flash High
+toolPolicy: agy-owned
+sessionMode: full
 modelDiscovery: auto
-modelDiscoveryTtlMs: 300000
-modelDiscoveryTimeoutMs: 10000
-imageInput: off          # off | experimental；默认不处理图片
-```
+retryPolicy:
+  maxRetries: 0
+  retryableCodes: [RATE_LIMIT, SERVER, TRANSPORT]
+imageInput: off
+~~~
 
-`model` 仍表示默认请求模型，并兼容 0.1.0 配置。`models` 是可选的显式目录；目录按 `id` 去重，若默认 `model` 未列出会自动补入。未配置但由请求方明确传入的模型 ID 会原样保留，不会被静默改写成默认模型。
+重试默认关闭，避免一次 DSH 请求被放大为多次 AGY 额度调用；显式 opt-in 也有最大次数和错误码白名单限制。
 
-`modelDiscovery: auto` 是默认值。Provider 会以无 Shell 的方式执行 `agy models`，将动态目录中未配置的模型补到显式目录之后；显式 `models` 的顺序、名称和其他 metadata 优先。发现结果只保存在进程内，默认 TTL 为 5 分钟，单次命令默认超时为 10 秒。设置 `modelDiscovery: off` 可完全恢复 0.2.0 的静态目录行为。
+## 诊断与开发
 
-`reasoningEffort` 是请求级能力，不是 Provider 配置项。可选值为 `low`、`medium`、`high`；未指定时保持 AGY/模型自身默认值，`temperature`、`stop` 和 `maxTokens` 仍会被拒绝。
+不消耗模型额度的诊断：
 
-`toolPolicy` 是 Provider 配置项，程序化默认值为 `reject`。通过 0.5.0 bundle 安装到 DSH profile 后，`cordis.patch.yml` 显式使用 `agy-owned`，因为该场景已确定由 AGY Agent 独占工具执行；DSH `tools` 仅作为上游 schema 元数据被忽略，文本上下文仍按原路径交给 AGY，AGY 内部工具事件不会转换为 DSH tool chunks。
-
-`imageInput` 默认关闭。设置为 `experimental` 后，Provider 才会通过可选 `AttachmentStore` 读取 DSH `ImageBlock`，在每次请求的随机临时目录写入受限 PNG/JPEG/WebP/GIF 文件，并把该目录作为 `--add-dir` 传给 AGY；请求结束或失败时清理目录。该模式还要求显式选择内置 `agentPreset: read-only` 或 `agentPreset: workspace-write`，以证明 Agent 白名单含 `view_file`；`deepseek-proxy` 和未知 custom Agent 会返回 `IMAGE_AGENT_UNSUPPORTED`。没有 `AttachmentStore` 时返回 `IMAGE_ATTACHMENT_UNAVAILABLE`，不会把 base64、浏览器路径或附件引用直接写进 Prompt。当前仍只宣称 `inputModalities: ['text']`，直到 AGY `view_file` 来源和 DSH Web image 闭环完成。
-
-实验脚本默认拒绝消耗额度；只有明确授权时才运行一次受控 PNG 闸门：
-
-```powershell
-$env:AGY_IMAGE_EXPERIMENT = 'ALLOW'
-$env:AGY_IMAGE_MODEL = 'gemini-3.7-flash-low'
-npx dsh-agy-provider agents install read-only --apply
-npm run image:experiment
-```
-
-该实验只输出脱敏的结果摘要，不输出 Prompt 或临时路径；公共 CI 不运行它。
-
-在项目目录执行：
-
-```powershell
-npm run diagnose
-```
-
-默认输出保留人类可读格式；增加 `--json` 可得到带 `schemaVersion`、`quotaUsed`、组件状态、模型能力和稳定 `errors[].code` 的机器可读结果：
-
-```powershell
+~~~powershell
 npm run diagnose -- --json
-```
-
-对指定 DSH profile 运行 doctor v2：
-
-```powershell
 npx dsh-agy-provider doctor --profile web --json
-```
+npx dsh-agy-provider agents list
+~~~
 
-profile 结果的 `profileSchemaVersion` 为 `2`，`effective` 会报告实际 dump 到的 provider/model、Agent、`sessionMode`、retry、purpose routes、workspace 边界、图片 bridge 和公开 `inputModalities`。`dumpStatus` 为 `timeout`、`nonzero` 或 `parse-error` 时，doctor 会返回对应稳定错误码（`PROFILE_DUMP_TIMEOUT`、`PROFILE_DUMP_NONZERO`、`PROFILE_DUMP_PARSE_FAILED`），不会把读取失败静默当成正常配置。`repairSuggestions` 只给出命令或配置建议，不自动修改 profile 或 Agent。
+本地开发：
 
-doctor 会校验包内 Agent 模板的 frontmatter 和工具白名单；workspace-write 缺少工作区、experimental image 没有 `view_file`、purpose route 不完整时分别给出可诊断 issue。诊断 JSON 不包含用户路径、Prompt、stderr、附件内容或凭据，并始终保持 `quotaUsed: false`。
-
-诊断只执行 `agy --version`、`agy agents` 和 `agy models`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。JSON 输出中的 `modelCatalog.source` 会标记 `static`、`discovered`、`merged`、`cache` 或 `fallback`，`stale`、`warning` 和 `warningCode` 用于说明是否使用了过期缓存、静态回退或发现失败原因。也可以通过 `AGY_PATH`、`AGY_AGENT`、`AGY_MODEL`、`AGY_MODELS` 和 `AGY_MINIMUM_VERSION` 覆盖检查目标；`AGY_MODELS` 必须是 JSON 数组，例如：
-
-```powershell
-$env:AGY_AGENT = 'deepseek-proxy'
-$env:AGY_MODELS = '[{"id":"gemini-3.1-pro-high","name":"Gemini 3.1 Pro High"},{"id":"gemini-3.6-flash"}]'
-npm run diagnose -- --json
-```
-
-诊断输出只返回可执行文件来源标签（`explicit`/`environment`/`path`），不返回本机完整路径，也不包含 Prompt、凭据或 Token。
-
-### DSH 安装 smoke test
-
-V2-M1 的 DSH 验证需要一个已安装目标 profile 的隔离 `DSH_HOME`。在 PowerShell 中设置该目录和 DSH CLI 入口后执行：
-
-```powershell
-$env:DSH_HOME = '<isolated-dsh-home>'
-$env:DSH_BIN = '<dsh-project>\node_modules\.bin\dsh.cmd'
-npm run smoke:dsh
-```
-
-该命令只使用 `agy-mock`，成功结果会标记 `quotaUsed: false`，不会调用真实 AGY 或输出 token、Prompt 和用户路径。
-
-不依赖已有 `DSH_HOME`/`DSH_BIN` 时，可运行自包含版本。它会在临时目录安装固定的 `@deepseek-ai/dsh@0.1.0-rc.7`、打包并安装当前 Provider、创建隔离 `headless` profile，验证 bundle/config/Mock 响应后自动清理：
-
-```powershell
+~~~powershell
+npm ci
+npm run verify
+npm run benchmark
 npm run smoke:dsh:self-contained
-```
+~~~
 
-输出包含 DSH/Provider 版本、模型、`toolPolicy`、bundle inventory 和 `quotaUsed: false`；该流程不登录、不调用 AGY、不使用模型额度。
+需要真实 AGY 的实验不会自动运行。图片实验受独立额度闸门控制，且当前 0.6.0 识图证据不足，不应在没有明确授权时重复执行。
 
-安装、升级和发布检查见 [安装文档](docs/installation.md)、[0.2.0 迁移说明](docs/migration-0.2.0.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md)、[0.5.0 迁移说明](docs/migration-0.5.0.md)、[0.6.0 迁移说明](docs/migration-0.6.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。在 DSH 中使用时，必须把包安装到目标 profile：`npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.0`；仅在普通项目目录执行 `npm install` 不会自动修改 DSH profile。
+## 未来规划
 
-详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md)、[0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.4.0 开发计划](docs/v0.4.0-development-plan.md)、[0.5.0 开发计划](docs/v0.5.0-development-plan.md) 和 [0.6.0 开发计划](docs/v0.6.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。
+未来版本会继续以“可验证、可回退、额度可控”为前提，重点包括：
+
+### 0.7.x：能力协商与图片闭环
+
+- 完成 DSH Web AttachmentStore → AGY view_file → 模型像素答案的端到端证据。
+- 只有在真实工具事件、临时文件清理、权限边界和 Web UI 都通过后，才考虑公开 image modality。
+- 将模型的文本、图片、工具能力改为可审计的 capability negotiation，而不是静态猜测。
+
+### 后续版本：工具与写入能力加固
+
+- 继续完善 workspace-write 的路径边界、冲突处理、备份和回滚体验。
+- 若 DSH 提供稳定且与 AGY 权限模型兼容的工具契约，再评估 DSH tool-call bridge；默认仍保持 AGY 单一工具所有者，避免双重执行。
+- 不会因为“有 read”就默认打开 write；写入始终需要显式 preset 和 workspaceRoot。
+
+### 后续版本：传输与成本优化
+
+- 只有持久 transport 在真实 AGY 协议、串线、崩溃恢复、进程清理和 token 成本闸门上证明收益后，才考虑进入正式配置。
+- 继续完善 purpose-aware 的 compaction/session-title 路由和 usage 可观测性。
+- 保持公共 CI、doctor、解析器和 Mock smoke 的零额度原则。
+
+## 明确不支持的能力
+
+- 直接调用 Gemini API 或在插件内管理 OAuth/refresh token。
+- DSH 与 AGY 的双重工具执行 loop。
+- 未验证的 glob、shell、网络、MCP、subagent 或自动权限批准。
+- 默认写入用户工作区。
+- 公开 image modality、temperature、stop、maxTokens 和未经验证的 reasoning-delta 输出。
+- 未经成本和可靠性验证的生产级 persistent stream transport。
+
+## 项目结构
+
+~~~text
+dsh-agy-provider/
+├─ src/
+│  ├─ provider/       # DSH Adapter、配置、序列化、图片 bridge
+│  ├─ agy/            # 子进程、argv、stream-json、模型发现、脱敏
+│  ├─ session/        # DSH Session 与 AGY Conversation 映射
+│  ├─ doctor.ts       # profile-aware doctor v2
+│  └─ agent-*.ts      # preset、安装器和 agents CLI
+├─ agents/            # tool-free/read-only/workspace-write 模板
+├─ scripts/           # verify、benchmark、diagnose、DSH smoke
+├─ tests/
+├─ docs/
+├─ cordis.patch.yml
+└─ package.json
+~~~
+
+## 文档
+
+- [安装文档](docs/installation.md)
+- [0.6.0 迁移说明](docs/migration-0.6.0.md)
+- [工具能力矩阵](docs/tool-capability-matrix.md)
+- [兼容性矩阵](docs/compatibility-matrix.md)
+- [发布检查清单](docs/release-checklist.md)
+- [CHANGELOG](CHANGELOG.md)
+- [0.6.0 开发计划](docs/v0.6.0-development-plan.md)
+- [DSH Provider 契约](docs/dsh-provider-contract.md)
+- [性能基线](docs/performance-baseline.md)
+
+## License
+
+MIT

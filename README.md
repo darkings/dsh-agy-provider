@@ -1,5 +1,7 @@
 # dsh-agy-provider
 
+[简体中文](README.md) · [English](README.en.md)
+
 把本机已经登录的 **AGY CLI** 暴露为 [DSH](https://github.com/darkings/dsh) 的模型 Provider。
 
 它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；真正的认证、模型选择和 Agent 工具执行仍由本机 agy 负责。

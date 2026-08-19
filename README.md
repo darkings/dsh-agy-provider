@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`0.5.0` 已公开发布：V5-M1–M6 的源码、doctor CLI、原生 DSH profile smoke、Trusted Publishing 和 registry 隔离复验均已完成，npm registry 为 `latest=0.5.0`。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
+`0.6.0` release candidate 已完成源码、doctor v2、Agent capability presets、图片 text-only negative result 和跨平台 CI；Trusted Publishing/registry 复验正在进行，当前 npm registry 仍为 `latest=0.5.0`。0.3.0 未单独占用 registry 版本，其已完成能力随 0.4.0 一并发布。
 
 - `deepseek-proxy` Agent 可被 AGY 识别。
 - `agy.exe --output-format stream-json` 可输出逐行 JSON 事件。
@@ -38,9 +38,9 @@
 - AGY 内部工具由 AGY 独占执行，不转换为 DSH tool calls。
 - 两种策略检测到权限请求时都立即终止并返回 `PERMISSION_REQUIRED`，不会自动批准或加入 `--dangerously-skip-permissions`。
 
-当前 0.5.0 profile onboarding：
+当前 0.6.0 profile onboarding：
 
-- DSH Web/headless 必须通过 `dsh plugin --profile <profile> add dsh-agy-provider@0.5.0` 安装；普通 `npm install` 只用于 Node.js 代码导入，不会修改 DSH profile。
+- DSH Web/headless 必须通过 `dsh plugin --profile <profile> add dsh-agy-provider@0.6.0` 安装；普通 `npm install` 只用于 Node.js 代码导入，不会修改 DSH profile。
 - DSH `plugin add` 会转发给 pnpm；使用 profile 安装前需确保 `pnpm` 已在 PATH 中。
 - profile bundle patch 默认使用 `enabled: true` 与 `toolPolicy: agy-owned`，因此 DSH Web 的默认 tool schemas 不会触发 `UNSUPPORTED_TOOLS`；AGY 仍是唯一工具执行者。
 - 直接库调用的 `Config({})` 仍为 `enabled: false`、`toolPolicy: reject`；需要严格模式时，可在 profile patch 中显式覆盖 bundle 配置。
@@ -107,15 +107,15 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 - reasoning effort、tool policy 和 model discovery 的日志字段只允许白名单枚举；日志 sanitizer 不会转发运行时附加字段。
 - 完整用户路径、spawn 失败 executable path、Prompt、stderr 和凭据不会进入诊断或结构化日志。
 
-当前 0.5.0 发布状态：
+当前 0.6.0 发布状态：
 
-- 当前源码 package version 和 npm registry 均为 `0.5.0`；npm registry 的 `latest` 已指向 `0.5.0`。
+- 当前源码 package version 为 `0.6.0`；npm registry 在发布完成前仍为 `latest=0.5.0`。
 - `.github/workflows/publish.yml` 要求 `v*.*.*` tag 与 `package.json` 版本完全匹配，并使用 npm Trusted Publishing，不在仓库保存长期 token。
-- `v0.5.0` 已指向发布提交 `e4d0bf4`，publish workflow run `32211523708` 成功；registry 安装复验覆盖 Web/headless、doctor 和 Mock response。
+- `v0.6.0` 尚未创建；发布门禁通过后将使用 npm Trusted Publishing，并复验 Web/headless、doctor v2、Agent inventory 和 Mock response。
 
 当前明确不支持：
 
-- DSH tool-call bridge、图像内容、采样参数、`temperature`、`stop` 和 `maxTokens`；显式 `toolPolicy: agy-owned` 仅允许忽略 DSH schemas，不产生 DSH tool chunks。
+- DSH tool-call bridge、公开图像 modality、采样参数、`temperature`、`stop` 和 `maxTokens`；`imageInput: experimental` 仅是受限 raster staging 实验，不改变公开 `inputModalities: ['text']`。
 - 会跨插件进程重启持久化的 AGY Conversation 映射；重启后会使用完整 DSH 历史降级创建新会话。
 - `--continue` 自动选择的最近会话；为避免多个 DSH Session 串话，Provider 不使用它。
 - 生产级持久 stream transport；当前仅有隔离实验 prototype，未形成 public 配置或兼容性承诺。
@@ -281,6 +281,6 @@ npm run smoke:dsh:self-contained
 
 输出包含 DSH/Provider 版本、模型、`toolPolicy`、bundle inventory 和 `quotaUsed: false`；该流程不登录、不调用 AGY、不使用模型额度。
 
-安装、升级和发布检查见 [安装文档](docs/installation.md)、[0.2.0 迁移说明](docs/migration-0.2.0.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md)、[0.5.0 迁移说明](docs/migration-0.5.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。在 DSH 中使用时，必须把包安装到目标 profile：`npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.5.0`；仅在普通项目目录执行 `npm install` 不会自动修改 DSH profile。
+安装、升级和发布检查见 [安装文档](docs/installation.md)、[0.2.0 迁移说明](docs/migration-0.2.0.md)、[0.3.0 迁移说明](docs/migration-0.3.0.md)、[0.5.0 迁移说明](docs/migration-0.5.0.md)、[0.6.0 迁移说明](docs/migration-0.6.0.md)、[Changelog](CHANGELOG.md) 和 [发布检查清单](docs/release-checklist.md)。在 DSH 中使用时，必须把包安装到目标 profile：`npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.0`；仅在普通项目目录执行 `npm install` 不会自动修改 DSH profile。
 
 详细里程碑、验收标准和风险见 [0.1.0 开发计划](docs/development-plan.md)、[0.2.0 开发计划](docs/v0.2.0-development-plan.md)、[0.3.0 开发计划](docs/v0.3.0-development-plan.md)、[0.4.0 开发计划](docs/v0.4.0-development-plan.md)、[0.5.0 开发计划](docs/v0.5.0-development-plan.md) 和 [0.6.0 开发计划](docs/v0.6.0-development-plan.md)。已验证事实见 [基线记录](docs/verified-baseline.md)。Provider 契约见 [DSH Provider 契约](docs/dsh-provider-contract.md)。兼容性与性能见 [兼容性矩阵](docs/compatibility-matrix.md) 和 [性能基线](docs/performance-baseline.md)。

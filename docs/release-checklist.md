@@ -95,3 +95,28 @@
 - [x] 发布后确认 registry `version=0.5.0`、`latest=0.5.0`，并完成隔离安装复验。
 
 > 0.5.0 已完成公开发布。后续若修改源码/文档，应使用新的版本号，不得复用 `v0.5.0` 或重复触发发布 workflow。
+
+## `0.6.0` 发布收口
+
+### 源码与文档
+
+- [ ] `package.json` 和 `package-lock.json` 同步为 `0.6.0`，不升级无关依赖。
+- [x] V6-M1–M5 源码、110/110 tests、doctor v2、Agent presets、图片 negative result 和跨平台 CI 完成。
+- [x] README、0.6.0 迁移、兼容性矩阵、CHANGELOG、工具能力边界和安装文档已同步。
+- [ ] 版本号、安装命令、bundle patch、tarball inventory 不再残留当前发布路径中的错误版本引用。
+
+### 发布前无额度门禁
+
+- [ ] `npm run verify`、`npm run benchmark`、`npm run smoke:dsh:self-contained`、`npm pack --dry-run` 通过。
+- [ ] 运行 doctor v2 JSON，确认 `quotaUsed=false`、effective fields 和 dump failure codes 测试通过。
+- [ ] `git diff --check`、敏感字段/用户路径审计通过；tarball 不包含规划文件、测试、日志、凭据或本机 profile。
+- [x] GitHub Actions CI run `32218909067` 已 11/11 success；公共 CI 0 次真实 AGY 请求。
+- [x] M4 真实 AGY 额度已停止在 2/2，M5/M6 不再追加真实模型请求。
+
+### Trusted Publishing 与 registry
+
+- [ ] 在独立 release commit 上创建并推送精确 `v0.6.0` tag；不得复用旧 tag。
+- [ ] publish workflow 的 tag/version 检查和 npm Trusted Publishing 成功。
+- [ ] registry 回读确认 `dsh-agy-provider@0.6.0`、`latest=0.6.0`、tarball/bin/types 可访问。
+- [ ] 全新隔离 registry DSH profile 安装复验 Web/headless、doctor v2、Agent inventory、Mock response、text-only modality 和清理。
+- [ ] 发布结果、workflow run、registry 版本写回 README、CHANGELOG、兼容性矩阵、计划和 progress/findings。

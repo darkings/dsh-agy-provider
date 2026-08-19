@@ -13,7 +13,7 @@
 不要只在业务项目目录执行 `npm install dsh-agy-provider`。DSH Web 使用独立的 profile 依赖目录，必须通过 DSH 的 plugin 命令安装：
 
 ```powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.5.0
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.0
 ```
 
 该命令会将包加入 `web` profile 的依赖和 `dsh.profile.bundles`。验证是否已加载：
@@ -46,7 +46,7 @@ npx @deepseek-ai/dsh web
 如果只需要在普通 Node.js 项目中导入 Provider，而不是让 DSH Web 加载 bundle，才使用：
 
 ```powershell
-npm install dsh-agy-provider@0.5.0
+npm install dsh-agy-provider@0.6.0
 ```
 
 ## 从 GitHub 安装源码包
@@ -59,9 +59,7 @@ npx @deepseek-ai/dsh plugin --profile web add github:darkings/dsh-agy-provider
 
 ## 版本与发布状态
 
-当前源码 package version 为 `0.5.0`，npm registry 的 `latest` 暂为 `0.4.0`。0.3.0 的已完成能力已随 0.4.0 一并发布；0.5.0 发布前，稳定 registry 安装仍使用 0.4.0，验证 0.5.0 则从当前源码/tarball 安装。
-
-0.4.0 已通过 `npm publish --access public` 发布。0.5.0 发布前仍需完成跨平台 CI、Trusted Publisher/tag 条件和 registry 全新安装复验；当前未执行 `npm publish`。
+当前 0.6.0 正在执行发布收口；registry 在发布完成前仍保持 `latest=0.5.0`。0.5.0 已通过 Trusted Publishing 发布，0.3.0 的已完成能力随 0.4.0 一并发布。
 
 ## 配置
 
@@ -117,7 +115,7 @@ modelDiscoveryTimeoutMs: 10000
 npm run diagnose
 ```
 
-诊断只执行 `agy --version`、`agy agents` 和 `agy models`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力、`modelCatalog.source`、`modelCatalog.stale`、`modelCatalog.warning`、`modelCatalog.warningCode` 和稳定错误码：
+诊断只执行 `agy --version`、`agy agents`、`agy models` 和可选 DSH `--dump-config`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力、`modelCatalog.source`、`modelCatalog.stale`、`modelCatalog.warning`、`modelCatalog.warningCode` 和稳定错误码。指定 profile 时额外包含 `profileSchemaVersion: 2`、effective Agent/session/retry/purpose/workspace/image 状态和只读 repair suggestions。
 
 ```powershell
 npm run diagnose -- --json

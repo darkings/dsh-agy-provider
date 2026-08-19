@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.6.0] - 2026-08-19
+
+### Added
+
+- Quota-safe retry policy：默认 `maxRetries: 0`，显式 retry 硬上限为 2，并记录安全的 usage/attempt telemetry。
+- `compaction` 与 `sessionTitle` purpose routes，可分别覆盖 model、Agent 和 reasoning effort。
+- 独立 `tool-free`、`read-only`、`workspace-write` Agent 模板、quota-free 安装预览和显式 apply；workspace-write 仅允许受控文件工具。
+- 可选 AttachmentStore 图片 staging bridge、MIME/字节/数量限制、finally 清理和稳定图片错误码。
+- doctor v2 effective profile snapshot、dump-config 失败分类、Agent frontmatter 校验和只读修复建议。
+
+### Changed
+
+- 0.6.0 默认继续 `sessionMode: full`、AGY 独占工具执行和 text-only public modality；现有 `deepseek-proxy` 不被覆盖。
+- `imageInput: experimental` 仍不升级公开 `inputModalities`；由于没有已验证的 `view_file` 来源和 DSH Web image 闭环，图片能力按 negative result 收口。
+- 自包含 DSH Web/headless smoke 现在校验 doctor v2 effective fields，公共 CI 仍为 `quotaUsed=false`。
+
+### Security
+
+- workspace-write 不包含 shell、`run_command`、网络、浏览器、MCP、subagent 或权限跳过；doctor 不自动修改 profile/Agent。
+- 诊断、日志和实验报告不记录 Prompt、response 正文、路径、附件内容、工具参数或凭据。
+
+### Release readiness
+
+- 源码、文档、跨平台 CI 和 quota-free registry smoke 完成后，通过精确 `v0.6.0` tag 使用 npm Trusted Publishing 发布。
+
 ## [0.5.0] - 2026-08-19
 
 ### Added

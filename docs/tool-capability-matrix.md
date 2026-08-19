@@ -48,3 +48,17 @@ Provider 不把 AGY 内部工具重新包装成 DSH `tool-call`，也不让 DSH 
 - 每个工具的唯一执行所有者和幂等/重试策略。
 - 权限 UI 或 headless 审批协议。
 - 工具参数、工作区路径和取消信号的双向校验。
+
+## 0.6.0 Agent capability presets
+
+| Preset | 工具白名单 | 工作区要求 | 适用范围 |
+|--------|------------|------------|----------|
+| `tool-free` | `[]` | 无 | 默认文本请求；保留 `deepseek-proxy` 兼容路径 |
+| `read-only` | `find_by_name`、`grep_search`、`view_file`、`list_dir` | 可选 existing workspace | 查找/读取；experimental image 的唯一推荐前置档位 |
+| `workspace-write` | read-only + `multi_replace_file_content`、`replace_file_content`、`write_to_file` | 必须是显式 existing non-root `workspaceRoot` | 受控文件编辑 |
+
+0.6.0 的 write preset 不包含 `run_command`、网络、浏览器、MCP、subagent 或 `--dangerously-skip-permissions`。Agent 安装默认 preview，只有显式 `--apply` 才写入；doctor v2 只校验 frontmatter/白名单，不自动覆盖用户 Agent。
+
+## 0.6.0 图片结论
+
+Provider 可以从 DSH `AttachmentStore` 读取经过校验的 raster bytes 并按请求 staging 到临时目录，但当前没有足够的 AGY `view_file` 来源事件和 DSH Web attachment 闭环证据。因此 `imageInput: experimental` 只提供受控实验错误/清理路径，公开模型 metadata 继续为 `inputModalities: ['text']`；不把图片伪装成 DSH tool-call 或 Prompt 内路径。

@@ -5,9 +5,9 @@
 | 组件 | 版本/环境 | 结果 | 证据 |
 |------|-----------|------|------|
 | Windows | Windows 11 | 通过 | M0–M8 本机测试、V2-M4 进程树测试 |
-| Ubuntu | `ubuntu-latest` | 通过无额度验证 | V2-M4 GitHub Actions typecheck/test/pack/benchmark |
-| macOS | `macos-latest` | 通过无额度验证 | V2-M4 GitHub Actions typecheck/test/pack/benchmark |
-| Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | V2-M4 GitHub Actions 矩阵 |
+| Ubuntu | `ubuntu-latest` | 通过无额度验证 | V5-M5 GitHub Actions run `32209089784`：verify/benchmark + DSH smoke |
+| macOS | `macos-latest` | 通过无额度验证 | V5-M5 GitHub Actions run `32209089784`：verify/benchmark + DSH smoke |
+| Node.js | 20/22/24，要求 `>=20` | 通过无额度验证 | V5-M5 GitHub Actions run `32209089784`：11/11 success |
 | DSH LLM SDK | `@deepseek-ai/dsh-llm@0.1.0-rc.7` | 通过 | 官方 `Context + LlmRuntime` smoke test |
 | DSH tools policy | `reject` 默认；显式 `agy-owned` | 通过无额度验证 | 官方 DSH runtime schema、工具事件、权限 fail-fast 和日志白名单测试 |
 | DSH profile onboarding | `@deepseek-ai/dsh@0.1.0-rc.7` + `dsh plugin add` | 通过无额度验证 | V5-M4 Web/headless 原生 plugin-add smoke，`quotaUsed=false` |
@@ -18,7 +18,7 @@
 | AGY models | `agy models` plain text | 通过 | V3-M1 解析、去重、显式目录合并和 fallback 测试通过 |
 | Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
 | npm registry | `dsh-agy-provider@0.4.0`, `latest=0.4.0` | 已发布基线 | `npm view`、发布产物检查；0.5.0 release candidate 尚未发布 |
-| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 已具备安全闸门 | `.github/workflows/publish.yml`；账号级 2FA/Trusted Publisher 待配置 |
+| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 已具备安全闸门 | `.github/workflows/publish.yml`；账号级 2FA 已配置，Trusted Publisher 待配置 |
 
 ## 版本策略
 

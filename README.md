@@ -10,7 +10,7 @@
 
 0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
 
-0.7.0 已完成 release candidate 门禁并进入 Trusted Publishing 发布：它把 DSH bundle 默认切换为 `dsh-owned`，由 DSH Session、ToolRuntime、sandbox 和 approval 控制项目、权限与工具。发布后的 registry 版本、tag 和隔离安装结果会写入 CHANGELOG 与兼容性矩阵。
+0.7.0 已公开发布，npm `latest=0.7.0`。它把 DSH bundle 默认切换为 `dsh-owned`，由 DSH Session、ToolRuntime、sandbox 和 approval 控制项目、权限与工具；Trusted Publishing、跨平台 CI 和 registry 隔离安装均已通过。
 
 0.6.0 的公开能力重点是：
 

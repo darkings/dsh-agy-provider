@@ -23,7 +23,9 @@
 ### Release result
 
 - 版本 bump、verify、benchmark、61-file pack dry-run、141/141 tests 和 Windows/Ubuntu/macOS × Node 20/22/24 / DSH Node 22/24 CI 已通过。
-- 通过精确 `v0.7.0` tag 触发 npm Trusted Publishing；发布 run 和 registry smoke 将在发布后补充到本节。
+- `v0.7.0` 已指向 release commit `b94fa32`；PR CI run `32286276907` 通过 17/17。
+- npm Trusted Publishing run `32286511205` 成功；registry 已确认 `dsh-agy-provider@0.7.0`、`latest=0.7.0` 和 tarball 可访问。
+- 发布后 registry Web/headless smoke 与 15/15 DSH permission/tool matrix 通过，`workspaceSource=dsh-session-cwd`、`toolExecution=dsh-tool-runtime`、`quotaUsed=false`、cleanup completed。
 
 ## [0.6.1] - 2026-08-19
 

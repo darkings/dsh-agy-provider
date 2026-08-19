@@ -10,7 +10,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 Version 0.6.1 is publicly released as the compatibility-fix release for 0.6.0. It fixes plugin startup when the DSH profile does not provide `AttachmentStore`; all 0.6.0 capabilities and configuration remain compatible. The `v0.6.1` tag, GitHub Actions CI, and npm Trusted Publishing have passed.
 
-Version 0.7.0 has completed the release-candidate gates and is entering Trusted Publishing release. Its DSH bundle defaults to `dsh-owned`, with the active DSH Session, ToolRuntime, sandbox, and approval services controlling the project, permissions, and tools. The final registry version, tag, and isolated-install evidence will be recorded in the changelog and compatibility matrix after publishing.
+Version 0.7.0 is publicly released and npm `latest=0.7.0`. Its DSH bundle defaults to `dsh-owned`, with the active DSH Session, ToolRuntime, sandbox, and approval services controlling the project, permissions, and tools. Trusted Publishing, cross-platform CI, and isolated registry installation have passed.
 
 The 0.6.0 focus is:
 

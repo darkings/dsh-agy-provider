@@ -392,7 +392,10 @@ async function main() {
       if (tarballs.length !== 1) throw new Error('PROVIDER_TARBALL_NOT_FOUND')
       providerSource = join(providerTarballDir, tarballs[0])
     }
-    if (!existsSync(providerSource)) throw new Error(`PROVIDER_SOURCE_NOT_FOUND:${providerSource}`)
+    const providerLooksLikePath = /[\\/]|\.tgz$/i.test(providerSource)
+    if (providerLooksLikePath && !existsSync(providerSource)) {
+      throw new Error(`PROVIDER_SOURCE_NOT_FOUND:${providerSource}`)
+    }
 
     const addWebResult = await runNode(dshEntry, ['plugin', '--profile', 'web', 'add', providerSource], {
       cwd: installRoot,

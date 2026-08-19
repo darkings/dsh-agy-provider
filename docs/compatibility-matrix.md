@@ -20,10 +20,10 @@
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
 | AGY models | `agy models` plain text | 通过 | V3-M1 解析、去重、显式目录合并和 fallback 测试通过 |
 | Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
-| npm registry | release target `dsh-agy-provider@0.7.0`，发布前基线 `latest=0.6.1` | 待 tag/publish 后回读 | npm metadata/tarball、全新 DSH profile 安装 smoke |
-| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 待执行 | `v0.7.0` 必须指向 release CI 全绿的 commit；不保存 npm token |
+| npm registry | `dsh-agy-provider@0.7.0`, `latest=0.7.0` | 通过 | npm metadata/tarball、全新 DSH Web/headless profile 安装 smoke、15/15 permission matrix |
+| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.7.0` → `b94fa32`；publish run `32286511205`；不保存 npm token |
 
-0.6.1 legacy 证据仍保留：registry Web/headless plugin add、doctor v2、bundle inventory、Mock response 和 cleanup 已通过。0.7.0 release candidate 的 packed artifact 已验证 `toolPolicy=dsh-owned`、doctor v3、DSH permission matrix、shell/local web/local MCP 和 tool-result round-trip；PR run `32285350984` 为 17/17 success，发布前 registry `latest` 仍为 0.6.1。
+0.6.1 legacy 证据仍保留：registry Web/headless plugin add、doctor v2、bundle inventory、Mock response 和 cleanup 已通过。0.7.0 发布证据：release commit `b94fa32` 的 PR run `32286276907` 为 17/17，Trusted Publishing run `32286511205` 成功；registry `0.7.0` 的 Web/headless smoke 与 15/15 permission/tool matrix 通过，`quotaUsed=false`、cleanup completed。
 
 ## 版本策略
 

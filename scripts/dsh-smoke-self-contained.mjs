@@ -6,7 +6,7 @@ import { dirname, join, parse } from 'node:path'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh@0.1.0-rc.7'
 const PROVIDER_SPEC = process.env.DSH_SMOKE_PROVIDER_SPEC?.trim()
-const EXPECTED_RESPONSE = 'V5-M4 self-contained mock smoke passed'
+const EXPECTED_RESPONSE = 'V6-M5 self-contained mock smoke passed'
 const COMMAND_TIMEOUT_MS = 10 * 60_000
 const OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024
 
@@ -122,7 +122,7 @@ function smokeTempParent() {
 }
 
 async function main() {
-  const workDir = await mkdtemp(join(smokeTempParent(), 'dsh-agy-provider-v5-smoke-'))
+  const workDir = await mkdtemp(join(smokeTempParent(), 'dsh-agy-provider-v6-smoke-'))
   const isolatedHome = join(workDir, 'dsh-home')
   const installRoot = join(workDir, 'dsh-install')
   const providerTarballDir = join(workDir, 'provider-tarball')
@@ -210,7 +210,30 @@ async function main() {
       || doctorParsed.profile?.bundleEnabled !== true
       || doctorParsed.profile?.toolPolicy !== 'agy-owned'
       || doctorParsed.profile?.effectiveProvider !== 'agy'
-      || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro-high') {
+      || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro-high'
+      || doctorParsed.profile?.profileSchemaVersion !== 2
+      || doctorParsed.profile?.effective?.dumpStatus !== 'ok'
+      || doctorParsed.profile?.effective?.provider !== 'agy'
+      || doctorParsed.profile?.effective?.model !== 'gemini-3.1-pro-high'
+      || doctorParsed.profile?.effective?.agent !== 'deepseek-proxy'
+      || doctorParsed.profile?.effective?.sessionMode !== 'full'
+      || JSON.stringify(doctorParsed.profile?.effective?.modelCapability?.inputModalities) !== '["text"]') {
+      process.stderr.write(`Doctor profile summary: ${JSON.stringify({
+        quotaUsed: doctorParsed.quotaUsed,
+        packageInstalled: doctorParsed.profile?.packageInstalled,
+        bundleDeclared: doctorParsed.profile?.bundleDeclared,
+        bundleEnabled: doctorParsed.profile?.bundleEnabled,
+        toolPolicy: doctorParsed.profile?.toolPolicy,
+        effectiveProvider: doctorParsed.profile?.effectiveProvider,
+        effectiveModel: doctorParsed.profile?.effectiveModel,
+        effective: doctorParsed.profile?.effective,
+        issueCodes: doctorParsed.errors?.map(issue => issue.code),
+        dumpConfigLines: webDumpConfig.stdout
+          .split(/\r?\n/)
+          .filter(line => /dsh-agy-provider|enabled:|toolPolicy:|provider:|model:|agent:|sessionMode:/.test(line))
+          .map(line => line.trim().replace(/\s+/g, ' '))
+          .slice(0, 24),
+      })}\n`)
       throw new Error('DOCTOR_PROFILE_DIAGNOSTIC_MISMATCH')
     }
 
@@ -265,7 +288,7 @@ async function main() {
 
     process.stdout.write(JSON.stringify({
       schemaVersion: 1,
-      experiment: 'v5-m4-self-contained-dsh-native-plugin-smoke',
+      experiment: 'v6-m5-self-contained-dsh-native-plugin-smoke',
       quotaUsed: false,
       dsh: dshMetadata,
       dshVersion,

@@ -1,9 +1,15 @@
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
 import { redactText } from './agy/redact.js'
+import {
+  getAgentPreset,
+  listAgentPresets,
+  readAgentPresetTemplate,
+  type AgentPreset,
+} from './agent-presets.js'
 import {
   diagnoseProvider,
   type DiagnosticIssue,
@@ -29,6 +35,11 @@ function loadPackageMetadata(): PackageMetadata {
 
 const packageMetadata = loadPackageMetadata()
 const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+const AGENT_WRITE_TOOLS = new Set([
+  'multi_replace_file_content',
+  'replace_file_content',
+  'write_to_file',
+])
 
 function isSafeProfileName(value: string): boolean {
   return PROFILE_NAME_PATTERN.test(value)
@@ -66,7 +77,51 @@ export interface ProfileDiagnosticOptions {
   ) => Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }>) | undefined
 }
 
+export type ProfileDumpStatus = 'not-run' | 'ok' | 'unavailable' | 'timeout' | 'nonzero' | 'parse-error'
+
+export interface EffectivePurposeRoute {
+  configured: boolean
+  complete: boolean | null
+  model: string | null
+  agent: string | null
+  reasoningEffort: string | null
+}
+
+export interface EffectiveProfileConfig {
+  dumpStatus: ProfileDumpStatus
+  provider: string | null
+  model: string | null
+  agent: string | null
+  agentPreset: string | null
+  sessionMode: string | null
+  retryPolicy: {
+    maxRetries: number | null
+    retryableCodes: readonly string[]
+  } | null
+  purposeRoutes: {
+    compaction: EffectivePurposeRoute | null
+    sessionTitle: EffectivePurposeRoute | null
+  }
+  workspaceRootStatus: 'configured' | 'missing' | 'not-directory' | 'unknown'
+  imageInput: string | null
+  modelCapability: {
+    inputModalities: readonly ['text']
+    imageBridge: 'off' | 'experimental' | 'unknown'
+  }
+  agentCapability: {
+    knownPreset: boolean | null
+    frontmatterValid: boolean | null
+    tools: readonly string[]
+    viewFile: boolean | null
+    writeTools: boolean | null
+    commandExecutionPolicy: string | null
+    mcpServersEmpty: boolean | null
+    subagent: boolean | null
+  }
+}
+
 export interface ProfileDiagnosticResult {
+  profileSchemaVersion: 2
   name: string
   dshHomePresent: boolean
   profilePresent: boolean
@@ -76,6 +131,8 @@ export interface ProfileDiagnosticResult {
   toolPolicy: ToolPolicy | string | null
   effectiveProvider: string | null
   effectiveModel: string | null
+  effective: EffectiveProfileConfig
+  repairSuggestions: readonly string[]
   issues: DiagnosticIssue[]
 }
 
@@ -163,41 +220,311 @@ function resolveDshHome(customHome?: string): string {
   return join(homedir(), '.dsh')
 }
 
-function parseDumpConfig(stdout: string): {
-  bundleEnabled: boolean | null
-  toolPolicy: string | null
-  effectiveProvider: string | null
-  effectiveModel: string | null
-} {
-  let bundleEnabled: boolean | null = null
-  let toolPolicy: string | null = null
-  let effectiveProvider: string | null = null
-  let effectiveModel: string | null = null
+interface ParsedDumpConfig {
+  recognized: boolean
+  malformed: boolean
+  values: Readonly<Record<string, string>>
+}
 
-  const lines = stdout.split(/\r?\n/)
+function stripDumpValue(value: string): string {
+  const withoutComment = value.replace(/\s+#.*$/, '').trim()
+  if (withoutComment.length >= 2) {
+    const first = withoutComment[0]
+    const last = withoutComment.at(-1)
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return withoutComment.slice(1, -1)
+    }
+  }
+  return withoutComment
+}
+
+/** Parse only the provider bundle section; this is intentionally not a general YAML parser. */
+function parseDumpConfig(stdout: string): ParsedDumpConfig {
+  const values: Record<string, string> = {}
+  let recognized = false
+  let malformed = false
   let inBundleSection = false
+  const stack: Array<{ indent: number; key: string }> = []
 
-  for (const line of lines) {
-    if (line.includes('# == dsh-agy-provider') || line.includes('id: dsh-agy-provider')) {
+  for (const line of stdout.split(/\r?\n/)) {
+    if (/^\s*#\s*==\s*dsh-agy-provider\b/i.test(line)
+      || /^\s*-\s*id:\s*dsh-agy-provider\b/i.test(line)
+      || /^\s*id:\s*dsh-agy-provider\b/i.test(line)) {
+      recognized = true
       inBundleSection = true
+      stack.length = 0
       continue
     }
-    if (inBundleSection && line.startsWith('# == ')) {
+    if (inBundleSection && /^\s*#\s*==\s+/.test(line)) {
       inBundleSection = false
+      stack.length = 0
+      continue
     }
-    if (inBundleSection) {
-      const enabledMatch = /^\s*enabled:\s*(true|false)/i.exec(line)
-      if (enabledMatch?.[1] !== undefined) bundleEnabled = enabledMatch[1].toLowerCase() === 'true'
-      const toolPolicyMatch = /^\s*toolPolicy:\s*([^\s#]+)/.exec(line)
-      if (toolPolicyMatch?.[1] !== undefined) toolPolicy = toolPolicyMatch[1]
-      const providerMatch = /^\s*provider:\s*([^\s#]+)/.exec(line)
-      if (providerMatch?.[1] !== undefined) effectiveProvider = providerMatch[1]
-      const modelMatch = /^\s*model:\s*([^\s#]+)/.exec(line)
-      if (modelMatch?.[1] !== undefined) effectiveModel = modelMatch[1]
+    if (!inBundleSection || line.trim().length === 0 || line.trim().startsWith('#')) continue
+
+    const match = /^(\s*)([A-Za-z][A-Za-z0-9_-]*):(?:\s*(.*))?$/.exec(line)
+    if (/^\s*-\s+/.test(line)) continue
+    if (match === null || match[1] === undefined || match[2] === undefined) {
+      malformed = true
+      continue
+    }
+
+    const indent = match[1].replace(/\t/g, '  ').length
+    while (stack.length > 0 && (stack.at(-1)?.indent ?? -1) >= indent) stack.pop()
+    const path = [...stack.map(entry => entry.key), match[2]].join('.')
+    const rawValue = match[3]?.trim() ?? ''
+    values[path] = stripDumpValue(rawValue)
+    if (rawValue.length === 0) stack.push({ indent, key: match[2] })
+  }
+
+  return { recognized, malformed, values }
+}
+
+function normalizeConfigValues(values: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
+  const normalized: Record<string, string> = { ...values }
+  for (const [key, value] of Object.entries(values)) {
+    if (key.startsWith('config.')) {
+      const shortKey = key.slice('config.'.length)
+      if (normalized[shortKey] === undefined) normalized[shortKey] = value
+    }
+  }
+  return normalized
+}
+
+function valueOf(values: Readonly<Record<string, string>>, key: string): string | null {
+  const value = values[key]
+  return value === undefined || value.length === 0 ? null : value
+}
+
+function booleanValue(value: string | null): boolean | null {
+  if (value === null) return null
+  if (value.toLowerCase() === 'true') return true
+  if (value.toLowerCase() === 'false') return false
+  return null
+}
+
+function numberValue(value: string | null): number | null {
+  if (value === null || !/^\d+$/.test(value)) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
+}
+
+function listValue(value: string | null): readonly string[] {
+  if (value === null) return []
+  const normalized = value.trim().replace(/^\[/, '').replace(/\]$/, '').trim()
+  if (normalized.length === 0) return []
+  return normalized.split(',').map(item => stripDumpValue(item.trim())).filter(Boolean)
+}
+
+function workspaceStatus(value: string | null): EffectiveProfileConfig['workspaceRootStatus'] {
+  if (value === null || value.trim().length === 0) return value === null ? 'unknown' : 'missing'
+  try {
+    return statSync(value).isDirectory() ? 'configured' : 'not-directory'
+  } catch {
+    return 'missing'
+  }
+}
+
+function routeFromDump(
+  values: Readonly<Record<string, string>>,
+  purpose: 'compaction' | 'sessionTitle',
+): EffectivePurposeRoute | null {
+  const prefix = `purposeRoutes.${purpose}.`
+  const configured = Object.keys(values).some(key => key.startsWith(prefix))
+  if (!configured) return null
+  const model = valueOf(values, `${prefix}model`)
+  const agent = valueOf(values, `${prefix}agent`)
+  const reasoningEffort = valueOf(values, `${prefix}reasoningEffort`)
+  return {
+    configured: true,
+    complete: model !== null && agent !== null && reasoningEffort !== null,
+    model,
+    agent,
+    reasoningEffort,
+  }
+}
+
+function emptyEffective(dumpStatus: ProfileDumpStatus): EffectiveProfileConfig {
+  return {
+    dumpStatus,
+    provider: null,
+    model: null,
+    agent: null,
+    agentPreset: null,
+    sessionMode: null,
+    retryPolicy: null,
+    purposeRoutes: { compaction: null, sessionTitle: null },
+    workspaceRootStatus: 'unknown',
+    imageInput: null,
+    modelCapability: { inputModalities: ['text'], imageBridge: 'unknown' },
+    agentCapability: {
+      knownPreset: null,
+      frontmatterValid: null,
+      tools: [],
+      viewFile: null,
+      writeTools: null,
+      commandExecutionPolicy: null,
+      mcpServersEmpty: null,
+      subagent: null,
+    },
+  }
+}
+
+function effectiveFromDump(
+  parsed: ParsedDumpConfig,
+  dumpStatus: ProfileDumpStatus,
+): EffectiveProfileConfig {
+  const values = normalizeConfigValues(parsed.values)
+  const imageInput = valueOf(values, 'imageInput')
+  const retryMax = valueOf(values, 'retryPolicy.maxRetries')
+  const retryCodes = valueOf(values, 'retryPolicy.retryableCodes')
+  return {
+    dumpStatus,
+    provider: valueOf(values, 'provider'),
+    model: valueOf(values, 'model'),
+    agent: valueOf(values, 'agent'),
+    agentPreset: valueOf(values, 'agentPreset'),
+    sessionMode: valueOf(values, 'sessionMode'),
+    retryPolicy: retryMax === null && retryCodes === null
+      ? null
+      : { maxRetries: numberValue(retryMax), retryableCodes: listValue(retryCodes) },
+    purposeRoutes: {
+      compaction: routeFromDump(values, 'compaction'),
+      sessionTitle: routeFromDump(values, 'sessionTitle'),
+    },
+    workspaceRootStatus: workspaceStatus(valueOf(values, 'workspaceRoot')),
+    imageInput,
+    modelCapability: {
+      inputModalities: ['text'],
+      imageBridge: imageInput === 'off' ? 'off' : imageInput === 'experimental' ? 'experimental' : 'unknown',
+    },
+    agentCapability: emptyEffective(dumpStatus).agentCapability,
+  }
+}
+
+interface ParsedAgentFrontmatter {
+  name: string | null
+  tools: readonly string[] | null
+  commandExecutionPolicy: string | null
+  mcpServersEmpty: boolean | null
+  subagent: boolean | null
+}
+
+function parseAgentFrontmatter(source: string): ParsedAgentFrontmatter {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
+  if (match === null || match[1] === undefined) {
+    return { name: null, tools: null, commandExecutionPolicy: null, mcpServersEmpty: null, subagent: null }
+  }
+  let name: string | null = null
+  let tools: string[] | null = null
+  let commandExecutionPolicy: string | null = null
+  let mcpServersEmpty: boolean | null = null
+  let subagent: boolean | null = null
+  let collectingTools = false
+
+  for (const line of match[1].split(/\r?\n/)) {
+    const listItem = /^\s*-\s*(.+?)\s*$/.exec(line)
+    if (collectingTools && listItem?.[1] !== undefined) {
+      tools ??= []
+      tools.push(stripDumpValue(listItem[1]))
+      continue
+    }
+    const field = /^([A-Za-z][A-Za-z0-9_-]*):(?:\s*(.*))?$/.exec(line)
+    if (field === null || field[1] === undefined) continue
+    collectingTools = field[1] === 'tools' && (field[2] ?? '').trim().length === 0
+    const rawValue = stripDumpValue(field[2]?.trim() ?? '')
+    if (field[1] === 'name') name = rawValue || null
+    if (field[1] === 'tools' && !collectingTools) tools = [...listValue(rawValue)]
+    if (field[1] === 'commandExecutionPolicy') commandExecutionPolicy = rawValue || null
+    if (field[1] === 'mcpServers') mcpServersEmpty = rawValue === '[]'
+    if (field[1] === 'subagent') subagent = booleanValue(rawValue)
+  }
+
+  return { name, tools, commandExecutionPolicy, mcpServersEmpty, subagent }
+}
+
+function presetForAgent(agent: string | null, agentPreset: string | null): AgentPreset | undefined {
+  return getAgentPreset(agentPreset) ?? listAgentPresets().find(preset => preset.agentName === agent)
+}
+
+async function inspectAgent(
+  agent: string | null,
+  agentPreset: string | null,
+): Promise<{
+  capability: EffectiveProfileConfig['agentCapability']
+  issue?: DiagnosticIssue
+  suggestion?: string
+}> {
+  const preset = presetForAgent(agent, agentPreset)
+  if (preset === undefined) {
+    return {
+      capability: {
+        knownPreset: agent === null ? null : false,
+        frontmatterValid: agent === null ? null : null,
+        tools: [],
+        viewFile: agent === null ? null : false,
+        writeTools: agent === null ? null : false,
+        commandExecutionPolicy: null,
+        mcpServersEmpty: null,
+        subagent: null,
+      },
+      ...(agent === null ? {} : {
+        suggestion: `Install or inspect the selected Agent explicitly; bundled options: ${listAgentPresets().map(item => item.id).join(', ')}`,
+      }),
     }
   }
 
-  return { bundleEnabled, toolPolicy, effectiveProvider, effectiveModel }
+  try {
+    const frontmatter = parseAgentFrontmatter(await readAgentPresetTemplate(preset))
+    const actualTools = frontmatter.tools ?? []
+    const toolsMatch = actualTools.length === preset.tools.length
+      && actualTools.every((tool, index) => tool === preset.tools[index])
+    const valid = frontmatter.name === preset.agentName
+      && toolsMatch
+      && frontmatter.commandExecutionPolicy === 'off'
+      && frontmatter.mcpServersEmpty === true
+      && frontmatter.subagent === false
+    const capability = {
+      knownPreset: true,
+      frontmatterValid: valid,
+      tools: actualTools,
+      viewFile: actualTools.includes('view_file'),
+      writeTools: actualTools.some(tool => AGENT_WRITE_TOOLS.has(tool)),
+      commandExecutionPolicy: frontmatter.commandExecutionPolicy,
+      mcpServersEmpty: frontmatter.mcpServersEmpty,
+      subagent: frontmatter.subagent,
+    } satisfies EffectiveProfileConfig['agentCapability']
+    return valid
+      ? { capability }
+      : {
+        capability,
+        issue: {
+          component: 'profile',
+          code: 'PROFILE_AGENT_FRONTMATTER_INVALID',
+          message: `Bundled Agent ${preset.agentName} does not match its declared tool and execution policy`,
+        },
+        suggestion: `Reinstall the bundled Agent with: npx dsh-agy-provider agents install ${preset.id} --apply`,
+      }
+  } catch {
+    return {
+      capability: {
+        knownPreset: true,
+        frontmatterValid: false,
+        tools: [],
+        viewFile: preset.tools.includes('view_file'),
+        writeTools: preset.tools.some(tool => AGENT_WRITE_TOOLS.has(tool)),
+        commandExecutionPolicy: null,
+        mcpServersEmpty: null,
+        subagent: null,
+      },
+      issue: {
+        component: 'profile',
+        code: 'PROFILE_AGENT_FRONTMATTER_UNREADABLE',
+        message: `Could not read the bundled Agent template for ${preset.agentName}`,
+      },
+      suggestion: `Reinstall the bundled Agent with: npx dsh-agy-provider agents install ${preset.id} --apply`,
+    }
+  }
 }
 
 export async function diagnoseProfile(
@@ -213,6 +540,7 @@ export async function diagnoseProfile(
 
   if (!validProfileName) {
     return {
+      profileSchemaVersion: 2,
       name: '<invalid>',
       dshHomePresent,
       profilePresent: false,
@@ -222,6 +550,8 @@ export async function diagnoseProfile(
       toolPolicy: null,
       effectiveProvider: null,
       effectiveModel: null,
+      effective: emptyEffective('not-run'),
+      repairSuggestions: [],
       issues: [{
         component: 'profile',
         code: 'PROFILE_NAME_INVALID',
@@ -236,6 +566,12 @@ export async function diagnoseProfile(
   let toolPolicy: string | null = null
   let effectiveProvider: string | null = null
   let effectiveModel: string | null = null
+  let effective = emptyEffective('not-run')
+  const repairSuggestions: string[] = []
+
+  const addSuggestion = (suggestion: string): void => {
+    if (!repairSuggestions.includes(suggestion)) repairSuggestions.push(suggestion)
+  }
 
   if (!dshHomePresent) {
     issues.push({
@@ -282,7 +618,8 @@ export async function diagnoseProfile(
       })
     }
 
-    // Attempt to inspect effective dump-config if DSH CLI is available
+    // Inspect effective dump-config. Failure is part of the diagnostic result;
+    // it must not silently turn into a false "unknown but healthy" profile.
     const runCmd = options.runCommand ?? defaultRunCommand
     const customBin = options.dshBin?.trim() || process.env.DSH_BIN?.trim()
     const dshCandidates = [
@@ -296,6 +633,7 @@ export async function diagnoseProfile(
       : dshCandidates.find(p => existsSync(p))
         ?? pathDshCommand
 
+    let dumpStatus: ProfileDumpStatus = 'not-run'
     if (dshEntry !== undefined) {
       try {
         const invocation = resolveDshInvocation(dshEntry)
@@ -305,17 +643,97 @@ export async function diagnoseProfile(
           cwd: profileDir,
           env: { ...process.env, DSH_HOME: dshHome },
         })
-        if (dumpResult.exitCode === 0 && !dumpResult.timedOut) {
+        if (dumpResult.timedOut) {
+          dumpStatus = 'timeout'
+          issues.push({
+            component: 'profile',
+            code: 'PROFILE_DUMP_TIMEOUT',
+            message: `DSH --dump-config timed out for profile "${profileName}"`,
+          })
+          addSuggestion(`Retry the read-only check: npx @deepseek-ai/dsh --profile ${profileName} --dump-config`)
+        } else if (dumpResult.exitCode !== 0) {
+          dumpStatus = 'nonzero'
+          issues.push({
+            component: 'profile',
+            code: 'PROFILE_DUMP_NONZERO',
+            message: `DSH --dump-config exited unsuccessfully for profile "${profileName}"`,
+          })
+          addSuggestion(`Run the read-only check directly: npx @deepseek-ai/dsh --profile ${profileName} --dump-config`)
+        } else {
           const parsed = parseDumpConfig(dumpResult.stdout)
-          bundleEnabled = parsed.bundleEnabled
-          toolPolicy = parsed.toolPolicy
-          effectiveProvider = parsed.effectiveProvider
-          effectiveModel = parsed.effectiveModel
+          if (!parsed.recognized || parsed.malformed) {
+            dumpStatus = 'parse-error'
+            issues.push({
+              component: 'profile',
+              code: 'PROFILE_DUMP_PARSE_FAILED',
+              message: `DSH --dump-config did not contain a valid dsh-agy-provider section for profile "${profileName}"`,
+            })
+            addSuggestion(`Inspect the read-only dump format: npx @deepseek-ai/dsh --profile ${profileName} --dump-config`)
+          } else {
+            dumpStatus = 'ok'
+            effective = effectiveFromDump(parsed, dumpStatus)
+            const configValues = normalizeConfigValues(parsed.values)
+            bundleEnabled = booleanValue(valueOf(configValues, 'enabled'))
+            toolPolicy = valueOf(configValues, 'toolPolicy')
+            effectiveProvider = effective.provider
+            effectiveModel = effective.model
+
+            const agentInspection = await inspectAgent(effective.agent, effective.agentPreset)
+            effective = { ...effective, agentCapability: agentInspection.capability }
+            if (agentInspection.issue !== undefined) issues.push(agentInspection.issue)
+            if (agentInspection.suggestion !== undefined) addSuggestion(agentInspection.suggestion)
+
+            if (effective.agentCapability.writeTools === true
+              && effective.workspaceRootStatus !== 'configured') {
+              issues.push({
+                component: 'profile',
+                code: 'PROFILE_WORKSPACE_REQUIRED',
+                message: 'The selected Agent can write files but no existing workspace directory is configured',
+              })
+              addSuggestion('Set workspaceRoot to an existing project directory before enabling workspace-write')
+            }
+            if (effective.imageInput === 'experimental' && effective.agentCapability.viewFile !== true) {
+              issues.push({
+                component: 'profile',
+                code: 'PROFILE_IMAGE_AGENT_UNSUPPORTED',
+                message: 'Experimental image input requires a verified Agent with the view_file tool',
+              })
+              addSuggestion('Use agentPreset: read-only or workspace-write and install it with: npx dsh-agy-provider agents install read-only --apply')
+            }
+            for (const purpose of ['compaction', 'sessionTitle'] as const) {
+              const route = effective.purposeRoutes[purpose]
+              if (route?.complete === false) {
+                issues.push({
+                  component: 'profile',
+                  code: 'PROFILE_PURPOSE_ROUTE_INCOMPLETE',
+                  message: `Purpose route "${purpose}" is missing model, agent, or reasoningEffort`,
+                })
+                addSuggestion(`Complete or remove purposeRoutes.${purpose} in the profile configuration`)
+              }
+            }
+            if (effective.retryPolicy !== null
+              && (effective.retryPolicy.maxRetries === null || effective.retryPolicy.maxRetries > 2)) {
+              issues.push({
+                component: 'profile',
+                code: 'PROFILE_RETRY_POLICY_INVALID',
+                message: 'retryPolicy.maxRetries must be an integer from 0 through 2',
+              })
+              addSuggestion('Set retryPolicy.maxRetries to 0, 1, or 2 in the profile configuration')
+            }
+          }
         }
       } catch {
-        // dump-config is optional diagnostic enhancement
+        dumpStatus = 'unavailable'
+        issues.push({
+          component: 'profile',
+          code: 'PROFILE_DUMP_UNAVAILABLE',
+          message: `Could not execute DSH --dump-config for profile "${profileName}"`,
+        })
+        addSuggestion(`Verify the DSH executable and retry: npx @deepseek-ai/dsh --profile ${profileName} --dump-config`)
       }
     }
+
+    if (dumpStatus !== 'ok') effective = emptyEffective(dumpStatus)
 
     // Check bundleEnabled and toolPolicy warnings
     if (bundleEnabled === false) {
@@ -335,6 +753,7 @@ export async function diagnoseProfile(
   }
 
   return {
+    profileSchemaVersion: 2,
     name: profileName,
     dshHomePresent,
     profilePresent,
@@ -344,6 +763,8 @@ export async function diagnoseProfile(
     toolPolicy,
     effectiveProvider,
     effectiveModel,
+    effective,
+    repairSuggestions,
     issues,
   }
 }
@@ -391,6 +812,16 @@ export function formatDoctorHuman(result: DoctorResult): string {
     lines.push(
       `profile [${p.name}]: exists=${p.profilePresent}; packageInstalled=${p.packageInstalled}; bundleDeclared=${p.bundleDeclared}; enabled=${p.bundleEnabled ?? 'unknown'}; toolPolicy=${p.toolPolicy ?? 'unknown'}`,
     )
+    lines.push(
+      `effective: dump=${p.effective.dumpStatus}; provider=${p.effective.provider ?? 'unknown'}; model=${p.effective.model ?? 'unknown'}; agent=${p.effective.agent ?? 'unknown'}; sessionMode=${p.effective.sessionMode ?? 'unknown'}; imageInput=${p.effective.imageInput ?? 'unknown'}; inputModalities=${p.effective.modelCapability.inputModalities.join(',')}`,
+    )
+    lines.push(
+      `agentCapability: preset=${p.effective.agentCapability.knownPreset ?? 'unknown'}; frontmatter=${p.effective.agentCapability.frontmatterValid ?? 'unknown'}; view_file=${p.effective.agentCapability.viewFile ?? 'unknown'}; writeTools=${p.effective.agentCapability.writeTools ?? 'unknown'}; workspace=${p.effective.workspaceRootStatus}`,
+    )
+    if (p.repairSuggestions.length > 0) {
+      lines.push('repair suggestions:')
+      for (const suggestion of p.repairSuggestions) lines.push(`- ${suggestion}`)
+    }
   }
 
   lines.push(
@@ -417,7 +848,7 @@ export function formatDoctorHuman(result: DoctorResult): string {
 export function formatDoctorHelp(): string {
   return `Usage: dsh-agy-provider [doctor] [options]
 
-Quota-free diagnostic CLI for dsh-agy-provider and DSH profiles.
+Quota-free diagnostic CLI v2 for dsh-agy-provider and DSH profiles.
 
 Commands:
   doctor                  Run diagnostic checks (default)

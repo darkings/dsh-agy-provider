@@ -223,3 +223,183 @@ test('runDoctor combines provider and profile diagnostics into unified report', 
     await rm(tempDir, { recursive: true, force: true })
   }
 })
+
+test('doctor v2 reports effective profile capabilities without exposing workspace paths', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'dsh-doctor-effective-'))
+  try {
+    const dshHome = join(tempDir, 'dsh-home')
+    const profileDir = join(dshHome, 'profiles', 'workspace')
+    const workspaceRoot = join(tempDir, 'workspace-root')
+    await mkdir(profileDir, { recursive: true })
+    await mkdir(workspaceRoot, { recursive: true })
+    await writeFile(join(profileDir, 'package.json'), JSON.stringify({
+      name: 'profile-workspace',
+      dependencies: { 'dsh-agy-provider': '0.5.0' },
+      dsh: { profile: { bundles: ['dsh-agy-provider'] } },
+    }, null, 2))
+
+    const result = await diagnoseProfile({
+      profileName: 'workspace',
+      dshHome,
+      dshBin: join(profileDir, 'mock-dsh.js'),
+      runCommand: async () => ({
+        exitCode: 0,
+        timedOut: false,
+        stderr: '',
+        stdout: `# == dsh-agy-provider
+  enabled: true
+  toolPolicy: agy-owned
+  provider: agy
+  model: gemini-3.7-flash-low
+  agent: dsh-agy-read-only
+  agentPreset: read-only
+  sessionMode: full
+  workspaceRoot: ${workspaceRoot}
+  imageInput: off
+  retryPolicy:
+    maxRetries: 0
+    retryableCodes: [RATE_LIMIT, SERVER, TRANSPORT]
+  purposeRoutes:
+    compaction:
+      model: gemini-3.7-flash-low
+      agent: dsh-agy-tool-free
+      reasoningEffort: low
+`,
+      }),
+    })
+
+    assert.equal(result.profileSchemaVersion, 2)
+    assert.equal(result.effective.dumpStatus, 'ok')
+    assert.equal(result.effective.agent, 'dsh-agy-read-only')
+    assert.equal(result.effective.agentPreset, 'read-only')
+    assert.equal(result.effective.sessionMode, 'full')
+    assert.equal(result.effective.retryPolicy?.maxRetries, 0)
+    assert.deepEqual(result.effective.retryPolicy?.retryableCodes, ['RATE_LIMIT', 'SERVER', 'TRANSPORT'])
+    assert.equal(result.effective.purposeRoutes.compaction?.complete, true)
+    assert.equal(result.effective.workspaceRootStatus, 'configured')
+    assert.equal(result.effective.agentCapability.frontmatterValid, true)
+    assert.equal(result.effective.agentCapability.viewFile, true)
+    assert.equal(result.effective.agentCapability.writeTools, false)
+    assert.deepEqual(result.effective.modelCapability.inputModalities, ['text'])
+    assert.equal(result.effective.modelCapability.imageBridge, 'off')
+    assert.deepEqual(result.repairSuggestions, [])
+    assert.equal(JSON.stringify(result).includes(workspaceRoot), false)
+    assert.equal(result.issues.length, 0)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('doctor v2 emits stable dump failure codes and read-only repair suggestions', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'dsh-doctor-dump-failure-'))
+  try {
+    const dshHome = join(tempDir, 'dsh-home')
+    const profileDir = join(dshHome, 'profiles', 'web')
+    await mkdir(profileDir, { recursive: true })
+    await writeFile(join(profileDir, 'package.json'), JSON.stringify({
+      name: 'profile-web',
+      dependencies: { 'dsh-agy-provider': '0.5.0' },
+      dsh: { profile: { bundles: ['dsh-agy-provider'] } },
+    }, null, 2))
+
+    const timeoutResult = await diagnoseProfile({
+      profileName: 'web',
+      dshHome,
+      dshBin: 'mock-dsh',
+      runCommand: async () => ({ exitCode: null, timedOut: true, stdout: '', stderr: 'secret path must not surface' }),
+    })
+    assert.equal(timeoutResult.effective.dumpStatus, 'timeout')
+    assert.equal(timeoutResult.issues.some(issue => issue.code === 'PROFILE_DUMP_TIMEOUT'), true)
+    assert.equal(timeoutResult.issues.some(issue => issue.message.includes('secret')), false)
+    assert.equal(timeoutResult.repairSuggestions.some(value => value.includes('--dump-config')), true)
+
+    const nonzeroResult = await diagnoseProfile({
+      profileName: 'web',
+      dshHome,
+      dshBin: 'mock-dsh',
+      runCommand: async () => ({ exitCode: 7, timedOut: false, stdout: '', stderr: 'private stderr' }),
+    })
+    assert.equal(nonzeroResult.effective.dumpStatus, 'nonzero')
+    assert.equal(nonzeroResult.issues.some(issue => issue.code === 'PROFILE_DUMP_NONZERO'), true)
+
+    const parseResult = await diagnoseProfile({
+      profileName: 'web',
+      dshHome,
+      dshBin: 'mock-dsh',
+      runCommand: async () => ({ exitCode: 0, timedOut: false, stdout: 'not a dsh config', stderr: '' }),
+    })
+    assert.equal(parseResult.effective.dumpStatus, 'parse-error')
+    assert.equal(parseResult.issues.some(issue => issue.code === 'PROFILE_DUMP_PARSE_FAILED'), true)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('doctor v2 flags unsafe effective Agent combinations without modifying the profile', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'dsh-doctor-effective-unsafe-'))
+  try {
+    const dshHome = join(tempDir, 'dsh-home')
+    const profileDir = join(dshHome, 'profiles', 'unsafe')
+    await mkdir(profileDir, { recursive: true })
+    await writeFile(join(profileDir, 'package.json'), JSON.stringify({
+      name: 'profile-unsafe',
+      dependencies: { 'dsh-agy-provider': '0.5.0' },
+      dsh: { profile: { bundles: ['dsh-agy-provider'] } },
+    }, null, 2))
+
+    const result = await diagnoseProfile({
+      profileName: 'unsafe',
+      dshHome,
+      dshBin: 'mock-dsh',
+      runCommand: async () => ({
+        exitCode: 0,
+        timedOut: false,
+        stderr: '',
+        stdout: `# == dsh-agy-provider
+  enabled: true
+  toolPolicy: agy-owned
+  provider: agy
+  model: gemini-3.7-flash-low
+  agent: dsh-agy-workspace-write
+  agentPreset: workspace-write
+  imageInput: experimental
+  purposeRoutes:
+    compaction:
+      model: gemini-3.7-flash-low
+`,
+      }),
+    })
+
+    assert.equal(result.effective.agentCapability.writeTools, true)
+    assert.equal(result.effective.workspaceRootStatus, 'unknown')
+    assert.equal(result.issues.some(issue => issue.code === 'PROFILE_WORKSPACE_REQUIRED'), true)
+    assert.equal(result.issues.some(issue => issue.code === 'PROFILE_IMAGE_AGENT_UNSUPPORTED'), false)
+    assert.equal(result.issues.some(issue => issue.code === 'PROFILE_PURPOSE_ROUTE_INCOMPLETE'), true)
+    assert.equal(result.repairSuggestions.some(value => value.includes('workspaceRoot')), true)
+    assert.equal(result.repairSuggestions.some(value => value.includes('purposeRoutes.compaction')), true)
+
+    const imageOnlyResult = await diagnoseProfile({
+      profileName: 'unsafe',
+      dshHome,
+      dshBin: 'mock-dsh',
+      runCommand: async () => ({
+        exitCode: 0,
+        timedOut: false,
+        stderr: '',
+        stdout: `# == dsh-agy-provider
+  enabled: true
+  provider: agy
+  model: gemini-3.7-flash-low
+  agent: dsh-agy-tool-free
+  agentPreset: tool-free
+  imageInput: experimental
+`,
+      }),
+    })
+    assert.equal(imageOnlyResult.effective.agentCapability.viewFile, false)
+    assert.equal(imageOnlyResult.issues.some(issue => issue.code === 'PROFILE_IMAGE_AGENT_UNSUPPORTED'), true)
+    assert.equal(imageOnlyResult.repairSuggestions.some(value => value.includes('agents install read-only')), true)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+})

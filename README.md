@@ -11,7 +11,7 @@
 - Node.js `child_process.spawn()` 可直接启动 `agy.exe` 并增量解析输出。
 - 最小请求可得到 `init`、`step_update` 和 `result` 事件，进程退出码为 `0`。
 - 官方 `@deepseek-ai/dsh-llm` runtime 可注册并驱动 `AgyAdapter` 文本流。
-- 当前自动化测试 90 个全部通过；bundle dry-run 可见 `cordis.patch.yml`、`lib` 和 doctor CLI 产物。
+- 当前自动化测试 110 个全部通过；bundle dry-run 可见 `cordis.patch.yml`、`lib`、Agent 模板和 doctor CLI 产物。
 - V2-M5 quota 复测后继续默认 `sessionMode: full`：`full` 第二轮为 4,529 input tokens，`resume` 为 9,224，未启用持久化 Session。
 
 0.4.0 已完成 V4-M1/V4-M4；真实 AGY 协议采样和自包含 DSH Mock smoke 已验证。V4-M2/V4-M3 因未证明同一 AGY 进程的多轮 stdin 留存，以有证据的 negative result 关闭，正式路径继续使用 one-shot，不暴露 persistent transport 配置。详见 [0.4.0 开发计划](docs/v0.4.0-development-plan.md)。
@@ -240,6 +240,16 @@ npm run diagnose
 ```powershell
 npm run diagnose -- --json
 ```
+
+对指定 DSH profile 运行 doctor v2：
+
+```powershell
+npx dsh-agy-provider doctor --profile web --json
+```
+
+profile 结果的 `profileSchemaVersion` 为 `2`，`effective` 会报告实际 dump 到的 provider/model、Agent、`sessionMode`、retry、purpose routes、workspace 边界、图片 bridge 和公开 `inputModalities`。`dumpStatus` 为 `timeout`、`nonzero` 或 `parse-error` 时，doctor 会返回对应稳定错误码（`PROFILE_DUMP_TIMEOUT`、`PROFILE_DUMP_NONZERO`、`PROFILE_DUMP_PARSE_FAILED`），不会把读取失败静默当成正常配置。`repairSuggestions` 只给出命令或配置建议，不自动修改 profile 或 Agent。
+
+doctor 会校验包内 Agent 模板的 frontmatter 和工具白名单；workspace-write 缺少工作区、experimental image 没有 `view_file`、purpose route 不完整时分别给出可诊断 issue。诊断 JSON 不包含用户路径、Prompt、stderr、附件内容或凭据，并始终保持 `quotaUsed: false`。
 
 诊断只执行 `agy --version`、`agy agents` 和 `agy models`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。JSON 输出中的 `modelCatalog.source` 会标记 `static`、`discovered`、`merged`、`cache` 或 `fallback`，`stale`、`warning` 和 `warningCode` 用于说明是否使用了过期缓存、静态回退或发现失败原因。也可以通过 `AGY_PATH`、`AGY_AGENT`、`AGY_MODEL`、`AGY_MODELS` 和 `AGY_MINIMUM_VERSION` 覆盖检查目标；`AGY_MODELS` 必须是 JSON 数组，例如：
 

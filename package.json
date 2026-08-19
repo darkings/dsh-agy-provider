@@ -28,6 +28,7 @@
     "lib/**/*.js",
     "lib/**/*.d.ts",
     "bin/**/*.js",
+    "agents/**/*.md",
     "cordis.patch.yml"
   ],
   "license": "MIT",

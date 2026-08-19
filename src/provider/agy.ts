@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { realpathSync, statSync } from 'node:fs'
+import { parse as parsePath } from 'node:path'
 import {
   EMPTY_RESPONSE_CODE,
   LlmAdapter,
@@ -19,10 +21,12 @@ import {
   AgyProcessError,
   isAgyReasoningEffort,
   runAgyProcess,
+  type AgyExecutionMode,
   type AgyReasoningEffort,
   type AgyRequest,
   type ProcessResult,
 } from '../agy/process.js'
+import { getAgentPreset, type AgentPresetId } from '../agent-presets.js'
 import {
   AgyModelDiscovery,
   type AgyModelDiscoveryCommand,
@@ -96,6 +100,15 @@ interface EffectiveAgyRoute {
   reasoningEffort: AgyReasoningEffort | undefined
 }
 
+interface AgyAgentRuntime {
+  agent: string
+  preset: AgentPresetId | undefined
+  workspaceRoot: string | undefined
+  addDirs: readonly string[] | undefined
+  mode: AgyExecutionMode | undefined
+  disableSlashCommands: boolean | undefined
+}
+
 class AsyncQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
   private readonly values: T[] = []
   private readonly waiters: Array<{
@@ -149,6 +162,42 @@ const DEFAULT_MAX_QUEUE = 32
 const DEFAULT_QUEUE_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const DEFAULT_MAX_EVENT_LINE_LENGTH = 1_048_576
+
+function canonicalWorkspaceRoot(value: string | undefined): string | undefined {
+  const selected = value?.trim()
+  if (selected === undefined || selected.length === 0) return undefined
+  try {
+    const canonical = realpathSync(selected)
+    if (!statSync(canonical).isDirectory() || canonical === parsePath(canonical).root) {
+      throw new Error('workspace root must be a non-root directory')
+    }
+    return canonical
+  } catch (error) {
+    throw new RangeError(
+      `workspaceRoot must point to an existing non-root directory: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    )
+  }
+}
+
+function resolveAgyAgentRuntime(config: Config): AgyAgentRuntime {
+  const preset = config.agentPreset === undefined ? undefined : getAgentPreset(config.agentPreset)
+  if (config.agentPreset !== undefined && preset === undefined) {
+    throw new RangeError('agentPreset must be one of: tool-free, read-only, workspace-write')
+  }
+  const workspaceRoot = canonicalWorkspaceRoot(config.workspaceRoot)
+  if (preset?.writeAccess === true && workspaceRoot === undefined) {
+    throw new RangeError('workspaceRoot is required when agentPreset is workspace-write')
+  }
+  return {
+    agent: preset?.agentName ?? config.agent ?? DEFAULT_AGENT,
+    preset: preset?.id,
+    workspaceRoot,
+    addDirs: workspaceRoot === undefined ? undefined : [workspaceRoot],
+    mode: preset?.mode,
+    disableSlashCommands: preset === undefined ? undefined : true,
+  }
+}
 
 const AGY_REASONING_METADATA = [
   {
@@ -314,6 +363,10 @@ export class AgyAdapter extends LlmAdapter {
   private readonly model: string
   private readonly models: readonly ModelConfig[]
   private readonly agent: string
+  private readonly workspaceRoot: string | undefined
+  private readonly addDirs: readonly string[] | undefined
+  private readonly mode: AgyExecutionMode | undefined
+  private readonly disableSlashCommands: boolean | undefined
   private readonly toolPolicy: ToolPolicy
   private readonly agyPath: string | undefined
   private readonly timeoutMs: number
@@ -335,7 +388,12 @@ export class AgyAdapter extends LlmAdapter {
     super()
     this.model = config.model ?? DEFAULT_MODEL
     this.models = configuredModels(config)
-    this.agent = config.agent ?? DEFAULT_AGENT
+    const agentRuntime = resolveAgyAgentRuntime(config)
+    this.agent = agentRuntime.agent
+    this.workspaceRoot = agentRuntime.workspaceRoot
+    this.addDirs = agentRuntime.addDirs
+    this.mode = agentRuntime.mode
+    this.disableSlashCommands = agentRuntime.disableSlashCommands
     this.toolPolicy = config.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject'
     this.agyPath = config.agyPath?.trim() === '' ? undefined : config.agyPath?.trim()
     this.timeoutMs = config.timeoutMs ?? 120_000
@@ -590,6 +648,10 @@ export class AgyAdapter extends LlmAdapter {
       ...(requestedConversationId === undefined ? {} : { conversation: requestedConversationId }),
       ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
       ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
+      ...(this.workspaceRoot === undefined ? {} : { cwd: this.workspaceRoot }),
+      ...(this.addDirs === undefined ? {} : { addDirs: this.addDirs }),
+      ...(this.mode === undefined ? {} : { mode: this.mode }),
+      ...(this.disableSlashCommands === undefined ? {} : { disableSlashCommands: this.disableSlashCommands }),
     }
     const processPromise = this.run(request).then(processResultValue => {
       result = processResultValue

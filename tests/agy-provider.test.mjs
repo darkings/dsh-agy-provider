@@ -143,6 +143,48 @@ test('AgyAdapter applies purpose routes only to matching auxiliary calls', async
   assert.equal(captured[1]?.reasoningEffort, undefined)
 })
 
+test('AgyAdapter maps read-only and workspace-write presets to bounded AGY process options', async () => {
+  const captured = []
+  const adapter = new AgyAdapter({
+    model: 'gemini-test',
+    agentPreset: 'read-only',
+    workspaceRoot: process.cwd(),
+  }, {
+    runAgyProcess: fakeRunner([
+      { event: 'result', result: { status: 'SUCCESS', response: 'read-only' } },
+    ], captured),
+  })
+
+  for await (const _chunk of adapter.stream({ ...request, messages: [] , system: 'read' })) {}
+  assert.equal(captured[0]?.agent, 'dsh-agy-read-only')
+  assert.equal(captured[0]?.cwd, process.cwd())
+  assert.deepEqual(captured[0]?.addDirs, [process.cwd()])
+  assert.equal(captured[0]?.mode, 'plan')
+  assert.equal(captured[0]?.disableSlashCommands, true)
+
+  const writeCaptured = []
+  const writeAdapter = new AgyAdapter({
+    model: 'gemini-test',
+    agentPreset: 'workspace-write',
+    workspaceRoot: process.cwd(),
+  }, {
+    runAgyProcess: fakeRunner([
+      { event: 'result', result: { status: 'SUCCESS', response: 'written' } },
+    ], writeCaptured),
+  })
+  for await (const _chunk of writeAdapter.stream({ ...request, messages: [] , system: 'write' })) {}
+  assert.equal(writeCaptured[0]?.agent, 'dsh-agy-workspace-write')
+  assert.equal(writeCaptured[0]?.mode, 'accept-edits')
+  assert.equal(writeCaptured[0]?.disableSlashCommands, true)
+})
+
+test('AgyAdapter requires an explicit non-root workspace for workspace-write', () => {
+  assert.throws(
+    () => new AgyAdapter({ agentPreset: 'workspace-write' }),
+    /workspaceRoot is required/,
+  )
+})
+
 test('official DSH runtime validates reasoning effort before AGY spawn', async () => {
   const root = new Context()
   const captured = []

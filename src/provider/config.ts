@@ -1,4 +1,5 @@
 import z from '@deepseek-ai/schemastery'
+import { AGENT_PRESET_IDS, type AgentPresetId } from '../agent-presets.js'
 
 export interface Config {
   /** Keep the bundle inert until explicitly enabled. */
@@ -19,6 +20,10 @@ export interface Config {
   toolPolicy?: ToolPolicy
   /** AGY agent profile, for example `deepseek-proxy`. */
   agent?: string
+  /** Optional bundled Agent capability profile; omitted preserves the configured agent. */
+  agentPreset?: AgentPresetId
+  /** Explicit existing workspace directory required by the workspace-write preset. */
+  workspaceRoot?: string
   /** Explicit AGY executable path; empty means discover from environment/PATH. */
   agyPath?: string
   /** Hard upper bound for one AGY child process. */
@@ -128,6 +133,8 @@ export function createConfigSchema(defaults: {
     modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000),
     toolPolicy: z.union(['reject', 'agy-owned'] as const).default(defaultToolPolicy),
     agent: z.string().default('deepseek-proxy'),
+    agentPreset: z.union(AGENT_PRESET_IDS),
+    workspaceRoot: z.string().pattern(/^\S(?:.*\S)?$/),
     agyPath: z.string().default(''),
     timeoutMs: z.number().min(1).max(3_600_000).default(120_000),
     sessionMode: z.union(['resume', 'full'] as const).default('full'),

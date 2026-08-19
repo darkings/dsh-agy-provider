@@ -7,9 +7,17 @@ export type ProcessTermination = 'completed' | 'non-zero' | 'signaled' | 'aborte
 export const AGY_REASONING_EFFORTS = ['low', 'medium', 'high'] as const
 export type AgyReasoningEffort = typeof AGY_REASONING_EFFORTS[number]
 
+export const AGY_EXECUTION_MODES = ['plan', 'accept-edits'] as const
+export type AgyExecutionMode = typeof AGY_EXECUTION_MODES[number]
+
 export function isAgyReasoningEffort(value: unknown): value is AgyReasoningEffort {
   return typeof value === 'string'
     && (AGY_REASONING_EFFORTS as readonly string[]).includes(value)
+}
+
+export function isAgyExecutionMode(value: unknown): value is AgyExecutionMode {
+  return typeof value === 'string'
+    && (AGY_EXECUTION_MODES as readonly string[]).includes(value)
 }
 
 export class AgyProcessError extends Error {
@@ -54,6 +62,12 @@ export interface AgyRequest extends Omit<ProcessRequest, 'executable' | 'args'> 
   model?: string
   conversation?: string
   reasoningEffort?: AgyReasoningEffort
+  /** Explicit AGY directories made available to the selected Agent. */
+  addDirs?: readonly string[]
+  /** Bounded AGY execution mode selected by an Agent preset. */
+  mode?: AgyExecutionMode
+  /** Disable slash commands for bundled non-interactive presets. */
+  disableSlashCommands?: boolean
 }
 
 export function defaultAgyCommand(): 'agy.exe' | 'agy' {
@@ -113,10 +127,19 @@ export function resolveAgyExecutable(explicit?: string): string {
 
 /** Build AGY's print-mode argv without invoking a shell. */
 export function buildAgyArgs(
-  request: Pick<AgyRequest, 'prompt' | 'agent' | 'model' | 'conversation' | 'reasoningEffort'>,
+  request: Pick<
+    AgyRequest,
+    'prompt' | 'agent' | 'model' | 'conversation' | 'reasoningEffort' | 'addDirs' | 'mode' | 'disableSlashCommands'
+  >,
 ): string[] {
   if (request.reasoningEffort !== undefined && !isAgyReasoningEffort(request.reasoningEffort)) {
     throw new TypeError('AGY reasoning effort must be one of: low, medium, high')
+  }
+  if (request.mode !== undefined && !isAgyExecutionMode(request.mode)) {
+    throw new TypeError('AGY execution mode must be one of: plan, accept-edits')
+  }
+  if (request.addDirs?.some(directory => typeof directory !== 'string' || directory.trim().length === 0)) {
+    throw new TypeError('AGY add-dir entries must be non-empty paths')
   }
   return [
     '-p', request.prompt,
@@ -124,6 +147,9 @@ export function buildAgyArgs(
     ...(request.model === undefined ? [] : ['--model', request.model]),
     ...(request.conversation === undefined ? [] : ['--conversation', request.conversation]),
     ...(request.reasoningEffort === undefined ? [] : ['--effort', request.reasoningEffort]),
+    ...(request.addDirs?.flatMap(directory => ['--add-dir', directory]) ?? []),
+    ...(request.mode === undefined ? [] : ['--mode', request.mode]),
+    ...(request.disableSlashCommands === true ? ['--disable-slash-commands'] : []),
     '--output-format', 'stream-json',
   ]
 }

@@ -26,8 +26,34 @@ export { AgyModelDiscovery, mergeModelCatalog, parseAgyModels } from './agy/mode
 export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
 export { diagnoseProfile, runDoctor } from './doctor.js'
+export {
+  AGENT_PRESET_IDS,
+  getAgentPreset,
+  listAgentPresets,
+  readAgentPresetTemplate,
+  requireAgentPreset,
+} from './agent-presets.js'
+export {
+  DEFAULT_AGENT_DIRECTORY,
+  AgentInstallError,
+  describeAgentPresets,
+  installAgentPreset,
+  isAgentPreset,
+} from './agent-installer.js'
+export { formatAgentsHelp, runAgentsCli } from './agents-cli.js'
 export { BundleConfig, ConfigSchema, createConfigSchema }
 export type { DoctorOptions, DoctorResult, ProfileDiagnosticOptions, ProfileDiagnosticResult } from './doctor.js'
+export type {
+  AgentExecutionMode,
+  AgentPreset,
+  AgentPresetId,
+} from './agent-presets.js'
+export type {
+  AgentDirectoryEntry,
+  AgentInstallAction,
+  AgentInstallOptions,
+  AgentInstallResult,
+} from './agent-installer.js'
 export type { ConfigType, ModelConfig, ToolPolicy }
 export interface Config extends ConfigType {}
 

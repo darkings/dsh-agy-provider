@@ -38,6 +38,40 @@ test('buildAgyArgs maps reasoning effort as a separate argv pair', () => {
   )
 })
 
+test('buildAgyArgs maps bounded Agent workspace flags without shell composition', () => {
+  assert.deepEqual(
+    buildAgyArgs({
+      prompt: 'edit a file',
+      agent: 'dsh-agy-workspace-write',
+      model: 'gemini-test',
+      addDirs: ['C:\\workspace', 'C:\\workspace\\nested'],
+      mode: 'accept-edits',
+      disableSlashCommands: true,
+    }),
+    [
+      '-p', 'edit a file',
+      '--agent', 'dsh-agy-workspace-write',
+      '--model', 'gemini-test',
+      '--add-dir', 'C:\\workspace',
+      '--add-dir', 'C:\\workspace\\nested',
+      '--mode', 'accept-edits',
+      '--disable-slash-commands',
+      '--output-format', 'stream-json',
+    ],
+  )
+})
+
+test('buildAgyArgs rejects unapproved execution modes and empty directories', () => {
+  assert.throws(
+    () => buildAgyArgs({ prompt: 'test', mode: 'dangerous' }),
+    /execution mode must be one of/,
+  )
+  assert.throws(
+    () => buildAgyArgs({ prompt: 'test', addDirs: [''] }),
+    /add-dir entries must be non-empty/,
+  )
+})
+
 test('buildAgyArgs rejects a non-whitelisted reasoning effort', () => {
   assert.throws(
     () => buildAgyArgs({ prompt: 'a prompt', reasoningEffort: 'high; whoami' }),

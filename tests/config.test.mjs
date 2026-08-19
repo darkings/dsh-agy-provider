@@ -19,6 +19,7 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.equal(config.modelDiscoveryTtlMs, 300_000)
   assert.equal(config.modelDiscoveryTimeoutMs, 10_000)
   assert.equal(config.toolPolicy, 'reject')
+  assert.equal(config.agentPreset, undefined)
   assert.deepEqual(config.retryPolicy, {
     maxRetries: 0,
     retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'],
@@ -31,6 +32,8 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.throws(() => Config({ toolPolicy: 'bridge' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ retryPolicy: { maxRetries: 3 } }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ retryPolicy: { retryableCodes: ['TIMEOUT'] } }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ agentPreset: 'full-access' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ workspaceRoot: '   ' }), error => error.name === 'ValidationError')
 })
 
 test('Config accepts only bounded transient retry policy overrides', () => {
@@ -66,6 +69,38 @@ test('Config accepts optional purpose-specific route overrides', () => {
   assert.throws(() => Config({
     purposeRoutes: { compaction: { reasoningEffort: 'turbo' } },
   }), error => error.name === 'ValidationError')
+})
+
+test('Config accepts explicit Agent capability presets and workspace roots', () => {
+  assert.deepEqual(Config({
+    agentPreset: 'workspace-write',
+    workspaceRoot: 'C:\\workspace',
+  }), {
+    enabled: false,
+    provider: 'agy',
+    model: 'gemini-3.1-pro-high',
+    models: [],
+    modelDiscovery: 'auto',
+    modelDiscoveryTtlMs: 300_000,
+    modelDiscoveryTimeoutMs: 10_000,
+    toolPolicy: 'reject',
+    agent: 'deepseek-proxy',
+    agentPreset: 'workspace-write',
+    workspaceRoot: 'C:\\workspace',
+    agyPath: '',
+    timeoutMs: 120_000,
+    sessionMode: 'full',
+    minimumAgyVersion: '1.1.13',
+    maxConcurrent: 4,
+    maxQueue: 32,
+    queueTimeoutMs: 30_000,
+    maxOutputBytes: 8 * 1024 * 1024,
+    maxEventLineLength: 1_048_576,
+    retryPolicy: { maxRetries: 0, retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] },
+    purposeRoutes: { compaction: {}, sessionTitle: {} },
+    response: 'AGY mock provider is ready.',
+    delayMs: 0,
+  })
 })
 
 test('Config accepts the explicit AGY-owned tool policy', () => {
@@ -137,4 +172,5 @@ test('package manifest exposes the doctor CLI with npm-normalized bin metadata',
     'dsh-agy-provider': 'bin/dsh-agy-provider.js',
   })
   assert.ok(packageJson.files.includes('bin/**/*.js'))
+  assert.ok(packageJson.files.includes('agents/**/*.md'))
 })

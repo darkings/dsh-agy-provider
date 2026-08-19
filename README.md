@@ -46,6 +46,21 @@
 - 直接库调用的 `Config({})` 仍为 `enabled: false`、`toolPolicy: reject`；需要严格模式时，可在 profile patch 中显式覆盖 bundle 配置。
 - 安装后可运行 `npx dsh-agy-provider doctor --profile web --json`；doctor 只执行 AGY 版本、Agent、模型目录和 DSH config dump 检查，不发送 Prompt，`quotaUsed` 固定为 `false`。
 
+当前 0.6.0 Agent capability presets：
+
+- 现有 `deepseek-proxy` 保持不变，仍是默认的 `tools: []` 纯文本后端。
+- 包内新增 `tool-free`、`read-only` 和 `workspace-write` 三档模板；`read-only` 只允许 `find_by_name`、`grep_search`、`view_file`、`list_dir`，`workspace-write` 另外允许三个文件替换/写入工具，不包含 shell、网络、浏览器、MCP、subagent 或权限跳过。
+- 查看模板不会消耗 AGY 额度：`npx dsh-agy-provider agents list`。
+- 安装默认为 preview，不写文件；确认后再加 `--apply`。目标目录可用 `--dir` 或 `AGY_AGENT_DIR` 指定：
+
+```powershell
+npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents"
+npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents" --apply
+```
+
+- 已存在的 Agent 文件默认拒绝覆盖；需要保留旧文件时显式使用 `--apply --backup`。
+- Provider 侧使用 `agentPreset: read-only` 或 `agentPreset: workspace-write`；`workspace-write` 必须同时配置一个已存在且非文件系统根目录的 `workspaceRoot`。Provider 会把 canonical workspace 作为 AGY `cwd` 和 `--add-dir`，并分别使用 `--mode plan` 或 `--mode accept-edits`；未配置 preset 时保持旧 argv 和 `deepseek-proxy` 路径。
+
 当前 M7 配置、安全和可观测性：
 
 - 配置默认 `maxConcurrent: 4`、`maxQueue: 32`、`queueTimeoutMs: 30000`，超出后分别返回 `QUEUE_FULL` 或 `QUEUE_TIMEOUT`。
@@ -134,6 +149,7 @@ dsh-agy-provider/
 │  ├─ verified-baseline.md
 │  └─ migration-0.5.0.md
 ├─ src/
+│  ├─ agent-presets.ts / agent-installer.ts / agents-cli.ts # Agent 模板、安装和 quota-free CLI
 │  ├─ agy/          # 子进程、参数、事件解析、模型发现、诊断、限流和脱敏
 │  │  ├─ experimental-transport.ts # V3-M4 隔离持久 worker prototype
 │  │  └─ redact.ts / log.ts / models.ts # V3-M5 脱敏、日志和目录诊断边界
@@ -149,6 +165,7 @@ dsh-agy-provider/
 │  ├─ dsh-smoke-self-contained.mjs # 原生 plugin add 的 Web/headless smoke
 │  └─ quota-experiment.mjs # 人工触发的 full/resume quota 对照
 ├─ tests/
+├─ agents/          # 随 npm 包发布的最小能力档位模板
 ├─ task_plan.md
 ├─ findings.md
 └─ progress.md

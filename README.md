@@ -232,17 +232,18 @@ npm run smoke:dsh:self-contained
 
 未来版本会继续以“可验证、可回退、额度可控”为前提，重点包括：
 
-### 0.7.x：能力协商与图片闭环
+### 0.7.0：由 DSH 控制项目、权限与工具
 
-- 完成 DSH Web AttachmentStore → AGY view_file → 模型像素答案的端到端证据。
-- 只有在真实工具事件、临时文件清理、权限边界和 Web UI 都通过后，才考虑公开 image modality。
-- 将模型的文本、图片、工具能力改为可审计的 capability negotiation，而不是静态猜测。
+- 新增 DSH-owned tool bridge：AGY 只产生标准 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
+- 直接采用 DSH Session 的项目 `cwd`，以及 `read-only`、`workspace-write`、`danger-full-access` 权限选择，不在插件内复制第二套开关。
+- 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
+- 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。
 
-### 后续版本：工具与写入能力加固
+### 后续版本：图片与工具体验加固
 
-- 继续完善 workspace-write 的路径边界、冲突处理、备份和回滚体验。
-- 若 DSH 提供稳定且与 AGY 权限模型兼容的工具契约，再评估 DSH tool-call bridge；默认仍保持 AGY 单一工具所有者，避免双重执行。
-- 不会因为“有 read”就默认打开 write；写入始终需要显式 preset 和 workspaceRoot。
+- 完成 DSH Web AttachmentStore → AGY 模型像素答案的端到端证据后，再考虑公开 image modality。
+- 继续完善 workspace-write 的冲突处理、备份、回滚和 tool-call 展示体验。
+- 不会因为工具目录中存在 write 就绕过 DSH 权限；实际写入始终服从会话 permission preset 和项目边界。
 
 ### 后续版本：传输与成本优化
 
@@ -285,6 +286,7 @@ dsh-agy-provider/
 - [兼容性矩阵](docs/compatibility-matrix.md)
 - [发布检查清单](docs/release-checklist.md)
 - [CHANGELOG](CHANGELOG.md)
+- [0.7.0 开发计划](docs/v0.7.0-development-plan.md)
 - [0.6.0 开发计划](docs/v0.6.0-development-plan.md)
 - [DSH Provider 契约](docs/dsh-provider-contract.md)
 - [性能基线](docs/performance-baseline.md)

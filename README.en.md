@@ -232,17 +232,18 @@ Experiments that call a real AGY model never run automatically. The image experi
 
 Future work follows the same rules: verifiable behavior, safe fallback, and bounded quota use.
 
-### 0.7.x: capability negotiation and image closure
+### 0.7.0: DSH-controlled workspace, permissions, and tools
 
-- Complete DSH Web AttachmentStore → AGY view_file → real pixel-answer evidence.
-- Consider public image modality only after real tool events, temporary-file cleanup, permission boundaries, and the Web UI path all pass.
-- Replace static assumptions with auditable negotiation for text, image, and tool capabilities.
+- Add a DSH-owned tool bridge: AGY only produces standard DSH tool calls, while DSH ToolRuntime executes filesystem, shell, network, and MCP tools.
+- Use the DSH Session project `cwd` and its `read-only`, `workspace-write`, or `danger-full-access` selection instead of duplicating switches in this plugin.
+- Keep sandboxing, approval, MCP credentials, and side effects inside DSH; the Provider does not pass `--dangerously-skip-permissions`.
+- See the [0.7.0 development plan](docs/v0.7.0-development-plan.md) for scope, security gates, quota budget, and milestones.
 
-### Later: tool and write hardening
+### Later: image and tool UX hardening
 
-- Improve workspace-write path boundaries, conflict handling, backup, and rollback UX.
-- Evaluate a DSH tool-call bridge only if DSH exposes a stable contract compatible with AGY's permission model. AGY remains the default single tool owner.
-- Never turn write access on merely because read access exists; explicit preset and workspaceRoot remain required.
+- Consider public image modality only after an end-to-end DSH Web AttachmentStore → AGY pixel-answer path is proven.
+- Improve workspace-write conflict handling, backup, rollback, and tool-call presentation.
+- Never bypass the DSH session permission preset merely because a write tool exists in the catalog.
 
 ### Later: transport and cost optimization
 
@@ -285,6 +286,7 @@ dsh-agy-provider/
 - [Compatibility matrix](docs/compatibility-matrix.md)
 - [Release checklist](docs/release-checklist.md)
 - [CHANGELOG](CHANGELOG.md)
+- [0.7.0 development plan](docs/v0.7.0-development-plan.md)
 - [0.6.0 development plan](docs/v0.6.0-development-plan.md)
 - [DSH Provider contract](docs/dsh-provider-contract.md)
 - [Performance baseline](docs/performance-baseline.md)

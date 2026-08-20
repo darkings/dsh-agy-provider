@@ -4,7 +4,7 @@
 在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
 
 ## 当前阶段
-V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress，下一实施入口）
+V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress）
 
 ## 各阶段
 
@@ -20,7 +20,7 @@ V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress，下一实施入口
 - [ ] 捕获 AGY 1.1.15 真实 `--input-format stream-json` 帧协议（request/ready/event/complete/error/shutdown），与 `src/agy/experimental-transport.ts` 的 prototype envelope 做差异对照
 - [ ] 建立 DSH `0.1.0-rc.7` stable 回归与 `0.1.0-rc.8` next 兼容 lane，验证 Web/headless、Provider contract、AttachmentStore、ToolRuntime
 - [ ] 输出 M1 go/no-go 判定：协议可产品化且 rc.7 无回归才进入 M2
-- **状态：** pending
+- **状态：** in_progress
 - **交付：** `docs/agents.md` 更新、真实帧样例 fixture、双轨测试脚本
 - **门禁：** 捕获的真实帧与 prototype 不一致时，以真实帧为准重写 transport，不复用 fixture 契约
 
@@ -92,4 +92,5 @@ V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress，下一实施入口
 - 做重大决策前重读本计划
 - 记录所有错误，避免重复
 - 当前基线：`dsh-agy-provider@0.7.0` / AGY `1.1.15` / DSH `0.1.0-rc.7` stable / DSH `0.1.0-rc.8` next（规划基线，见 v0.8.0 计划 §2）
+
 

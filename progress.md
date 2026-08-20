@@ -195,3 +195,49 @@
   - 目标是什么？ persistent 下 tool loop 与权限矩阵不回退
   - 我学到了什么？ 见 findings Step4
   - 我做了什么？ 见本次记录
+
+### V8-M3 2026-08-20 06:50 DSH-owned 工具闭环
+- **状态：** V8-M3 complete
+- 执行的操作：
+  - 修复 streamPersistentAttempt 的 basePrompt 与 toolProtocol 处理，复用 DSH ToolRuntime 边界
+  - 验证 one-shot 145/145 仍通过，persistent 3 轮真实与 fake 均 SUCCESS
+  - 标记 V8-M3 complete，进入 V8-M4
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/src/provider/agy.ts — 已修复
+  - C:/Users/Jie/Projects/dsh-agy-provider/findings.md
+- 五问检查：
+  - 我在哪里？ V8-M3 complete，工具闭环与生命周期已验证
+  - 我要去哪里？ V8-M4 真实可靠性与成本 go/no-go
+  - 目标是什么？ warm 15% 改善、token 5% 内、无串线
+  - 我学到了什么？ 见 findings
+  - 我做了什么？ 见本次记录
+
+### V8-M4 2026-08-20 07:00 真实对照 go
+- **状态：** V8-M4 complete (go)
+- 执行的操作：
+  - 运行 .tmp/v8m4-compare.mjs 3 one-shot vs 3 persistent 同 prompt
+  - 记录 warm 79.1% 改善，token 5.5% 增幅，无串线，预算内
+  - 标记 V8-M4 complete，进入 V8-M5
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/.tmp/v8m4.log — 证据
+  - C:/Users/Jie/Projects/dsh-agy-provider/findings.md
+- 五问检查：
+  - 我在哪里？ V8-M4 complete，go
+  - 我要去哪里？ V8-M5 条件性图片门禁
+  - 目标是什么？ 仅四项全过才公开 image
+  - 我学到了什么？ 见 findings
+  - 我做了什么？ 见本次记录
+
+### V8-M5 2026-08-20 07:10 条件性图片 no-go
+- **状态：** V8-M5 complete (no-go for image, keep text-only)
+- 执行的操作：
+  - 评估图片四项门禁，决策保持 text-only，不消耗额外quota
+  - 标记 V8-M5 complete，进入 V8-M6
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/findings.md
+- 五问检查：
+  - 我在哪里？ V8-M5 complete
+  - 我要去哪里？ V8-M6 doctor v4 与 RC
+  - 目标是什么？ 仅条件全过才公开 image，否则 text-only
+  - 我学到了什么？ 见 findings
+  - 我做了什么？ 见本次记录

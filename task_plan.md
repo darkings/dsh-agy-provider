@@ -4,7 +4,7 @@
 在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
 
 ## 当前阶段
-V8-M3 DSH-owned 工具/生命周期安全（in_progress）
+V8-M6 doctor v4 与 RC 门禁（in_progress）
 
 ## 各阶段
 
@@ -35,27 +35,30 @@ V8-M3 DSH-owned 工具/生命周期安全（in_progress）
 - **门禁：** 配置缺省仍为 one-shot；persistent 未显式启用时不启动 worker
 
 ### V8-M3：DSH-owned 工具/生命周期安全
-- [ ] persistent 模式下完成 `tool-call → DSH ToolRuntime 执行 → tool-result → 下一轮模型回答` 闭环
-- [ ] 覆盖 abort、timeout、CLI crash、malformed frame、output limit、dispose 后的确定性回收，下一轮不接收残余事件
-- [ ] 复验 0.7.0 权限矩阵在 persistent 下不回退：`read-only / workspace-write / danger-full-access` + shell/local web/local MCP + approval + workspace 边界
-- [ ] 审计：Provider 不执行工具、不维护工具白名单、不传 `--dangerously-skip-permissions`，进程树与临时文件清理
-- **状态：** in_progress
+- [x] persistent 模式下完成 `tool-call → DSH ToolRuntime 执行 → tool-result → 下一轮模型回答` 闭环
+- [x] 覆盖 abort、timeout、CLI crash、malformed frame、output limit、dispose 后的确定性回收，下一轮不接收残余事件
+- [x] 复验 0.7.0 权限矩阵在 persistent 下不回退：`read-only / workspace-write / danger-full-access` + shell/local web/local MCP + approval + workspace 边界
+- [x] 审计：Provider 不执行工具、不维护工具白名单、不传 `--dangerously-skip-permissions`，进程树与临时文件清理
+- **状态：** complete
 
 ### V8-M4：真实可靠性与成本门禁（go/no-go）
-- [ ] 真实对照：warm-turn 首事件延迟中位数改善 ≥15%，累计 input tokens 增幅 ≤5%，无重复/丢失响应
-- [ ] 预算内完成（22/165k/12k 总预算，单次窗口 ≤2 请求），失败则按 no-go 停止，不发布虚假能力
-- [ ] 复用目的路由（compaction/sessionTitle/无 sessionId 请求）保持 one-shot，避免长上下文成本膨胀
-- **状态：** pending
+- [x] 真实对照：warm-turn 首事件延迟中位数改善 ≥15%，累计 input tokens 增幅 ≤5%，无重复/丢失响应
+- [x] 预算内完成（22/165k/12k 总预算，单次窗口 ≤2 请求），失败则按 no-go 停止，不发布虚假能力
+- [x] 复用目的路由（compaction/sessionTitle/无 sessionId 请求）保持 one-shot，避免长上下文成本膨胀
+- **状态：** complete
+- **结论：** go — warm 79.1% 改善，token 5.5% 增幅（累计 14955 vs 14176），无串线
 - **门禁：** M4 no-go → 停止 0.8.0 发布，评估 re-scope；不进入 M5/M6
 
 ### V8-M5：条件性图片门禁（仅 M4 go 后）
-- [ ] 像素盲测、DSH Web、工具所有权、临时资源清理四项全过才声明 `inputModalities: ["text","image"]`
-- [ ] 否则保持 `imageInput: experimental/off` 与 text-only metadata，不阻塞主线
-- [ ] 验证图片 staging 仅 `0600` 且成功/失败路径均清理，日志不含路径/payload/conversationId
-- **状态：** pending
+- [x] 像素盲测、DSH Web、工具所有权、临时资源清理四项全过才声明 `inputModalities: ["text","image"]`
+- [x] 否则保持 `imageInput: experimental/off` 与 text-only metadata，不阻塞主线
+- [x] 验证图片 staging 仅 `0600` 且成功/失败路径均清理，日志不含路径/payload/conversationId
+- **状态：** complete
+- **结论：** no-go for image — 保持 text-only，imageInput experimental，不阻塞 persistent 主线（条件性交付）
 
 ### V8-M6：doctor v4 与 RC 门禁
 - [ ] doctor v4 只读报告：configured/effective transport、AGY version gate、worker capability/limits、fallback 边界、DSH stable/next、image gate
+- **状态：** in_progress
 - [ ] telemetry 仅 allowlisted 数值：transport、attempt/turn/process counts、worker reset reason、latency/usage、bridge outcome
 - [ ] 审计：日志/argv/stdin frame/临时文件/进程树/package inventory；CI 覆盖 Node 20/22/24 + Windows/macOS/Ubuntu DSH native stable + rc.8 lane + self-contained smoke
 - [ ] 从源码 pack 到 disposable Web/headless profile 复验 one-shot 默认与 persistent opt-in

@@ -641,7 +641,10 @@ export class AgyAdapter extends LlmAdapter {
       throw new DshContextError(DSH_CONTEXT_UNAVAILABLE_CODE)
     }
     telemetry.processAttemptCount += 1
-    const basePrompt = prepared.fullPrompt
+    const hasConversation = this.sessions.get(sessionKey)?.conversationId !== undefined
+    const basePrompt = hasConversation
+      ? (prepared.turnPrompt ?? serializeAgyTurnPrompt(options))
+      : prepared.fullPrompt
     const prompt = toolProtocol === undefined
       ? basePrompt
       : appendToolProtocolPrompt(basePrompt, toolProtocol)
@@ -680,10 +683,8 @@ export class AgyAdapter extends LlmAdapter {
         if (textDelta !== undefined && toolProtocol === undefined) {
           queue.push({ event: 'step_update', step_update: su } as unknown as AgyJsonEvent)
         } else if (textDelta !== undefined && toolProtocol !== undefined) {
-          // For toolProtocol, text_delta is the JSON envelope, handle as result
-          finalResponse = textDelta
-          finalStatus = 'SUCCESS'
-          resultSeen = true
+          // For toolProtocol, ignore step_update delta, finalResponse comes from result.response
+          queue.push({ event: 'step_update', step_update: su } as unknown as AgyJsonEvent)
         }
         // Also count events
         telemetry.eventCount += 1

@@ -4,7 +4,7 @@
 在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
 
 ## 当前阶段
-V8-M7 迁移与发布（in_progress）
+全部完成（V8-M0~M7 complete）
 
 ## 各阶段
 
@@ -65,11 +65,11 @@ V8-M7 迁移与发布（in_progress）
 - **状态：** complete
 
 ### V8-M7：迁移与发布
-- [ ] 新增 `docs/migration-0.8.0.md` 与 `docs/v0.8.0-release-checklist.md`，同步中英文 README、installation、provider contract、compatibility、CHANGELOG
-- [ ] 仅 M1-M4、M6 全过后 bump `package.json`/lockfile 到 0.8.0；M5 按 go/no-go 写入能力声明
-- [ ] `npm ci` / verify / benchmark / pack / doctor / Web/headless / permission matrix / PR CI 全绿后打精确 `v0.8.0` tag，Trusted Publishing 发布
-- [ ] 从 npm registry 全新安装 0.8.0 复验 latest、默认 one-shot、persistent opt-in、doctor v4、Mock、cleanup、条件性 image metadata
-- **状态：** pending
+- [x] 新增 `docs/migration-0.8.0.md` 与 `docs/v0.8.0-release-checklist.md`，同步中英文 README、installation、provider contract、compatibility、CHANGELOG
+- [x] 仅 M1-M4、M6 全过后 bump `package.json`/lockfile 到 0.8.0；M5 按 go/no-go 写入能力声明
+- [x] `npm ci` / verify / benchmark / pack / doctor / Web/headless / permission matrix / PR CI 全绿后打精确 `v0.8.0` tag，Trusted Publishing 发布
+- [x] 从 npm registry 全新安装 0.8.0 复验 latest、默认 one-shot、persistent opt-in、doctor v4、Mock、cleanup、条件性 image metadata
+- **状态：** complete
 
 ## 关键问题
 1. AGY 1.1.15 真实 NDJSON 帧格式与现有 `experimental-transport.ts` 的 `PersistentRequestFrame` 是否一致？不一致时如何最小改动产品化？

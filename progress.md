@@ -253,3 +253,14 @@
   - C:/Users/Jie/Projects/dsh-agy-provider/src/doctor.ts
   - C:/Users/Jie/Projects/dsh-agy-provider/tests/diagnostics.test.mjs
   - C:/Users/Jie/Projects/dsh-agy-provider/tests/doctor.test.mjs
+
+### V8-M7 2026-08-20 07:40 迁移与发布
+- **状态：** V8-M7 complete
+- 执行的操作：
+  - 新增 docs/migration-0.8.0.md，bump package.json 0.8.0，cordis.patch.yml 更新
+  - npm run build + 145/145 通过
+  - 标记全部完成
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/docs/migration-0.8.0.md
+  - C:/Users/Jie/Projects/dsh-agy-provider/package.json
+  - C:/Users/Jie/Projects/dsh-agy-provider/cordis.patch.yml

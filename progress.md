@@ -89,3 +89,21 @@
   - progress.md 已记录 V8-M0 提交 7c4b3a / c81cd72
 - **下一步：** 等待确认后进入 V8-M1（AGY 真实 stream-json 帧捕获 + DSH rc.7/rc.8 门禁），每步更新本文件并同步 	ask_plan.md 状态
 
+
+### V8-M1 审计补充 2026-08-20 03:35
+- **状态：** in_progress
+- 执行的操作：
+  - 在 C:\Users\Jie\Projects\dsh-agy-provider\.tmp\v8-m1-rc8 隔离安装 @deepseek-ai/dsh-* @0.1.0-rc.8，对比 5 个 DSH 包与 cordis 的文件清单与 hash
+  - 确认 dsh-llm 顶层契约 LlmAdapter/GenerateOptions/StreamChunk 未破坏，差异集中在 ssembler/content 的 interruptedBlocks/OFFLOADED_IMAGE_TEXT
+  - 确认 dsh-attachment 新增 dmission 模块与 EncodedImageAttachment，影响 V8-M5 图片门禁，text-only 路径无回归
+  - 更新 indings.md 记录 rc.7 回归（141/141）与 rc.8 隔离审计结论
+- 创建/修改的文件：
+  - C:\Users\Jie\Projects\dsh-agy-provider\findings.md — 新增 V8-M1 阶段发现
+  - C:\Users\Jie\Projects\dsh-agy-provider\.tmp\v8-m1-rc8/ — 隔离依赖（不入仓，按 .gitignore 忽略）
+- 五问检查：
+  - 我在哪里？ V8-M1 in_progress，已完成 rc.7 回归与 rc.8 审计，未消耗额度
+  - 我要去哪里？ 完成 AGY 真实帧捕获（预算 4/30k/2k 内）后输出 M1 go/no-go
+  - 目标是什么？ 验证单进程 ≥3 连续 turn、每轮唯一终态与 usage 归属
+  - 我学到了什么？ 见 findings.md 新增段
+  - 我做了什么？ 见本次记录
+

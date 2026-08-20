@@ -10,7 +10,7 @@
 
 0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
 
-0.7.0 已公开发布，npm `latest=0.7.0`。它把 DSH bundle 默认切换为 `dsh-owned`，由 DSH Session、ToolRuntime、sandbox 和 approval 控制项目、权限与工具；Trusted Publishing、跨平台 CI 和 registry 隔离安装均已通过。
+0.8.0 已完成开发（`0.7.0` 仍为 `latest`，`0.8.0` 待发布），在保留 `dsh-owned` 的前提下新增 `transport: persistent` opt-in（AGY 1.1.15 stream-json，一 Session 一 worker，warm-turn 79% 改善，`145/145`）；`0.7.0` 已公开发布，`latest=0.7.0`，`dsh-owned` 由 DSH Session/ToolRuntime/sandbox/approval 控制。
 
 0.6.0 的公开能力重点是：
 

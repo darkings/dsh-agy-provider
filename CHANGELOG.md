@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0] - 2026-08-20
+
+### Added
+
+- Persistent `stream-json` 传输：`transport: one-shot|persistent` 默认 `one-shot`，`persistent` 时一 Session 一 AGY worker，`encodeAgyUserMessage {event:"user"}` 真实协议，`init/step_update/result` 复用，`idle TTL/ready` 与 `before-accept` 回退。
+- Doctor v4（`schemaVersion 2`）：报告 `transport/persistentIdleTtlMs/readyTimeout/fallback`，`AGY 1.1.15` 与 `DSH rc.7/rc.8` 双 lane。
+- `tests/persistent-transport.test.mjs` 4 用例（100 串行/8 并发等）与 `fixtures/persistent-worker-real.mjs`。
+
+### Changed
+
+- `stream-protocol` 新增 `AgyStreamUserMessage` 与 `encodeAgyUserMessage`，以真实 AGY 帧为准，不复用 fixture 信封。
+- `one-shot` 保持默认，`persistent` 仅显式启用才起 worker，`compaction/sessionTitle` 保持 one-shot。
+
+### Release result
+
+- `0.8.0` 开发完成（`V8-M0~M7`），`145/145`，`63-file pack`，`benchmark 927k events/s`，`doctor v4`，真实 3 轮 warm 79% 改善，待 `v0.8.0` tag 与 Trusted Publishing。
+
 ## [0.7.0] - 2026-08-20
 
 ### Added

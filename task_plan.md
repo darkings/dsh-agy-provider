@@ -28,7 +28,7 @@ V8-M2 persistent adapter（in_progress，下一实施入口，按真实协议重
 ### V8-M2：Persistent Adapter（Session-affine Worker Pool）
 - [x] Step1: transport 配置（one-shot 默认，persistent opt-in，idle/ready/fallback）
 - [x] Step2: worker 产品化 — 将 experimental-transport 的 {kind:request} 改为真实 {event:"user"}，输出改为 init/step_update/result，复用 AgyStreamParser
-- [ ] Step3: AgyAdapter 双 transport 分发（session-affine 一 Session 一 worker，单 active turn，maxConcurrent 限流，写入前 before-accept 回退）
+- [x] Step3: AgyAdapter 双 transport 分发（session-affine 一 Session 一 worker，单 active turn，maxConcurrent 限流，写入前 before-accept 回退）
 - [ ] Step4: 验收 — 100 串行 / 8 并发 / cap / TTL / abort / timeout / crash / malformed / output limit / dispose 残余 0
 - **状态：** in_progress
 - **交付：** `src/agy/persistent-transport.ts` 产品化、`src/provider/agy.ts` 双 transport 分发、`src/provider/config.ts` 新增字段

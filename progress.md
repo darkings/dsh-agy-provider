@@ -161,3 +161,20 @@
   - 目标是什么？ 一 Session 一 worker、单 active turn、maxConcurrent 限流
   - 我学到了什么？ 见 findings.md warm-turn 改善
   - 我做了什么？ 见本次记录
+
+### V8-M2 Step3 2026-08-20 06:10 AgyAdapter 双 transport
+- **状态：** V8-M2 in_progress
+- 执行的操作：
+  - 在 src/provider/agy.ts 新增 transport 字段、persistentTransport 实例与 shouldUsePersistent/streamPersistentAttempt
+  - 实现 session-affine 一 Session 一 worker、单 active turn、before-accept 回退
+  - 验证 adapter-persistent.log 3 轮同 session 均 SUCCESS，warm-turn 正常
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/src/provider/agy.ts — 双 transport 分发
+  - C:/Users/Jie/Projects/dsh-agy-provider/src/agy/persistent-transport.ts — 已产品化
+  - C:/Users/Jie/Projects/dsh-agy-provider/findings.md — 新增 Step3
+- 五问检查：
+  - 我在哪里？ V8-M2 Step3 完成，adapter 已支持 persistent opt-in
+  - 我要去哪里？ Step4 验收 100 串行/8 并发/cap/TTL/abort/timeout/crash 等
+  - 目标是什么？ 配置缺省仍 one-shot，persistent 显式启用才起 worker
+  - 我学到了什么？ 见 findings adapter 测试
+  - 我做了什么？ 见本次记录

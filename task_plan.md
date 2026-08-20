@@ -4,7 +4,7 @@
 在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
 
 ## 当前阶段
-V8-M2 persistent adapter（in_progress，下一实施入口，按真实协议重写 worker）
+V8-M3 DSH-owned 工具/生命周期安全（in_progress）
 
 ## 各阶段
 
@@ -29,8 +29,8 @@ V8-M2 persistent adapter（in_progress，下一实施入口，按真实协议重
 - [x] Step1: transport 配置（one-shot 默认，persistent opt-in，idle/ready/fallback）
 - [x] Step2: worker 产品化 — 将 experimental-transport 的 {kind:request} 改为真实 {event:"user"}，输出改为 init/step_update/result，复用 AgyStreamParser
 - [x] Step3: AgyAdapter 双 transport 分发（session-affine 一 Session 一 worker，单 active turn，maxConcurrent 限流，写入前 before-accept 回退）
-- [ ] Step4: 验收 — 100 串行 / 8 并发 / cap / TTL / abort / timeout / crash / malformed / output limit / dispose 残余 0
-- **状态：** in_progress
+- [x] Step4: 验收 — 100 串行 / 8 并发 / cap / TTL / abort / timeout / crash / malformed / output limit / dispose 残余 0
+- **状态：** complete
 - **交付：** `src/agy/persistent-transport.ts` 产品化、`src/provider/agy.ts` 双 transport 分发、`src/provider/config.ts` 新增字段
 - **门禁：** 配置缺省仍为 one-shot；persistent 未显式启用时不启动 worker
 
@@ -39,7 +39,7 @@ V8-M2 persistent adapter（in_progress，下一实施入口，按真实协议重
 - [ ] 覆盖 abort、timeout、CLI crash、malformed frame、output limit、dispose 后的确定性回收，下一轮不接收残余事件
 - [ ] 复验 0.7.0 权限矩阵在 persistent 下不回退：`read-only / workspace-write / danger-full-access` + shell/local web/local MCP + approval + workspace 边界
 - [ ] 审计：Provider 不执行工具、不维护工具白名单、不传 `--dangerously-skip-permissions`，进程树与临时文件清理
-- **状态：** pending
+- **状态：** in_progress
 
 ### V8-M4：真实可靠性与成本门禁（go/no-go）
 - [ ] 真实对照：warm-turn 首事件延迟中位数改善 ≥15%，累计 input tokens 增幅 ≤5%，无重复/丢失响应

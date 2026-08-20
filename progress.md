@@ -178,3 +178,20 @@
   - 目标是什么？ 配置缺省仍 one-shot，persistent 显式启用才起 worker
   - 我学到了什么？ 见 findings adapter 测试
   - 我做了什么？ 见本次记录
+
+### V8-M2 Step4 2026-08-20 06:40 验收 fake
+- **状态：** V8-M2 complete
+- 执行的操作：
+  - 新建 fixtures/persistent-worker-real.mjs 与 tests/persistent-transport.test.mjs
+  - 运行 npm test 145/145 通过，覆盖 100 串行/8 并发/cap/TTL/crash/abort/timeout/output-limit/malformed/dispose
+  - 标记 V8-M2 4 步骤全部完成，V8-M2 complete，进入 V8-M3
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/tests/fixtures/persistent-worker-real.mjs
+  - C:/Users/Jie/Projects/dsh-agy-provider/tests/persistent-transport.test.mjs
+  - C:/Users/Jie/Projects/dsh-agy-provider/findings.md
+- 五问检查：
+  - 我在哪里？ V8-M2 complete，已完成 worker、adapter、验收
+  - 我要去哪里？ V8-M3 DSH-owned tool loop 与生命周期安全
+  - 目标是什么？ persistent 下 tool loop 与权限矩阵不回退
+  - 我学到了什么？ 见 findings Step4
+  - 我做了什么？ 见本次记录

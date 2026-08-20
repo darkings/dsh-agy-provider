@@ -4,7 +4,7 @@
 在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
 
 ## 当前阶段
-V8-M6 doctor v4 与 RC 门禁（in_progress）
+V8-M7 迁移与发布（in_progress）
 
 ## 各阶段
 
@@ -57,12 +57,12 @@ V8-M6 doctor v4 与 RC 门禁（in_progress）
 - **结论：** no-go for image — 保持 text-only，imageInput experimental，不阻塞 persistent 主线（条件性交付）
 
 ### V8-M6：doctor v4 与 RC 门禁
-- [ ] doctor v4 只读报告：configured/effective transport、AGY version gate、worker capability/limits、fallback 边界、DSH stable/next、image gate
-- **状态：** in_progress
-- [ ] telemetry 仅 allowlisted 数值：transport、attempt/turn/process counts、worker reset reason、latency/usage、bridge outcome
-- [ ] 审计：日志/argv/stdin frame/临时文件/进程树/package inventory；CI 覆盖 Node 20/22/24 + Windows/macOS/Ubuntu DSH native stable + rc.8 lane + self-contained smoke
-- [ ] 从源码 pack 到 disposable Web/headless profile 复验 one-shot 默认与 persistent opt-in
-- **状态：** pending
+- [x] doctor v4 只读报告：configured/effective transport、AGY version gate、worker capability/limits、fallback 边界、DSH stable/next、image gate
+- **状态：** complete
+- [x] telemetry 仅 allowlisted 数值：transport、attempt/turn/process counts、worker reset reason、latency/usage、bridge outcome
+- [x] 审计：日志/argv/stdin frame/临时文件/进程树/package inventory；CI 覆盖 Node 20/22/24 + Windows/macOS/Ubuntu DSH native stable + rc.8 lane + self-contained smoke
+- [x] 从源码 pack 到 disposable Web/headless profile 复验 one-shot 默认与 persistent opt-in
+- **状态：** complete
 
 ### V8-M7：迁移与发布
 - [ ] 新增 `docs/migration-0.8.0.md` 与 `docs/v0.8.0-release-checklist.md`，同步中英文 README、installation、provider contract、compatibility、CHANGELOG

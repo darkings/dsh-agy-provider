@@ -241,3 +241,15 @@
   - 目标是什么？ 仅条件全过才公开 image，否则 text-only
   - 我学到了什么？ 见 findings
   - 我做了什么？ 见本次记录
+
+### V8-M6 2026-08-20 07:30 doctor v4
+- **状态：** V8-M6 complete (minimal)
+- 执行的操作：
+  - 升级 diagnostics schemaVersion 2，configuration 新增 transport 字段
+  - 修复 doctor/ diagnostics 测试 145/145 通过
+  - 标记 V8-M6 complete，进入 V8-M7
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/src/diagnostics.ts
+  - C:/Users/Jie/Projects/dsh-agy-provider/src/doctor.ts
+  - C:/Users/Jie/Projects/dsh-agy-provider/tests/diagnostics.test.mjs
+  - C:/Users/Jie/Projects/dsh-agy-provider/tests/doctor.test.mjs

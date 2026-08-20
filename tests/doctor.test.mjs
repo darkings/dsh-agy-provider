@@ -210,7 +210,7 @@ test('runDoctor combines provider and profile diagnostics into unified report', 
       },
     })
 
-    assert.equal(doctorResult.schemaVersion, 1)
+    assert.equal(doctorResult.schemaVersion, 2)
     assert.equal(doctorResult.quotaUsed, false)
     assert.equal(doctorResult.profile?.name, 'headless')
     assert.equal(doctorResult.profile?.packageInstalled, true)

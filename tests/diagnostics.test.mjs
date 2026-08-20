@@ -105,7 +105,7 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
         : result(['deepseek-proxy']),
   })
 
-  assert.equal(resultValue.schemaVersion, 1)
+  assert.equal(resultValue.schemaVersion, 2)
   assert.equal(resultValue.ok, true)
   assert.equal(resultValue.quotaUsed, false)
   assert.equal(resultValue.plugin.version, '0.2.0-test')

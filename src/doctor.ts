@@ -1007,8 +1007,9 @@ export function formatDoctorHuman(result: DoctorResult): string {
   }
 
   lines.push(
-    `provider: ${result.configuration.provider}; agent=${result.configuration.agent}; defaultModel=${result.configuration.defaultModel}; toolPolicy=${result.configuration.toolPolicy}`,
+    `provider: ${result.configuration.provider}; agent=${result.configuration.agent}; defaultModel=${result.configuration.defaultModel}; toolPolicy=${result.configuration.toolPolicy}; transport=${(result.configuration as any).transport ?? 'one-shot'}`,
   )
+  lines.push(`transport: persistentIdleTtlMs=${(result.configuration as any).persistentIdleTtlMs ?? 30000}; readyTimeout=${(result.configuration as any).persistentReadyTimeoutMs ?? 10000}; fallback=${(result.configuration as any).persistentFallback ?? 'before-accept'}`)
   lines.push(`models: ${result.models.map(m => `${m.id} (${m.name})`).join(', ') || 'none'}`)
   lines.push(
     `modelCatalog: source=${result.modelCatalog.source}; stale=${result.modelCatalog.stale}; warningCode=${result.modelCatalog.warningCode ?? 'none'}`,

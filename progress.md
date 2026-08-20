@@ -74,3 +74,18 @@
 ---
 *每个阶段完成后或遇到错误时更新此文件*
 
+
+### 2026-08-20 03:05 复核 0.8.0 计划（用户指定路径）
+- **状态：** 已重读 C:\Users\Jie\Projects\dsh-agy-provider\docs\v0.8.0-development-plan.md 全量 294 行，确认与 	ask_plan.md 对齐
+- **计划状态：** 规划完成，尚未开始实施；package version / npm latest / v0.7.0 tag 保持不变（计划 §1 声明）
+- **核对项：**
+  - 主题与决策 §1-3.4（one-shot 默认 / 一 Session 一 worker / 写入后不回退 / DSH 拥有工具权限）已映射到 	ask_plan.md V8-M0~M7
+  - 成功标准 §4（8 条）与必做/不做 §5 已映射到各阶段交付与门禁
+  - 里程碑 V8-M1~M7、预算 22/165k/12k、DoD 8 条、顺序图与风险表 §10 已完整收录
+  - 实施顺序明确：V8-M1 为第一实施步，不先改默认配置或重写 one-shot adapter
+- **与现状一致性：**
+  - 	ask_plan.md V8-M0 已 complete，对应计划 §12 的 V8-M0 planning
+  - indings.md 已记录 0.7.0 基线 / AGY 1.1.15 / DSH rc.7+rc.8 双轨 / transport 约束 / 图片条件性
+  - progress.md 已记录 V8-M0 提交 7c4b3a / c81cd72
+- **下一步：** 等待确认后进入 V8-M1（AGY 真实 stream-json 帧捕获 + DSH rc.7/rc.8 门禁），每步更新本文件并同步 	ask_plan.md 状态
+

@@ -145,3 +145,19 @@
   - 目标是什么？ 保持 0.7.0 行为不变，persistent 仅 opt-in
   - 我学到了什么？ 见 findings.md 真实协议与 config 默认
   - 我做了什么？ 见本次记录
+
+### V8-M2 Step2 2026-08-20 05:30 worker 产品化
+- **状态：** V8-M2 in_progress
+- 执行的操作：
+  - 复制 src/agy/experimental-transport.ts 为 src/agy/persistent-transport.ts，产品化为真实 AGY 1.1.15：输入 encodeAgyUserMessage，输出 parseAgyOutputLine(event init/step_update/result)，conversation_id 关联，idle TTL/readyTimeout 保留
+  - 修复 handleLine/sendRequest/stop/conversationId，npm run build 通过
+  - 验证 persistent-test.log 3 连续 turn 同 session：7420ms/2617ms/3011ms，warm-turn 65% 改善，usage 可归属，无泄漏
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/src/agy/persistent-transport.ts — 新建产品化版本
+  - C:/Users/Jie/Projects/dsh-agy-provider/findings.md — 新增 Step2 段
+- 五问检查：
+  - 我在哪里？ V8-M2 Step2 完成，worker 已按真实协议重写
+  - 我要去哪里？ Step3 在 AgyAdapter 接入双 transport 分发与 before-accept 回退
+  - 目标是什么？ 一 Session 一 worker、单 active turn、maxConcurrent 限流
+  - 我学到了什么？ 见 findings.md warm-turn 改善
+  - 我做了什么？ 见本次记录

@@ -246,6 +246,13 @@ Future work follows the same rules: verifiable behavior, safe fallback, and boun
 - Keep sandboxing, approval, MCP credentials, and side effects inside DSH; the Provider does not pass `--dangerously-skip-permissions`.
 - See the [0.7.0 development plan](docs/v0.7.0-development-plan.md) for scope, security gates, quota budget, and milestones.
 
+### 0.8.0: persistent transport and DSH next compatibility (planned)
+
+- Productize AGY 1.1.15's official `stream-json` input as a stable, session-affine opt-in transport; one-shot remains the 0.8.0 default.
+- Validate both DSH rc.7 stable and rc.8 next without breaking the current stable baseline.
+- Keep public image modality conditional on pixel-answer, DSH Web, tool-ownership, and cleanup gates; otherwise remain text-only.
+- See the [0.8.0 development plan](docs/v0.8.0-development-plan.md) for scope, go/no-go criteria, quota budget, and release gates.
+
 ### Later: image and tool UX hardening
 
 - Consider public image modality only after an end-to-end DSH Web AttachmentStore → AGY pixel-answer path is proven.

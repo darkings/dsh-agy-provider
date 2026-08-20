@@ -246,6 +246,13 @@ npm run smoke:dsh:self-contained
 - 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
 - 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。
 
+### 0.8.0：Persistent transport 与 DSH next 兼容（已规划）
+
+- 以 AGY 1.1.15 正式 `stream-json` 输入协议为基础，将一 Session 一 worker 的 persistent transport 做成稳定 opt-in；0.8.0 仍保持 one-shot 默认。
+- 同时验证 DSH rc.7 stable 与 rc.8 next，不以升级 next 为代价破坏现有用户。
+- 图片 modality 只作为条件性交付：像素盲测、DSH Web、工具所有权和清理门禁全部通过才公开，否则继续 text-only。
+- 详细范围、go/no-go、额度预算和发布门禁见 [0.8.0 开发计划](docs/v0.8.0-development-plan.md)。
+
 ### 后续版本：图片与工具体验加固
 
 - 完成 DSH Web AttachmentStore → AGY 模型像素答案的端到端证据后，再考虑公开 image modality。

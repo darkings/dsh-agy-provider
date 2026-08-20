@@ -4,17 +4,17 @@
 在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
 
 ## 当前阶段
-V8-M0 规划收口（in_progress）
+V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress，下一实施入口）
 
 ## 各阶段
 
 ### V8-M0：规划与基线固化
 - [x] 完成 `docs/v0.8.0-development-plan.md` 范围、门禁、预算、DoD 定义
 - [x] 同步 README 中英文的 0.8.0 已规划声明
-- [ ] 创建本 `task_plan.md` / `findings.md` / `progress.md` 文件规划系统（本步）
-- [ ] 固化分支策略 `codex/v0.8.0-*` 与留痕规范（每步更新 progress + 必要时提交）
-- [ ] 冻结 0.7.0 基线：`package.json 0.7.0` / `v0.7.0 -> b94fa32` / npm latest=0.7.0 不在 M0 中 bump
-- **状态：** in_progress
+- [x] 创建本 `task_plan.md` / `findings.md` / `progress.md` 文件规划系统（本步）
+- [x] 固化分支策略 `codex/v0.8.0-*` 与留痕规范（每步更新 progress + 必要时提交）
+- [x] 冻结 0.7.0 基线：`package.json 0.7.0` / `v0.7.0 -> b94fa32` / npm latest=0.7.0 不在 M0 中 bump
+- **状态：** complete
 
 ### V8-M1：AGY 真实协议 + DSH rc.7/rc.8 门禁
 - [ ] 捕获 AGY 1.1.15 真实 `--input-format stream-json` 帧协议（request/ready/event/complete/error/shutdown），与 `src/agy/experimental-transport.ts` 的 prototype envelope 做差异对照
@@ -92,3 +92,4 @@ V8-M0 规划收口（in_progress）
 - 做重大决策前重读本计划
 - 记录所有错误，避免重复
 - 当前基线：`dsh-agy-provider@0.7.0` / AGY `1.1.15` / DSH `0.1.0-rc.7` stable / DSH `0.1.0-rc.8` next（规划基线，见 v0.8.0 计划 §2）
+

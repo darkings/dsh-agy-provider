@@ -3,7 +3,9 @@
 ## 会话：2026-08-20
 
 ### V8-M0：规划与基线固化
-- **状态：** in_progress
+- **状态：** complete
+- **完成时间：** 2026-08-20T03:00:00+08:00
+- **提交：** 7c4b3a chore: 初始化 0.8.0 文件规划与 V8-M0 留痕
 - **开始时间：** 2026-08-20T02:45:00+08:00
 - **分支：** `codex/v0.8.0-m0-planning`（从 `agent/v7-m4-capability-matrix` 切出）
 - **基线：** `package.json@0.7.0` / `v0.7.0 -> b94fa32` / AGY `1.1.15` / DSH `0.1.0-rc.7` stable + `rc.8` next
@@ -22,12 +24,13 @@
   - 更新 `task_plan.md` 将 V8-M0 标记为 `complete`，进入 V8-M1
 
 ### V8-M1：AGY 真实协议 + DSH rc.7/rc.8 门禁
-- **状态：** pending
+- **状态：** in_progress
+- **开始时间：** 2026-08-20T03:00:00+08:00
 - 执行的操作：
-  - （待开始）捕获 AGY 1.1.15 真实 stream-json 帧
-  - （待开始）建立 rc.7 回归与 rc.8 兼容 lane
+  - 准备捕获 AGY 1.1.15 真实 stream-json 帧（待执行 scripts/agy-protocol-experiment.mjs）
+  - 准备建立 DSH rc.7 回归与 rc.8 next 兼容 lane
 - 创建/修改的文件：
-  - （待定）
+  - （进行中）
 
 ### V8-M2：Persistent Adapter
 - **状态：** pending
@@ -70,3 +73,4 @@
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*
+

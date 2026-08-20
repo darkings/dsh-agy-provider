@@ -35,6 +35,8 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.throws(() => Config({ agentPreset: 'full-access' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ workspaceRoot: '   ' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ imageInput: 'always' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ transport: 'turbo' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ persistentFallback: 'always' }), error => error.name === 'ValidationError')
 })
 
 test('Config accepts only bounded transient retry policy overrides', () => {
@@ -96,6 +98,10 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
     maxQueue: 32,
     queueTimeoutMs: 30_000,
     maxOutputBytes: 8 * 1024 * 1024,
+    transport: 'one-shot',
+    persistentIdleTtlMs: 30_000,
+    persistentReadyTimeoutMs: 10_000,
+    persistentFallback: 'before-accept',
     maxEventLineLength: 1_048_576,
     retryPolicy: { maxRetries: 0, retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] },
     purposeRoutes: { compaction: {}, sessionTitle: {} },
@@ -106,6 +112,10 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
 
 test('Config keeps image input opt-in and supports the experimental bridge flag', () => {
   assert.equal(Config({}).imageInput, undefined)
+  assert.equal(Config({}).transport, 'one-shot')
+  assert.equal(Config({}).persistentIdleTtlMs, 30_000)
+  assert.equal(Config({}).persistentReadyTimeoutMs, 10_000)
+  assert.equal(Config({}).persistentFallback, 'before-accept')
   assert.equal(Config({ imageInput: 'experimental' }).imageInput, 'experimental')
 })
 

@@ -128,3 +128,20 @@
   - 我学到了什么？ 见 findings.md 真实协议差异与额度
   - 我做了什么？ 见本次记录
   - 下一步：更新 task_plan 标记 M1 complete/M2 in_progress，并修复 src/agy/stream-protocol.ts 的 encode
+
+### V8-M2 Step1 2026-08-20 05:00 config transport（一步留痕）
+- **状态：** V8-M2 in_progress
+- 执行的操作：
+  - 按 docs/v0.8.0-development-plan.md 第6节配置草案，以 V8-M1 真实帧为契约新增 transport 字段（最终字段名以审计为准）
+  - 修改 C:/Users/Jie/Projects/dsh-agy-provider/src/provider/config.ts：新增 TransportMode / PersistentFallbackMode，Config 接口 transport/persistentIdleTtlMs/persistentReadyTimeoutMs/persistentFallback，createConfigSchema 默认 one-shot/30000/10000/before-accept
+  - 修复 C:/Users/Jie/Projects/dsh-agy-provider/tests/config.test.mjs 预期（新增 transport 字段校验）
+  - 运行 npm run build + npm test：141/141 通过
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/src/provider/config.ts
+  - C:/Users/Jie/Projects/dsh-agy-provider/tests/config.test.mjs
+- 五问检查：
+  - 我在哪里？ V8-M2 Step1 完成，transport 配置已落地且默认 one-shot
+  - 我要去哪里？ Step2 将 experimental-transport 按真实 {event:"user"} 重写为 persistent-transport 产品化
+  - 目标是什么？ 保持 0.7.0 行为不变，persistent 仅 opt-in
+  - 我学到了什么？ 见 findings.md 真实协议与 config 默认
+  - 我做了什么？ 见本次记录

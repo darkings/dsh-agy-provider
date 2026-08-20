@@ -4,7 +4,7 @@
 在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
 
 ## 当前阶段
-V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress）
+V8-M2 persistent adapter（in_progress，下一实施入口，按真实协议重写 worker）
 
 ## 各阶段
 
@@ -17,10 +17,11 @@ V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress）
 - **状态：** complete
 
 ### V8-M1：AGY 真实协议 + DSH rc.7/rc.8 门禁
-- [ ] 捕获 AGY 1.1.15 真实 `--input-format stream-json` 帧协议（request/ready/event/complete/error/shutdown），与 `src/agy/experimental-transport.ts` 的 prototype envelope 做差异对照
-- [ ] 建立 DSH `0.1.0-rc.7` stable 回归与 `0.1.0-rc.8` next 兼容 lane，验证 Web/headless、Provider contract、AttachmentStore、ToolRuntime
-- [ ] 输出 M1 go/no-go 判定：协议可产品化且 rc.7 无回归才进入 M2
-- **状态：** in_progress
+- [x] 捕获 AGY 1.1.15 真实 `--input-format stream-json` 帧协议（request/ready/event/complete/error/shutdown），与 `src/agy/experimental-transport.ts` 的 prototype envelope 做差异对照
+- [x] 建立 DSH `0.1.0-rc.7` stable 回归与 `0.1.0-rc.8` next 兼容 lane，验证 Web/headless、Provider contract、AttachmentStore、ToolRuntime
+- [x] 输出 M1 go/no-go 判定：协议可产品化且 rc.7 无回归才进入 M2
+- **状态：** complete
+- **结论：** go — 单进程 3 连续 turn SUCCESS（conversation_id 一致，usage 可归属），真实输入为 {"event":"user","message":{...}}，与 prototype {kind:"request"} 不兼容，已以 three-turn.log 为证据
 - **交付：** `docs/agents.md` 更新、真实帧样例 fixture、双轨测试脚本
 - **门禁：** 捕获的真实帧与 prototype 不一致时，以真实帧为准重写 transport，不复用 fixture 契约
 
@@ -29,7 +30,7 @@ V8-M1 AGY 真实协议 + DSH rc.7/rc.8 门禁（in_progress）
 - [ ] 实现一 Session 一 worker、单 active turn、并发上限、idle TTL、ready/turn/shutdown timeout
 - [ ] one-shot/persistent 共用事件解析、错误分类、usage、tool protocol（`DSH TOOL PROTOCOL V1`）
 - [ ] 仅 `frame 写入前` 允许按策略回退 one-shot；写入后绝不自动重发（防重复计费）
-- **状态：** pending
+- **状态：** in_progress
 - **交付：** `src/agy/persistent-transport.ts` 产品化、`src/provider/agy.ts` 双 transport 分发、`src/provider/config.ts` 新增字段
 - **门禁：** 配置缺省仍为 one-shot；persistent 未显式启用时不启动 worker
 

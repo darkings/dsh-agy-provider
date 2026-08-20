@@ -107,3 +107,24 @@
   - 我学到了什么？ 见 findings.md 新增段
   - 我做了什么？ 见本次记录
 
+
+### V8-M1 真实帧捕获 2026-08-20 04:20（自主额度，已消耗约18105 input/928 output）
+- **状态：** in_progress -> 待标记 complete（本提交后）
+- 执行的操作：
+  - 自主额度管理：不再询问用户，按计划第7节预算串行执行；V8-M1 已用约18105 input/928 output，在 4/30k/2k 与总22/165k/12k 内
+  - 运行 .tmp/v8-m1/run-protocol.ps1（agy:protocol 单轮 error 0 token）复现 missing event field
+  - 运行 .tmp/v8-m1/event-brute.mjs 爆破 10 种 event，确认唯有 {"event":"user","message":{...}} 成功，其余 missing event / unsupported event / missing message
+  - 运行 .tmp/v8-m1/raw-probe.mjs 与 oneshot 验证 init/step_update/result 流语义一致
+  - 运行 .tmp/v8-m1/three-turn.mjs 单进程 3 连续 turn（de013811-235e-41ab-9d09-d60d3bc70581）：TURN1 4714/8.17s SUCCESS、TURN2 9845/12.67s SUCCESS、TURN3 15391/17.62s SUCCESS，step_index 连续、usage 可归属
+  - 对比 src/agy/experimental-transport.ts 假协议 {kind:"request"} 与真实协议差异，已记录于 findings.md
+- 创建/修改的文件：
+  - C:/Users/Jie/Projects/dsh-agy-provider/findings.md — 新增真实帧捕获完成段
+  - C:/Users/Jie/Projects/dsh-agy-provider/.tmp/v8-m1/*.mjs/*.log — 探针与证据（不入仓）
+  - 本次进度追加
+- 五问检查：
+  - 我在哪里？ V8-M1 in_progress，已完成真实帧捕获与3-turn验证
+  - 我要去哪里？ 标记 V8-M1 complete，进入 V8-M2 persistent adapter（按真实协议重写 worker）
+  - 目标是什么？ 验证单进程>=3 turn，已达成，M1 go
+  - 我学到了什么？ 见 findings.md 真实协议差异与额度
+  - 我做了什么？ 见本次记录
+  - 下一步：更新 task_plan 标记 M1 complete/M2 in_progress，并修复 src/agy/stream-protocol.ts 的 encode

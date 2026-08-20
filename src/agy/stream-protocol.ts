@@ -1,9 +1,13 @@
 /**
  * Small, transport-neutral helpers for AGY's stdin stream-json mode.
  *
- * This module deliberately does not assert an AGY input envelope. The real
- * CLI protocol is sampled by the guarded experiment script first; until that
- * evidence exists, production code must not depend on guessed fields.
+ * Real AGY 1.1.15 stream-json input is event-driven. Factual envelope sampled
+ * in V8-M1 (see findings.md 2026-08-20, .tmp/v8-m1/three-turn.log):
+ *   input:  {"event":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}} per NDJSON line
+ *   output: {"event":"init","conversation_id":"...","init":{...}} then
+ *           {"event":"step_update",...} then {"event":"result",...} per turn.
+ * The generic encodeAgyStreamInput is retained for forward compatibility, but
+ * callers should use the typed encodeAgyUserMessage helper.
  */
 
 export type AgyProtocolValue = Record<string, unknown> | readonly unknown[] | string | number | boolean | null
@@ -21,6 +25,15 @@ export class AgyStreamProtocolError extends Error {
 
 function byteLength(value: string): number {
   return Buffer.byteLength(value, 'utf8')
+}
+
+/** Typed input for AGY 1.1.15 stream-json: one user turn per NDJSON line. */
+export interface AgyStreamUserMessage {
+  readonly event: "user";
+  readonly message: {
+    readonly role: "user";
+    readonly content: readonly { readonly type: "text"; readonly text: string }[];
+  };
 }
 
 /** Encode one stdin NDJSON message without invoking a shell. */
@@ -49,6 +62,18 @@ export function encodeAgyStreamInput(message: unknown, maxFrameBytes = 256 * 102
     )
   }
   return encoded
+}
+
+/** Encode one AGY stream-json user turn with the factual V8-M1 envelope. */
+export function encodeAgyUserMessage(text: string, maxFrameBytes = 256 * 1024): string {
+  if (typeof text !== "string" || text.length === 0) {
+    throw new AgyStreamProtocolError("AGY stream-json user text must be a non-empty string", "INVALID_INPUT");
+  }
+  const payload: AgyStreamUserMessage = {
+    event: "user",
+    message: { role: "user", content: [{ type: "text", text }] },
+  };
+  return encodeAgyStreamInput(payload, maxFrameBytes);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

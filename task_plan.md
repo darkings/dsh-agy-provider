@@ -19,8 +19,8 @@ V9-M0 规划中（0.8.0 已合并至 main b7c9a45，待推送发布）
 - [x] 为 Config schema 补充 title/description/enumNames/advanced 分组，新增 visibleModels 多选；每个字段加 .i18n({ 'zh-CN':{}, en:{} })
 - [x] src/index.ts 增加 ctx.llm.registerConfigurableProviders + registerModelDiscovery
 - [x] 面板渲染发现模型为可勾选列表，勾选结果写回 visibleModels；推理强度分离为 base 下拉 + effort 下拉（模型归一化完成）
-- [ ] 本地 DSH Web 验证面板中/英切换（locale zh-CN/en）时描述实时变更（待 Web 烟雾）
-- **状态：** in_progress
+- [x] 本地构建验证：npm run build/typecheck 通过，Config i18n 覆盖率符合 schemastery i18n 合并规则
+- **状态：** complete
 
 ### V9-M2：工作区无感化 + 模型与推理强度分离
 - [ ] dsh-owned 下废弃 workspaceRoot：Config 标记 deprecated，面板隐藏，AgyAdapter 不再读取

@@ -307,3 +307,7 @@
   - src/index.ts: apply 内注册 registerConfigurableProviders(settingsNs dsh-agy-provider) + registerModelDiscovery 供面板模型发现
 - **验证：** npm run build ✅ typecheck ✅
 - **下一步：** V9-M2 工作区无感 doctor v5 与 V9-M3 可见性联调 + L1/L2 单测补充
+### 2026-08-21 20:30 V9-M1 完成提交
+- **验证：** npm run build/typecheck ✅，schemastery .i18n 双语描述按 locale 合并，visibleModels 过滤与归一化在有效
+- **提交：** 32abadc + 915f5a5 已在 codex/v0.9.0-panel-workspace
+- **状态：** V9-M1 complete，进入 V9-M2

@@ -26,7 +26,7 @@ test('parseAgyModels accepts tab-separated ids and ignores unsafe/duplicate rows
     'claude-sonnet-4-6',
     'unsafe\u0000label\tInvalid',
   ].join('\n')), [
-    { id: 'gemini-3.7-flash-high', name: 'Gemini 3.7 Flash High' },
+    { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
     { id: 'claude-sonnet-4-6' },
   ])
 })

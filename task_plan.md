@@ -23,14 +23,14 @@ V9-M0 规划中（0.8.0 已合并至 main b7c9a45，待推送发布）
 - **状态：** complete
 
 ### V9-M2：工作区无感化 + 模型与推理强度分离
-- [ ] dsh-owned 下废弃 workspaceRoot：Config 标记 deprecated，面板隐藏，AgyAdapter 不再读取
-- [ ] 工具请求自动使用 DSH Session header.cwd + workspaceRegistry + sandboxPolicy 的 canonical 校验
-- [ ] 纯文本无 workspace 仍可用，有工具无 workspace 时返回 DSH_WORKSPACE_MISMATCH 可操作错误
-- [ ] 模型归一化：src/agy/models.ts normalizeModelId/extractEffort，configuredModels/parseAgyModels 按 base 去重；listModels 仅返回 base，reasoning.efforts 统一暴露
-- [ ] 兼容：请求 model 带 -high/-medium/-low 后缀时自动拆为 base+effort，warning 提示迁移
-- [ ] doctor v5 报告 settingsPanel/workspaceSource/effectiveWorkspace/visibleModels + DEPRECATED_WORKSPACE_ROOT/DEPRECATED_MODEL_EFFORT_SUFFIX warning
-- [ ] 文档与迁移说明：docs/migration-0.9.0.md
-- **状态：** pending
+- [x] dsh-owned 下废弃 workspaceRoot：Config 标记 deprecated，面板隐藏，AgyAdapter 不再读取
+- [x] 工具请求自动使用 DSH Session header.cwd + workspaceRegistry + sandboxPolicy 的 canonical 校验
+- [x] 纯文本无 workspace 仍可用，有工具无 workspace 时返回 DSH_WORKSPACE_MISMATCH 可操作错误
+- [x] 模型归一化：src/agy/models.ts normalizeModelId/extractEffort，configuredModels/parseAgyModels 按 base 去重；listModels 仅返回 base，reasoning.efforts 统一暴露
+- [x] 兼容：请求 model 带 -high/-medium/-low 后缀时自动拆为 base+effort，warning 提示迁移
+- [x] doctor v5 报告 settingsPanel/workspaceSource/effectiveWorkspace/visibleModels + DEPRECATED_WORKSPACE_ROOT/DEPRECATED_MODEL_EFFORT_SUFFIX warning (profileSchemaVersion 4)
+- [ ] 文档与迁移说明：docs/migration-0.9.0.md (待 V9-M4)
+- **状态：** complete
 
 ### V9-M3：模型可见性与平权收口
 - [ ] visibleModels 过滤：listModels 按可见性过滤，未勾选不在选择器出现但显式请求仍兼容

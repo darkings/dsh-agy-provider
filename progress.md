@@ -311,3 +311,7 @@
 - **验证：** npm run build/typecheck ✅，schemastery .i18n 双语描述按 locale 合并，visibleModels 过滤与归一化在有效
 - **提交：** 32abadc + 915f5a5 已在 codex/v0.9.0-panel-workspace
 - **状态：** V9-M1 complete，进入 V9-M2
+### 2026-08-21 21:00 V9-M2 完成提交
+- **实现：** doctor profileSchemaVersion 3→4，新增 workspaceSource/visibleModels/modelEffortSplit，deprecation 警告 DEPRECATED_WORKSPACE_ROOT/DEPRECATED_MODEL_EFFORT_SUFFIX，dsh-owned 时 workspaceRoot 免校验
+- **提交：** doctor v5
+- **状态：** V9-M2 complete

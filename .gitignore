@@ -11,7 +11,8 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Local planning and progress notes
-/findings.md
-/progress.md
-/task_plan.md
+# Local planning and progress notes (0.8.0: 跟踪 V8 规划，允许入仓留痕)
+# /findings.md
+# /progress.md
+# /task_plan.md
+

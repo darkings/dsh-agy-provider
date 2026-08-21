@@ -71,7 +71,7 @@ export interface ProviderDiagnosticOptions {
 }
 
 export interface ProviderDiagnosticResult {
-  schemaVersion: 1
+  schemaVersion: 2
   ok: boolean
   quotaUsed: false
   plugin: {
@@ -97,6 +97,10 @@ export interface ProviderDiagnosticResult {
     toolPolicy: ToolPolicy
     sessionMode: 'resume' | 'full'
     enabled: boolean
+    transport: string
+    persistentIdleTtlMs: number
+    persistentReadyTimeoutMs: number
+    persistentFallback: string
   }
   models: readonly DiagnosticModel[]
   modelCatalog: {
@@ -216,7 +220,7 @@ export async function diagnoseProvider(
     ?? metadata.peerDependencies?.['@deepseek-ai/dsh-llm']
     ?? null
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     ok: errors.length === 0,
     quotaUsed: false,
     plugin: {
@@ -239,9 +243,15 @@ export async function diagnoseProvider(
       agent: config.agent ?? 'deepseek-proxy',
       defaultModel: config.model ?? models[0]?.id ?? 'unknown',
       modelDiscovery: config.modelDiscovery === 'off' ? 'off' : 'auto',
-      toolPolicy: config.toolPolicy === 'agy-owned' ? 'agy-owned' : 'reject',
+      toolPolicy: config.toolPolicy === 'agy-owned'
+        ? 'agy-owned'
+        : config.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject',
       sessionMode: config.sessionMode === 'resume' ? 'resume' : 'full',
       enabled: config.enabled === true,
+      transport: (config as any).transport ?? 'one-shot',
+      persistentIdleTtlMs: (config as any).persistentIdleTtlMs ?? 30000,
+      persistentReadyTimeoutMs: (config as any).persistentReadyTimeoutMs ?? 10000,
+      persistentFallback: (config as any).persistentFallback ?? 'before-accept',
     },
     models,
     modelCatalog: {

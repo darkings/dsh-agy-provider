@@ -27,10 +27,12 @@ export { AgyAdapter, MockAdapter }
 export { AgyModelDiscovery, mergeModelCatalog, parseAgyModels } from './agy/models.js'
 export { diagnoseAgy } from './agy/diagnostics.js'
 export { diagnoseProvider } from './diagnostics.js'
-export { DshContextError, readDshContextServices, resolveDshContext } from './dsh/context.js'
+export { DshContextError, diagnoseDshContext, readDshContextServices, resolveDshContext } from './dsh/context.js'
 export {
+  appendToolProtocolPrompt,
   createStructuredToolProtocol,
   parseStructuredEnvelope,
+  renderToolProtocolPrompt,
   StructuredResponseAccumulator,
   ToolProtocolError,
   TOOL_PROTOCOL_LIMITS,
@@ -44,9 +46,12 @@ export type {
   DshContextSnapshot,
   DshContextState,
   DshContextErrorCode,
+  DshContextDiagnostic,
+  DshPermissionPreset,
   DshPermissionPresetServiceLike,
   DshSandboxMode,
   DshSandboxPolicyLike,
+  DshServiceAvailability,
   DshSessionLike,
   DshSessionState,
   DshSessionStoreLike,
@@ -84,7 +89,14 @@ export {
 } from './agent-installer.js'
 export { formatAgentsHelp, runAgentsCli } from './agents-cli.js'
 export { BundleConfig, ConfigSchema, createConfigSchema }
-export type { DoctorOptions, DoctorResult, ProfileDiagnosticOptions, ProfileDiagnosticResult } from './doctor.js'
+export type {
+  DoctorOptions,
+  DoctorResult,
+  EffectiveBridgeCapability,
+  EffectiveDshContext,
+  ProfileDiagnosticOptions,
+  ProfileDiagnosticResult,
+} from './doctor.js'
 export type {
   AgentExecutionMode,
   AgentPreset,

@@ -35,6 +35,8 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.throws(() => Config({ agentPreset: 'full-access' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ workspaceRoot: '   ' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ imageInput: 'always' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ transport: 'turbo' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ persistentFallback: 'always' }), error => error.name === 'ValidationError')
 })
 
 test('Config accepts only bounded transient retry policy overrides', () => {
@@ -96,6 +98,10 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
     maxQueue: 32,
     queueTimeoutMs: 30_000,
     maxOutputBytes: 8 * 1024 * 1024,
+    transport: 'one-shot',
+    persistentIdleTtlMs: 30_000,
+    persistentReadyTimeoutMs: 10_000,
+    persistentFallback: 'before-accept',
     maxEventLineLength: 1_048_576,
     retryPolicy: { maxRetries: 0, retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] },
     purposeRoutes: { compaction: {}, sessionTitle: {} },
@@ -106,6 +112,10 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
 
 test('Config keeps image input opt-in and supports the experimental bridge flag', () => {
   assert.equal(Config({}).imageInput, undefined)
+  assert.equal(Config({}).transport, 'one-shot')
+  assert.equal(Config({}).persistentIdleTtlMs, 30_000)
+  assert.equal(Config({}).persistentReadyTimeoutMs, 10_000)
+  assert.equal(Config({}).persistentFallback, 'before-accept')
   assert.equal(Config({ imageInput: 'experimental' }).imageInput, 'experimental')
 })
 
@@ -130,7 +140,7 @@ test('Config accepts a multi-model catalog and preserves the legacy model fallba
   assert.throws(() => Config({ models: [{ id: '  ' }] }), error => error.name === 'ValidationError')
 })
 
-test('cordis.patch.yml defines ready bundle defaults with agy-owned tool policy while library defaults remain inert', async () => {
+test('cordis.patch.yml defines DSH-owned bundle defaults while library defaults remain inert', async () => {
   const fs = await import('node:fs/promises')
   const { fileURLToPath } = await import('node:url')
   const patchContent = await fs.readFile(fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)), 'utf8')
@@ -146,7 +156,7 @@ test('cordis.patch.yml defines ready bundle defaults with agy-owned tool policy 
 
   assert.equal(idMatch?.[1], 'dsh-agy-provider')
   assert.equal(enabledMatch?.[1], 'true')
-  assert.equal(toolPolicyMatch?.[1], 'agy-owned')
+  assert.equal(toolPolicyMatch?.[1], 'dsh-owned')
   assert.equal(providerMatch?.[1], 'agy')
   assert.equal(modelMatch?.[1], 'gemini-3.1-pro-high')
   assert.equal(agentMatch?.[1], 'deepseek-proxy')
@@ -162,7 +172,7 @@ test('public Config remains safe while BundleConfig exposes ready defaults', () 
   assert.equal(ExportedConfig({}).enabled, false)
   assert.equal(ExportedConfig({}).toolPolicy, 'reject')
   assert.equal(ExportedBundleConfig({}).enabled, true)
-  assert.equal(ExportedBundleConfig({}).toolPolicy, 'agy-owned')
+  assert.equal(ExportedBundleConfig({}).toolPolicy, 'dsh-owned')
   assert.equal(ExportedConfigSchema({}).enabled, false)
   assert.equal(ExportedConfigSchema({}).toolPolicy, 'reject')
 })

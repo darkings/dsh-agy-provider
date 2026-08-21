@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.8.0] - 2026-08-20
+
+### Added
+
+- Persistent `stream-json` 传输：`transport: one-shot|persistent` 默认 `one-shot`，`persistent` 时一 Session 一 AGY worker，`encodeAgyUserMessage {event:"user"}` 真实协议，`init/step_update/result` 复用，`idle TTL/ready` 与 `before-accept` 回退。
+- Doctor v4（`schemaVersion 2`）：报告 `transport/persistentIdleTtlMs/readyTimeout/fallback`，`AGY 1.1.15` 与 `DSH rc.7/rc.8` 双 lane。
+- `tests/persistent-transport.test.mjs` 4 用例（100 串行/8 并发等）与 `fixtures/persistent-worker-real.mjs`。
+
+### Changed
+
+- `stream-protocol` 新增 `AgyStreamUserMessage` 与 `encodeAgyUserMessage`，以真实 AGY 帧为准，不复用 fixture 信封。
+- `one-shot` 保持默认，`persistent` 仅显式启用才起 worker，`compaction/sessionTitle` 保持 one-shot。
+
+### Release result
+
+- `0.8.0` 开发完成（`V8-M0~M7`），`145/145`，`63-file pack`，`benchmark 927k events/s`，`doctor v4`，真实 3 轮 warm 79% 改善，待 `v0.8.0` tag 与 Trusted Publishing。
+
+## [0.7.0] - 2026-08-20
+
+### Added
+
+- DSH-owned tool bridge：DSH `read`、`write`、`edit`、`glob`、`grep`、shell、local web 和 MCP 工具继续由 DSH ToolRuntime、Session workspace、sandbox 与 approval 执行。
+- request-scoped DSH context snapshot、doctor v3、permission/approval/tool bridge capability report 和 allowlisted telemetry。
+- prompt-contract tool-call 校验、参数/结果边界、未知工具拒绝、原型污染防护、abort/timeout/cleanup 和稳定 `UNSUPPORTED_TOOLS`/`PERMISSION_REQUIRED` 错误。
+- 公开 0.7.0 迁移说明与 RC/release checklist；packed artifact、Web/headless、跨平台和 registry smoke 门禁。
+
+### Changed
+
+- DSH bundle 默认从 0.6.x legacy `agy-owned` 切换为 `dsh-owned`；AGY 只负责模型文本推理和受约束的 tool-call 生成。
+- 项目目录和权限不再通过 Provider 的静态 `workspaceRoot` 或 AGY 参数猜测；以 DSH 当前 Session `cwd`、permission preset、sandbox 和 approval 为唯一权威。
+- Provider 不传 `--dangerously-skip-permissions`，不执行文件、shell、网络或 MCP 工具；`agy-owned` 保留为显式 legacy 兼容模式并由 doctor 警告。
+
+### Security
+
+- 公共 CI、fake adapter、local HTTP/MCP fixture 和 doctor 全部保持 `quotaUsed=false`；CI 不调用 AGY、不访问公网 fixture、不读取用户 profile/config。
+- 工具 schema/图片 staging 临时文件使用 `0600`，成功、失败和取消路径均清理；pack 不包含规划文件、测试、fixture、日志、Prompt/response 或凭据。
+
+### Release result
+
+- 版本 bump、verify、benchmark、61-file pack dry-run、141/141 tests 和 Windows/Ubuntu/macOS × Node 20/22/24 / DSH Node 22/24 CI 已通过。
+- `v0.7.0` 已指向 release commit `b94fa32`；PR CI run `32286276907` 通过 17/17。
+- npm Trusted Publishing run `32286511205` 成功；registry 已确认 `dsh-agy-provider@0.7.0`、`latest=0.7.0` 和 tarball 可访问。
+- 发布后 registry Web/headless smoke 与 15/15 DSH permission/tool matrix 通过，`workspaceSource=dsh-session-cwd`、`toolExecution=dsh-tool-runtime`、`quotaUsed=false`、cleanup completed。
+
 ## [0.6.1] - 2026-08-19
 
 ### Fixed

@@ -4,11 +4,13 @@
 
 把本机已经登录的 **AGY CLI** 暴露为 [DSH](https://github.com/darkings/dsh) 的模型 Provider。
 
-它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；真正的认证、模型选择和 Agent 工具执行仍由本机 agy 负责。
+它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；认证和模型选择由本机 agy 负责，0.6.x legacy 工具由 AGY 执行，0.7.0 DSH-owned bridge 的实际工具执行由 DSH ToolRuntime 负责。
 
 ## 项目状态
 
 0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
+
+0.8.0 已完成开发（`0.7.0` 仍为 `latest`，`0.8.0` 待发布），在保留 `dsh-owned` 的前提下新增 `transport: persistent` opt-in（AGY 1.1.15 stream-json，一 Session 一 worker，warm-turn 79% 改善，`145/145`）；`0.7.0` 已公开发布，`latest=0.7.0`，`dsh-owned` 由 DSH Session/ToolRuntime/sandbox/approval 控制。
 
 0.6.0 的公开能力重点是：
 
@@ -16,7 +18,7 @@
 - DSH Session 与 AGY Conversation 的安全映射。
 - agy models 动态模型发现、缓存和静态 fallback。
 - low/medium/high reasoning effort 显式映射。
-- AGY-owned 工具策略、Agent capability presets 和 doctor v2。
+- DSH-owned 工具桥接、Agent capability presets 和 doctor v3；0.6.1 的 AGY-owned 路径保留为 legacy 兼容模式。
 - 默认零自动重试、quota-free 诊断和跨平台测试门禁。
 
 图片输入已经有受限的 experimental bridge，但公开模型目录仍然只声明 inputModalities: ['text']。在 DSH Web 的 AttachmentStore、AGY view_file 和真实像素答案闭环被验证前，项目不会把它宣传为正式识图能力。
@@ -65,7 +67,7 @@ Provider 使用 spawn(executable, args) 启动 AGY，不经过 shell 拼接命�
 项目明确只允许一个工具执行者：
 
 - 程序化 Provider 默认 toolPolicy: reject，收到 DSH tool schema 时返回 UNSUPPORTED_TOOLS。
-- 通过 DSH profile 安装的 bundle 默认使用 toolPolicy: agy-owned，DSH schema 不会重复发送，AGY 负责自己的内部工具。
+- 已发布的 0.6.1 DSH bundle 默认使用 toolPolicy: agy-owned；0.7.0 开发分支已切换为 toolPolicy: dsh-owned，DSH schema 经过 bounded contract 交给 AGY 生成调用，实际执行仍由 DSH ToolRuntime 完成。
 - 发生权限请求时返回 PERMISSION_REQUIRED 并终止请求，不自动批准，不使用 --dangerously-skip-permissions。
 
 ### 4. Agent capability presets 与读写能力
@@ -92,7 +94,7 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 
 已有模板默认拒绝覆盖；需要保留旧文件时显式增加 --backup。
 
-### 5. Doctor v2 与安全诊断
+### 5. Doctor v3 与安全诊断（0.7.0）
 
 发布包提供 profile-aware doctor：
 
@@ -100,7 +102,9 @@ npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents
 npx dsh-agy-provider doctor --profile web --json
 ~~~
 
-doctor v2 输出 profileSchemaVersion: 2，审计实际读取到的 provider、model、Agent、Session、retry、purpose route、workspace、image 和 model capability。它能区分 dump timeout、非零退出和解析失败，并输出只读的 repairSuggestions。
+0.7.0 源码中的 doctor 输出 `profileSchemaVersion: 3`，审计 provider、model、Agent、retry、purpose route、workspace、image、DSH context probe 状态和 DSH-owned bridge capability。它会区分 dump timeout、非零退出和解析失败，并对 `agy-owned` 输出 deprecated warning；profile doctor 只读，不把静态 dump 伪装成 live Session。
+
+运行时 API `diagnoseDshContext()` 会只返回 session/workspace/sandbox/permission/approval 的可用性、allowlisted 权限模式和稳定 issue code，例如 `DSH_SESSION_UNKNOWN`、`DSH_WORKSPACE_MISMATCH`，不会返回路径、Session ID、Prompt 或工具参数。telemetry 只保留 `permissionPreset`、`sandboxMode`、`approvalPolicy`、`toolSchemaCount`、`toolCallCount` 和 bridge outcome。
 
 doctor 只执行 agy --version、agy agents、agy models 和 DSH config dump，不发送模型 Prompt，不执行工具，quotaUsed 固定为 false。
 
@@ -117,10 +121,10 @@ imageInput: experimental 已支持：
 
 ### 7. 质量门禁
 
-- npm run verify：typecheck、110 个测试和 pack dry-run。
+- npm run verify：typecheck、141 个测试和 pack dry-run。
 - npm run benchmark：Parser、serializer、limiter 的无额度基线。
 - npm run smoke:dsh:self-contained：隔离 DSH Web/headless plugin-add、doctor 和 Mock response。
-- GitHub Actions：Node.js 20/22/24 × Windows/Ubuntu/macOS，并包含 DSH self-contained smoke。
+- GitHub Actions：Provider Node.js 20/22/24 × Windows/Ubuntu/macOS，DSH 原生 Node 22/24 × Windows/Ubuntu/macOS，并包含 self-contained smoke。
 - 公共 CI、doctor、benchmark 和 Mock smoke 均不调用真实 AGY 模型。
 
 ## 当前能力矩阵
@@ -131,8 +135,8 @@ imageInput: experimental 已支持：
 | AGY 额度/认证 | 已实现 | 由本机 AGY 管理 |
 | 动态模型发现 | 已实现 | modelDiscovery: auto |
 | reasoning effort | 已实现 | 不设置隐式 effort |
-| AGY 自有工具 | 已实现 | profile 为 agy-owned |
-| DSH tool-call bridge | 未实现 | 返回 UNSUPPORTED_TOOLS 或由 AGY 接管 |
+| AGY 自有工具 | 已实现（0.6.1 legacy） | 0.6.1 profile 为 agy-owned |
+| DSH tool-call bridge | 0.7.0 已实现并通过跨平台门禁 | 0.7.0 bundle 为 dsh-owned |
 | read-only Agent | 已实现 | 显式安装/配置 |
 | workspace-write Agent | 已实现 | 必须显式 workspaceRoot |
 | 图片 staging bridge | experimental | imageInput: off |
@@ -152,22 +156,24 @@ imageInput: experimental 已支持：
 普通 npm install 只安装 Node.js 包，不会把 Provider 写入 DSH profile。DSH Web/headless 应使用原生 plugin manager：
 
 ~~~powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
-npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.6.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.7.0
+npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.7.0
 ~~~
 
-profile bundle 默认相当于：
+0.7.0 已发布包的 profile bundle 默认相当于：
 
 ~~~yaml
 enabled: true
 provider: agy
 agent: deepseek-proxy
-toolPolicy: agy-owned
+toolPolicy: dsh-owned
 sessionMode: full
 imageInput: off
 ~~~
 
 直接使用库的 Config({}) 则保持 enabled: false、toolPolicy: reject，不会因为 import 包而修改用户 DSH profile。
+
+0.6.1 的 `toolPolicy: agy-owned` 仍可作为 legacy 回滚路径，但 doctor 会给出迁移 warning；0.7.0 不要求重复配置 `workspaceRoot`，项目目录、read/write、shell、网络、MCP 和 approval 均由 DSH 当前 Session 与 ToolRuntime 控制。
 
 ### Agent preset 配置
 
@@ -196,7 +202,7 @@ model: gemini-3.7-flash-high
 models:
   - id: gemini-3.7-flash-high
     name: Gemini 3.7 Flash High
-toolPolicy: agy-owned
+toolPolicy: dsh-owned
 sessionMode: full
 modelDiscovery: auto
 retryPolicy:
@@ -232,12 +238,20 @@ npm run smoke:dsh:self-contained
 
 未来版本会继续以“可验证、可回退、额度可控”为前提，重点包括：
 
-### 0.7.0：由 DSH 控制项目、权限与工具
+### 0.7.0：由 DSH 控制项目、权限与工具（已实现）
 
-- 新增 DSH-owned tool bridge：AGY 只产生标准 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
+- DSH-owned tool bridge 已完成：AGY 只产生经过本地严格校验的 DSH tool call，文件、shell、网络和 MCP 统一由 DSH ToolRuntime 执行。
+- V7-M4 权限矩阵、V7-M5 doctor v3/allowlisted telemetry/安全回归、V7-M6 packed artifact/Web/headless/跨平台发布门禁均已完成。
 - 直接采用 DSH Session 的项目 `cwd`，以及 `read-only`、`workspace-write`、`danger-full-access` 权限选择，不在插件内复制第二套开关。
 - 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
 - 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。
+
+### 0.8.0：Persistent transport 与 DSH next 兼容（已规划）
+
+- 以 AGY 1.1.15 正式 `stream-json` 输入协议为基础，将一 Session 一 worker 的 persistent transport 做成稳定 opt-in；0.8.0 仍保持 one-shot 默认。
+- 同时验证 DSH rc.7 stable 与 rc.8 next，不以升级 next 为代价破坏现有用户。
+- 图片 modality 只作为条件性交付：像素盲测、DSH Web、工具所有权和清理门禁全部通过才公开，否则继续 text-only。
+- 详细范围、go/no-go、额度预算和发布门禁见 [0.8.0 开发计划](docs/v0.8.0-development-plan.md)。
 
 ### 后续版本：图片与工具体验加固
 
@@ -268,7 +282,7 @@ dsh-agy-provider/
 │  ├─ provider/       # DSH Adapter、配置、序列化、图片 bridge
 │  ├─ agy/            # 子进程、argv、stream-json、模型发现、脱敏
 │  ├─ session/        # DSH Session 与 AGY Conversation 映射
-│  ├─ doctor.ts       # profile-aware doctor v2
+│  ├─ doctor.ts       # profile-aware doctor v3
 │  └─ agent-*.ts      # preset、安装器和 agents CLI
 ├─ agents/            # tool-free/read-only/workspace-write 模板
 ├─ scripts/           # verify、benchmark、diagnose、DSH smoke
@@ -287,6 +301,8 @@ dsh-agy-provider/
 - [发布检查清单](docs/release-checklist.md)
 - [CHANGELOG](CHANGELOG.md)
 - [0.7.0 开发计划](docs/v0.7.0-development-plan.md)
+- [0.7.0 迁移说明](docs/migration-0.7.0.md)
+- [0.7.0 release checklist](docs/v0.7.0-release-checklist.md)
 - [0.6.0 开发计划](docs/v0.6.0-development-plan.md)
 - [DSH Provider 契约](docs/dsh-provider-contract.md)
 - [性能基线](docs/performance-baseline.md)

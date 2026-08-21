@@ -87,6 +87,45 @@ export interface EffectivePurposeRoute {
   reasoningEffort: string | null
 }
 
+export interface EffectiveDshContext {
+  source: 'profile-dump'
+  session: {
+    state: 'not-probed'
+    required: boolean
+  }
+  workspace: {
+    state: 'not-probed'
+    configured: boolean
+  }
+  permission: {
+    state: 'not-probed'
+    preset: null
+  }
+  approval: {
+    state: 'not-probed'
+    policy: null
+  }
+  services: {
+    sessions: 'not-probed'
+    workspaceRegistry: 'not-probed'
+    sandboxPolicy: 'not-probed'
+    permissionPresets: 'not-probed'
+    approval: 'not-probed'
+  }
+}
+
+export interface EffectiveBridgeCapability {
+  owner: 'none' | 'agy' | 'dsh' | 'unknown'
+  enabled: boolean | null
+  agent: string | null
+  internalTools: 'empty' | 'present' | 'unknown'
+  schemaCapability: 'unsupported' | 'agy-owned' | 'prompt-contract-v1' | 'unknown'
+  legacyConfig: {
+    agyOwned: boolean
+    workspaceRootConfigured: boolean
+  }
+}
+
 export interface EffectiveProfileConfig {
   dumpStatus: ProfileDumpStatus
   provider: string | null
@@ -118,10 +157,12 @@ export interface EffectiveProfileConfig {
     mcpServersEmpty: boolean | null
     subagent: boolean | null
   }
+  dshContext: EffectiveDshContext
+  bridgeCapability: EffectiveBridgeCapability
 }
 
 export interface ProfileDiagnosticResult {
-  profileSchemaVersion: 2
+  profileSchemaVersion: 3
   name: string
   dshHomePresent: boolean
   profilePresent: boolean
@@ -367,6 +408,82 @@ function emptyEffective(dumpStatus: ProfileDumpStatus): EffectiveProfileConfig {
       mcpServersEmpty: null,
       subagent: null,
     },
+    dshContext: {
+      source: 'profile-dump',
+      session: { state: 'not-probed', required: false },
+      workspace: { state: 'not-probed', configured: false },
+      permission: { state: 'not-probed', preset: null },
+      approval: { state: 'not-probed', policy: null },
+      services: {
+        sessions: 'not-probed',
+        workspaceRegistry: 'not-probed',
+        sandboxPolicy: 'not-probed',
+        permissionPresets: 'not-probed',
+        approval: 'not-probed',
+      },
+    },
+    bridgeCapability: {
+      owner: 'unknown',
+      enabled: null,
+      agent: null,
+      internalTools: 'unknown',
+      schemaCapability: 'unknown',
+      legacyConfig: { agyOwned: false, workspaceRootConfigured: false },
+    },
+  }
+}
+
+function bridgeCapabilityFromConfig(
+  toolPolicy: string | null,
+  bundleEnabled: boolean | null,
+  configuredAgent: string | null,
+  agentCapability: EffectiveProfileConfig['agentCapability'],
+  workspaceRootStatus: EffectiveProfileConfig['workspaceRootStatus'],
+): EffectiveBridgeCapability {
+  const workspaceRootConfigured = workspaceRootStatus === 'configured'
+  if (toolPolicy === 'dsh-owned') {
+    return {
+      owner: 'dsh',
+      enabled: bundleEnabled,
+      agent: 'dsh-agy-tool-free',
+      internalTools: 'empty',
+      schemaCapability: 'prompt-contract-v1',
+      legacyConfig: { agyOwned: false, workspaceRootConfigured },
+    }
+  }
+  if (toolPolicy === 'agy-owned') {
+    const internalTools = agentCapability.frontmatterValid === true
+      && agentCapability.commandExecutionPolicy === 'off'
+      && agentCapability.mcpServersEmpty === true
+      && agentCapability.subagent === false
+      ? 'empty'
+      : agentCapability.frontmatterValid === false ? 'present' : 'unknown'
+    return {
+      owner: 'agy',
+      enabled: bundleEnabled,
+      agent: configuredAgent,
+      internalTools,
+      schemaCapability: 'agy-owned',
+      legacyConfig: { agyOwned: true, workspaceRootConfigured },
+    }
+  }
+  if (toolPolicy === 'reject') {
+    return {
+      owner: 'none',
+      enabled: bundleEnabled,
+      agent: configuredAgent,
+      internalTools: 'unknown',
+      schemaCapability: 'unsupported',
+      legacyConfig: { agyOwned: false, workspaceRootConfigured },
+    }
+  }
+  return {
+    owner: 'unknown',
+    enabled: bundleEnabled,
+    agent: configuredAgent,
+    internalTools: 'unknown',
+    schemaCapability: 'unknown',
+    legacyConfig: { agyOwned: false, workspaceRootConfigured },
   }
 }
 
@@ -378,6 +495,10 @@ function effectiveFromDump(
   const imageInput = valueOf(values, 'imageInput')
   const retryMax = valueOf(values, 'retryPolicy.maxRetries')
   const retryCodes = valueOf(values, 'retryPolicy.retryableCodes')
+  const toolPolicy = valueOf(values, 'toolPolicy')
+  const bundleEnabled = booleanValue(valueOf(values, 'enabled'))
+  const workspaceRootStatus = workspaceStatus(valueOf(values, 'workspaceRoot'))
+  const configuredAgent = valueOf(values, 'agent')
   return {
     dumpStatus,
     provider: valueOf(values, 'provider'),
@@ -392,13 +513,34 @@ function effectiveFromDump(
       compaction: routeFromDump(values, 'compaction'),
       sessionTitle: routeFromDump(values, 'sessionTitle'),
     },
-    workspaceRootStatus: workspaceStatus(valueOf(values, 'workspaceRoot')),
+    workspaceRootStatus,
     imageInput,
     modelCapability: {
       inputModalities: ['text'],
       imageBridge: imageInput === 'off' ? 'off' : imageInput === 'experimental' ? 'experimental' : 'unknown',
     },
     agentCapability: emptyEffective(dumpStatus).agentCapability,
+    dshContext: {
+      source: 'profile-dump',
+      session: { state: 'not-probed', required: toolPolicy === 'dsh-owned' },
+      workspace: { state: 'not-probed', configured: workspaceRootStatus === 'configured' },
+      permission: { state: 'not-probed', preset: null },
+      approval: { state: 'not-probed', policy: null },
+      services: {
+        sessions: 'not-probed',
+        workspaceRegistry: 'not-probed',
+        sandboxPolicy: 'not-probed',
+        permissionPresets: 'not-probed',
+        approval: 'not-probed',
+      },
+    },
+    bridgeCapability: bridgeCapabilityFromConfig(
+      toolPolicy,
+      bundleEnabled,
+      configuredAgent,
+      emptyEffective(dumpStatus).agentCapability,
+      workspaceRootStatus,
+    ),
   }
 }
 
@@ -540,7 +682,7 @@ export async function diagnoseProfile(
 
   if (!validProfileName) {
     return {
-      profileSchemaVersion: 2,
+      profileSchemaVersion: 3,
       name: '<invalid>',
       dshHomePresent,
       profilePresent: false,
@@ -679,9 +821,43 @@ export async function diagnoseProfile(
             effectiveModel = effective.model
 
             const agentInspection = await inspectAgent(effective.agent, effective.agentPreset)
-            effective = { ...effective, agentCapability: agentInspection.capability }
+            effective = {
+              ...effective,
+              agentCapability: agentInspection.capability,
+              bridgeCapability: bridgeCapabilityFromConfig(
+                toolPolicy,
+                bundleEnabled,
+                effective.agent,
+                agentInspection.capability,
+                effective.workspaceRootStatus,
+              ),
+            }
             if (agentInspection.issue !== undefined) issues.push(agentInspection.issue)
             if (agentInspection.suggestion !== undefined) addSuggestion(agentInspection.suggestion)
+
+            if (toolPolicy === 'agy-owned') {
+              issues.push({
+                component: 'profile',
+                code: 'PROFILE_TOOL_POLICY_DEPRECATED',
+                message: 'toolPolicy "agy-owned" is a legacy compatibility mode; DSH-owned execution is recommended and the profile was not changed',
+              })
+              addSuggestion('Set toolPolicy: dsh-owned after confirming the DSH permission and approval services are available')
+            }
+            if (toolPolicy === 'dsh-owned' && effective.bridgeCapability.internalTools === 'present') {
+              issues.push({
+                component: 'profile',
+                code: 'DSH_BRIDGE_AGENT_INTERNAL_TOOLS',
+                message: 'The DSH-owned bridge Agent exposes internal AGY tools; the bridge requires the bundled tool-free Agent',
+              })
+              addSuggestion('Use the bundled dsh-agy-tool-free Agent for toolPolicy: dsh-owned')
+            }
+            if (toolPolicy === 'reject' && bundleEnabled === true) {
+              issues.push({
+                component: 'profile',
+                code: 'DSH_SCHEMA_UNSUPPORTED',
+                message: 'The active profile rejects DSH tool schemas; tool bridge capability is unavailable until toolPolicy is explicitly selected',
+              })
+            }
 
             if (effective.agentCapability.writeTools === true
               && effective.workspaceRootStatus !== 'configured') {
@@ -747,13 +923,13 @@ export async function diagnoseProfile(
       issues.push({
         component: 'profile',
         code: 'PROFILE_TOOL_POLICY_REJECT',
-        message: `Profile "${profileName}" carries tool schemas by default, but toolPolicy is "reject". Set toolPolicy: agy-owned to prevent UNSUPPORTED_TOOLS errors`,
+        message: `Profile "${profileName}" carries tool schemas by default, but toolPolicy is "reject". Set toolPolicy: dsh-owned to let DSH execute tools, or agy-owned for legacy AGY-owned execution`,
       })
     }
   }
 
   return {
-    profileSchemaVersion: 2,
+    profileSchemaVersion: 3,
     name: profileName,
     dshHomePresent,
     profilePresent,
@@ -818,6 +994,12 @@ export function formatDoctorHuman(result: DoctorResult): string {
     lines.push(
       `agentCapability: preset=${p.effective.agentCapability.knownPreset ?? 'unknown'}; frontmatter=${p.effective.agentCapability.frontmatterValid ?? 'unknown'}; view_file=${p.effective.agentCapability.viewFile ?? 'unknown'}; writeTools=${p.effective.agentCapability.writeTools ?? 'unknown'}; workspace=${p.effective.workspaceRootStatus}`,
     )
+    lines.push(
+      `dshContext: session=${p.effective.dshContext.session.state}; workspace=${p.effective.dshContext.workspace.configured ? 'configured' : 'not-configured'}; permission=${p.effective.dshContext.permission.state}; approval=${p.effective.dshContext.approval.state}`,
+    )
+    lines.push(
+      `bridge: owner=${p.effective.bridgeCapability.owner}; agent=${p.effective.bridgeCapability.agent ?? 'unknown'}; schema=${p.effective.bridgeCapability.schemaCapability}; internalTools=${p.effective.bridgeCapability.internalTools}`,
+    )
     if (p.repairSuggestions.length > 0) {
       lines.push('repair suggestions:')
       for (const suggestion of p.repairSuggestions) lines.push(`- ${suggestion}`)
@@ -825,8 +1007,9 @@ export function formatDoctorHuman(result: DoctorResult): string {
   }
 
   lines.push(
-    `provider: ${result.configuration.provider}; agent=${result.configuration.agent}; defaultModel=${result.configuration.defaultModel}; toolPolicy=${result.configuration.toolPolicy}`,
+    `provider: ${result.configuration.provider}; agent=${result.configuration.agent}; defaultModel=${result.configuration.defaultModel}; toolPolicy=${result.configuration.toolPolicy}; transport=${(result.configuration as any).transport ?? 'one-shot'}`,
   )
+  lines.push(`transport: persistentIdleTtlMs=${(result.configuration as any).persistentIdleTtlMs ?? 30000}; readyTimeout=${(result.configuration as any).persistentReadyTimeoutMs ?? 10000}; fallback=${(result.configuration as any).persistentFallback ?? 'before-accept'}`)
   lines.push(`models: ${result.models.map(m => `${m.id} (${m.name})`).join(', ') || 'none'}`)
   lines.push(
     `modelCatalog: source=${result.modelCatalog.source}; stale=${result.modelCatalog.stale}; warningCode=${result.modelCatalog.warningCode ?? 'none'}`,
@@ -848,7 +1031,7 @@ export function formatDoctorHuman(result: DoctorResult): string {
 export function formatDoctorHelp(): string {
   return `Usage: dsh-agy-provider [doctor] [options]
 
-Quota-free diagnostic CLI v2 for dsh-agy-provider and DSH profiles.
+Quota-free diagnostic CLI v3 for dsh-agy-provider and DSH profiles.
 
 Commands:
   doctor                  Run diagnostic checks (default)

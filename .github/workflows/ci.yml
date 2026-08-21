@@ -40,6 +40,8 @@ jobs:
   dsh-smoke:
     name: Self-contained DSH Mock / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
     strategy:
       fail-fast: false
       matrix:
@@ -61,5 +63,59 @@ jobs:
       - name: Install provider dependencies
         run: npm ci
 
+      - name: Prepare DSH runtime directory
+        run: >-
+          node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
+        env:
+          DSH_INSTALL_DIR: ${{ runner.temp }}/dsh-install
+
+      - name: Install DSH runtime
+        run: pnpm add --dir "${{ runner.temp }}/dsh-install" --ignore-scripts --config.node-linker=hoisted --config.auto-install-peers=true @deepseek-ai/dsh@0.1.0-rc.7
+
       - name: Run self-contained DSH Mock smoke
         run: npm run smoke:dsh:self-contained
+        env:
+          DSH_SMOKE_DSH_ENTRY: ${{ runner.temp }}/dsh-install/node_modules/@deepseek-ai/dsh/lib/bin.js
+
+  dsh-capability-matrix:
+    name: DSH native capability matrix / Node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        # DSH 0.1.0-rc.7 imports Node 22+ APIs; Node 20 remains covered by
+        # the provider verify matrix above, but cannot run DSH-native smoke.
+        node: ['22.x', '24.x']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install pnpm for DSH plugin manager
+        run: npm install --global --no-audit --no-fund pnpm@11
+
+      - name: Install provider dependencies
+        run: npm ci
+
+      - name: Prepare DSH runtime directory
+        run: >-
+          node -e "require('node:fs').mkdirSync(process.env.DSH_INSTALL_DIR, { recursive: true })"
+        env:
+          DSH_INSTALL_DIR: ${{ runner.temp }}/dsh-install
+
+      - name: Install DSH runtime
+        run: pnpm add --dir "${{ runner.temp }}/dsh-install" --ignore-scripts --config.node-linker=hoisted --config.auto-install-peers=true @deepseek-ai/dsh@0.1.0-rc.7
+
+      - name: Run quota-free DSH capability matrix
+        run: npm run smoke:dsh:permission-matrix
+        env:
+          DSH_SMOKE_DSH_ENTRY: ${{ runner.temp }}/dsh-install/node_modules/@deepseek-ai/dsh/lib/bin.js

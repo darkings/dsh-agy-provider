@@ -38,3 +38,32 @@ test('serializeAgyTurnPrompt sends only messages after the previous assistant tu
     '=== USER ===\nsecond',
   )
 })
+
+test('serializeAgyPrompt preserves DSH tool calls and tool results as text data', () => {
+  const prompt = serializeAgyPrompt({
+    messages: [
+      {
+        role: 'assistant',
+        content: [{
+          type: 'tool-call',
+          id: 'call-1',
+          name: 'read_file',
+          arguments: '{"path":"fixture.txt"}',
+        }],
+      },
+      {
+        role: 'user',
+        content: [{
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          content: [{ type: 'text', text: 'fixture contents' }],
+        }],
+      },
+    ],
+  })
+
+  assert.match(prompt, /\[DSH TOOL CALL\]/)
+  assert.match(prompt, /read_file/)
+  assert.match(prompt, /\[DSH TOOL RESULT\]/)
+  assert.match(prompt, /fixture contents/)
+})

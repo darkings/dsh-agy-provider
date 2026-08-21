@@ -11,6 +11,48 @@ import type { ModelDiscoverySource } from './models.js'
 
 export type AgyModelDiscoveryLogSource = 'static' | ModelDiscoverySource
 
+export type AgyPermissionPreset = 'read-only' | 'workspace-write' | 'danger-full-access'
+export type AgySandboxMode = AgyPermissionPreset
+export type AgyApprovalPolicy = 'ask' | 'never'
+export type AgyBridgeOutcome =
+  | 'text-only'
+  | 'dsh-pending'
+  | 'dsh-message'
+  | 'dsh-tool-call'
+  | 'agy-owned'
+  | 'context-rejected'
+  | 'schema-rejected'
+  | 'protocol-rejected'
+  | 'agy-internal-tool'
+  | 'permission-required'
+  | 'failed'
+
+const BRIDGE_OUTCOMES: readonly AgyBridgeOutcome[] = [
+  'text-only',
+  'dsh-pending',
+  'dsh-message',
+  'dsh-tool-call',
+  'agy-owned',
+  'context-rejected',
+  'schema-rejected',
+  'protocol-rejected',
+  'agy-internal-tool',
+  'permission-required',
+  'failed',
+]
+
+function isAgyBridgeOutcome(value: unknown): value is AgyBridgeOutcome {
+  return typeof value === 'string' && BRIDGE_OUTCOMES.includes(value as AgyBridgeOutcome)
+}
+
+function isAgyPermissionPreset(value: unknown): value is AgyPermissionPreset {
+  return value === 'read-only' || value === 'workspace-write' || value === 'danger-full-access'
+}
+
+function isAgyApprovalPolicy(value: unknown): value is AgyApprovalPolicy {
+  return value === 'ask' || value === 'never'
+}
+
 const MODEL_DISCOVERY_LOG_SOURCES: readonly AgyModelDiscoveryLogSource[] = [
   'static',
   'discovered',
@@ -37,6 +79,11 @@ export interface AgyLogRecord {
   agent: string
   toolPolicy: ToolPolicy
   toolSchemaCount: number
+  toolCallCount: number
+  bridgeOutcome: AgyBridgeOutcome
+  permissionPreset?: AgyPermissionPreset
+  sandboxMode?: AgySandboxMode
+  approvalPolicy?: AgyApprovalPolicy
   reasoningEffort?: AgyReasoningEffort
   purpose?: 'compaction' | 'session-title'
   modelDiscoverySource?: AgyModelDiscoveryLogSource
@@ -69,6 +116,11 @@ export interface AgyTelemetry {
   readonly agent: string
   readonly toolPolicy: ToolPolicy
   readonly toolSchemaCount: number
+  toolCallCount: number
+  bridgeOutcome: AgyBridgeOutcome
+  permissionPreset?: AgyPermissionPreset
+  sandboxMode?: AgySandboxMode
+  approvalPolicy?: AgyApprovalPolicy
   readonly reasoningEffort?: AgyReasoningEffort
   readonly purpose?: 'compaction' | 'session-title'
   readonly modelDiscoverySource?: AgyModelDiscoveryLogSource
@@ -99,6 +151,11 @@ function baseRecord(telemetry: AgyTelemetry): AgyLogRecord {
     agent: telemetry.agent,
     toolPolicy: telemetry.toolPolicy,
     toolSchemaCount: telemetry.toolSchemaCount,
+    toolCallCount: telemetry.toolCallCount,
+    bridgeOutcome: telemetry.bridgeOutcome,
+    ...(telemetry.permissionPreset === undefined ? {} : { permissionPreset: telemetry.permissionPreset }),
+    ...(telemetry.sandboxMode === undefined ? {} : { sandboxMode: telemetry.sandboxMode }),
+    ...(telemetry.approvalPolicy === undefined ? {} : { approvalPolicy: telemetry.approvalPolicy }),
     ...(telemetry.reasoningEffort === undefined ? {} : { reasoningEffort: telemetry.reasoningEffort }),
     ...(telemetry.purpose === undefined ? {} : { purpose: telemetry.purpose }),
     ...(telemetry.modelDiscoverySource === undefined ? {} : { modelDiscoverySource: telemetry.modelDiscoverySource }),
@@ -168,6 +225,11 @@ export function sanitizeAgyLogRecord(record: AgyLogRecord): AgyLogRecord {
       ? 'agy-owned'
       : record.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject',
     toolSchemaCount: record.toolSchemaCount,
+    toolCallCount: safeNonNegativeNumber(record.toolCallCount),
+    bridgeOutcome: isAgyBridgeOutcome(record.bridgeOutcome) ? record.bridgeOutcome : 'failed',
+    ...(isAgyPermissionPreset(record.permissionPreset) ? { permissionPreset: record.permissionPreset } : {}),
+    ...(isAgyPermissionPreset(record.sandboxMode) ? { sandboxMode: record.sandboxMode } : {}),
+    ...(isAgyApprovalPolicy(record.approvalPolicy) ? { approvalPolicy: record.approvalPolicy } : {}),
     ...(isAgyReasoningEffort(record.reasoningEffort) ? { reasoningEffort: record.reasoningEffort } : {}),
     ...(record.purpose === 'compaction' || record.purpose === 'session-title' ? { purpose: record.purpose } : {}),
     ...(isModelDiscoveryLogSource(record.modelDiscoverySource)

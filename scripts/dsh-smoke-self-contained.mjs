@@ -6,6 +6,8 @@ import { dirname, join, parse } from 'node:path'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh@0.1.0-rc.7'
 const PROVIDER_SPEC = process.env.DSH_SMOKE_PROVIDER_SPEC?.trim()
+const EXPECTED_TOOL_POLICY = process.env.DSH_SMOKE_EXPECTED_TOOL_POLICY?.trim() || 'dsh-owned'
+const EXPECT_V3_DOCTOR = process.env.DSH_SMOKE_EXPECT_V3_DOCTOR?.trim() !== 'false'
 const EXPECTED_RESPONSE = 'V6-M5 self-contained mock smoke passed'
 const COMMAND_TIMEOUT_MS = 10 * 60_000
 const OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024
@@ -90,7 +92,13 @@ function runCommand(executable, args, options = {}) {
 
 function assertSuccess(result, code) {
   if (result.timedOut || result.exitCode !== 0) {
-    throw new Error(code)
+    const details = [
+      result.timedOut ? 'timed out' : `exitCode=${result.exitCode ?? 'null'}`,
+      result.signal === null || result.signal === undefined ? undefined : `signal=${result.signal}`,
+      result.stderr.trim().length === 0 ? undefined : `stderr=${result.stderr.trim().slice(-4000)}`,
+      result.stdout.trim().length === 0 ? undefined : `stdout=${result.stdout.trim().slice(-2000)}`,
+    ].filter(Boolean).join('\n')
+    throw new Error(`${code}\n${details}`)
   }
 }
 
@@ -100,6 +108,28 @@ function runNode(entry, args, options) {
 
 function runNpm(args, options) {
   return runNode(resolveNpmCli(), args, options)
+}
+
+async function findCachedDshEntry() {
+  const cacheRoots = [
+    process.env.npm_config_cache,
+    process.env.NPM_CONFIG_CACHE,
+    process.env.LOCALAPPDATA === undefined ? undefined : join(process.env.LOCALAPPDATA, 'npm-cache'),
+  ].filter(value => typeof value === 'string' && value.length > 0)
+  for (const cacheRoot of cacheRoots) {
+    const npxRoot = join(cacheRoot, '_npx')
+    if (!existsSync(npxRoot)) continue
+    for (const entry of await readdir(npxRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const root = join(npxRoot, entry.name, 'node_modules', '@deepseek-ai', 'dsh')
+      const dshEntry = join(root, 'lib', 'bin.js')
+      const packageJson = join(root, 'package.json')
+      if (!existsSync(dshEntry) || !existsSync(packageJson)) continue
+      const packageInfo = JSON.parse(await readFile(packageJson, 'utf8'))
+      if (packageInfo.version === '0.1.0-rc.7') return dshEntry
+    }
+  }
+  return undefined
 }
 
 function safeVersion(value) {
@@ -140,12 +170,19 @@ async function main() {
       providerSource = join(providerTarballDir, tarballs[0])
     }
 
-    await runNpm([
-      'install', '--prefix', installRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',
-      '--no-audit', '--no-fund', DSH_PACKAGE,
-    ], { cwd: process.cwd() }).then(result => assertSuccess(result, 'DSH_INSTALL_FAILED'))
-    const dshEntry = join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    let dshEntry = process.env.DSH_SMOKE_DSH_ENTRY?.trim()
+    if (dshEntry !== undefined && dshEntry.length === 0) dshEntry = undefined
+    if (dshEntry === undefined) dshEntry = await findCachedDshEntry()
+    if (dshEntry === undefined) {
+      await runNpm([
+        'install', '--prefix', installRoot, '--no-package-lock', '--ignore-scripts', '--prefer-offline',
+        '--no-audit', '--no-fund', DSH_PACKAGE,
+      ], { cwd: process.cwd() }).then(result => assertSuccess(result, 'DSH_INSTALL_FAILED'))
+      dshEntry = join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    }
+    await mkdir(installRoot, { recursive: true })
     if (!existsSync(dshEntry)) throw new Error('DSH_ENTRY_NOT_FOUND')
+    const dshPackageJson = join(dirname(dirname(dshEntry)), 'package.json')
 
     const dshVersionResult = await runNode(dshEntry, ['--version'], { cwd: installRoot, env: dshEnv })
     assertSuccess(dshVersionResult, 'DSH_VERSION_FAILED')
@@ -167,7 +204,7 @@ async function main() {
       throw new Error('WEB_PROFILE_BUNDLE_DECLARATION_MISSING')
     }
 
-    // Verify web profile dump-config has ready agy-owned defaults without manual patch
+    // Verify web profile dump-config has ready DSH-owned defaults without manual patch
     const webDumpConfig = await runNode(dshEntry, ['--profile', 'web', '--dump-config'], {
       cwd: installRoot,
       env: dshEnv,
@@ -176,7 +213,7 @@ async function main() {
     const webChecks = [
       '# == dsh-agy-provider',
       'enabled: true',
-      'toolPolicy: agy-owned',
+      `toolPolicy: ${EXPECTED_TOOL_POLICY}`,
       'provider: agy',
       'model: gemini-3.1-pro-high',
     ]
@@ -208,16 +245,16 @@ async function main() {
       || doctorParsed.profile?.packageInstalled !== true
       || doctorParsed.profile?.bundleDeclared !== true
       || doctorParsed.profile?.bundleEnabled !== true
-      || doctorParsed.profile?.toolPolicy !== 'agy-owned'
+      || doctorParsed.profile?.toolPolicy !== EXPECTED_TOOL_POLICY
       || doctorParsed.profile?.effectiveProvider !== 'agy'
       || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro-high'
-      || doctorParsed.profile?.profileSchemaVersion !== 2
-      || doctorParsed.profile?.effective?.dumpStatus !== 'ok'
-      || doctorParsed.profile?.effective?.provider !== 'agy'
-      || doctorParsed.profile?.effective?.model !== 'gemini-3.1-pro-high'
-      || doctorParsed.profile?.effective?.agent !== 'deepseek-proxy'
-      || doctorParsed.profile?.effective?.sessionMode !== 'full'
-      || JSON.stringify(doctorParsed.profile?.effective?.modelCapability?.inputModalities) !== '["text"]') {
+      || (EXPECT_V3_DOCTOR && (doctorParsed.profile?.profileSchemaVersion !== 3
+        || doctorParsed.profile?.effective?.dumpStatus !== 'ok'
+        || doctorParsed.profile?.effective?.provider !== 'agy'
+        || doctorParsed.profile?.effective?.model !== 'gemini-3.1-pro-high'
+        || doctorParsed.profile?.effective?.agent !== 'deepseek-proxy'
+        || doctorParsed.profile?.effective?.sessionMode !== 'full'
+        || JSON.stringify(doctorParsed.profile?.effective?.modelCapability?.inputModalities) !== '["text"]'))) {
       process.stderr.write(`Doctor profile summary: ${JSON.stringify({
         quotaUsed: doctorParsed.quotaUsed,
         packageInstalled: doctorParsed.profile?.packageInstalled,
@@ -275,7 +312,7 @@ async function main() {
     if (!response.stdout.includes(EXPECTED_RESPONSE)) throw new Error('DSH_MOCK_RESPONSE_MISMATCH')
 
     const providerMetadata = await packageVersion(join(webProfileRoot, 'node_modules', 'dsh-agy-provider', 'package.json'))
-    const dshMetadata = await packageVersion(join(installRoot, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
+    const dshMetadata = await packageVersion(dshPackageJson)
     const inventory = [
       'lib/index.js',
       'lib/index.d.ts',
@@ -298,7 +335,7 @@ async function main() {
       installMethod: PROVIDER_SPEC === undefined ? 'dsh plugin add' : 'dsh plugin add (registry spec)',
       bundleDefaults: {
         enabled: true,
-        toolPolicy: 'agy-owned',
+        toolPolicy: EXPECTED_TOOL_POLICY,
         provider: 'agy',
         model: 'gemini-3.1-pro-high',
       },

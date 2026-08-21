@@ -46,6 +46,14 @@ export interface Config {
   retryPolicy?: AgyRetryPolicyConfig
   /** Optional model/Agent/effort overrides for DSH auxiliary call purposes. */
   purposeRoutes?: PurposeRoutesConfig
+  /** Transport for AGY requests; 'one-shot' keeps 0.7.0 behavior, 'persistent' opt-in reuses one AGY stream-json worker per DSH session. */
+  transport?: TransportMode
+  /** Idle TTL for a persistent worker in ms; 0 closes immediately after a turn. */
+  persistentIdleTtlMs?: number
+  /** Ready timeout for persistent worker startup in ms. */
+  persistentReadyTimeoutMs?: number
+  /** Fallback policy when persistent cannot start: never or before-accept only. */
+  persistentFallback?: PersistentFallbackMode
   /** Experimental AttachmentStore-to-file bridge; omitted/off preserves text-only behavior. */
   imageInput?: 'off' | 'experimental'
   /** Deterministic response used only by the M1 mock route. */
@@ -55,6 +63,8 @@ export interface Config {
 }
 
 export type ToolPolicy = 'reject' | 'agy-owned' | 'dsh-owned'
+export type TransportMode = 'one-shot' | 'persistent'
+export type PersistentFallbackMode = 'never' | 'before-accept'
 
 export const AGY_RETRYABLE_CODES = ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] as const
 export type AgyRetryableCode = typeof AGY_RETRYABLE_CODES[number]
@@ -144,6 +154,10 @@ export function createConfigSchema(defaults: {
     maxConcurrent: z.natural().min(1).max(64).default(4),
     maxQueue: z.natural().max(256).default(32),
     queueTimeoutMs: z.natural().max(3_600_000).default(30_000),
+    transport: z.union(['one-shot', 'persistent'] as const).default('one-shot'),
+    persistentIdleTtlMs: z.number().min(0).max(3_600_000).default(30_000),
+    persistentReadyTimeoutMs: z.number().min(1).max(60_000).default(10_000),
+    persistentFallback: z.union(['never', 'before-accept'] as const).default('before-accept'),
     maxOutputBytes: z.natural().min(1_024).max(64 * 1024 * 1024).default(8 * 1024 * 1024),
     maxEventLineLength: z.natural().min(1_024).max(8 * 1024 * 1024).default(1_048_576),
     retryPolicy: RetryPolicyConfig.default({
@@ -160,8 +174,8 @@ export function createConfigSchema(defaults: {
 /** Programmatic library default: enabled=false, toolPolicy=reject */
 export const Config: z<Config> = createConfigSchema({ enabled: false, toolPolicy: 'reject' })
 
-/** Bundle default for DSH profile plugin add: enabled=true, toolPolicy=agy-owned */
-export const BundleConfig: z<Config> = createConfigSchema({ enabled: true, toolPolicy: 'agy-owned' })
+/** Bundle default for DSH profile plugin add: enabled=true, DSH owns tools. */
+export const BundleConfig: z<Config> = createConfigSchema({ enabled: true, toolPolicy: 'dsh-owned' })
 
 /**
  * Resolve the effective catalog while keeping the 0.1.0 `model` setting

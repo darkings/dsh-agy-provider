@@ -13,7 +13,7 @@
 不要只在业务项目目录执行 `npm install dsh-agy-provider`。DSH Web 使用独立的 profile 依赖目录，必须通过 DSH 的 plugin 命令安装：
 
 ```powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.6.1
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.7.0
 ```
 
 该命令会将包加入 `web` profile 的依赖和 `dsh.profile.bundles`。验证是否已加载：
@@ -28,7 +28,7 @@ npx @deepseek-ai/dsh --profile web --dump-config | Select-String dsh-agy-provide
 npx @deepseek-ai/dsh web
 ```
 
-0.5.0 起，显式通过 `dsh plugin add` 安装的 bundle 默认是 `enabled: true`、`toolPolicy: agy-owned`。这不会在安装阶段发送模型请求；确认 AGY 已登录、`deepseek-proxy` 可用后即可启动 Web：
+0.7.0 起，显式通过 `dsh plugin add` 安装的 bundle 默认是 `enabled: true`、`toolPolicy: dsh-owned`。这不会在安装阶段发送模型请求；确认 AGY 已登录、`deepseek-proxy` 可用后即可启动 Web：
 
 ```yaml
 - id: dsh-agy-provider
@@ -46,7 +46,7 @@ npx @deepseek-ai/dsh web
 如果只需要在普通 Node.js 项目中导入 Provider，而不是让 DSH Web 加载 bundle，才使用：
 
 ```powershell
-npm install dsh-agy-provider@0.6.1
+npm install dsh-agy-provider@0.7.0
 ```
 
 ## 从 GitHub 安装源码包
@@ -59,7 +59,7 @@ npx @deepseek-ai/dsh plugin --profile web add github:darkings/dsh-agy-provider
 
 ## 版本与发布状态
 
-当前 `0.6.1` 已公开发布，是 0.6.0 的兼容性修复版；修复 DSH profile 缺少 `AttachmentStore` 时的插件 loader 启动错误。发布使用 npm Trusted Publishing，registry `latest` 已指向 `0.6.1`。
+当前 `0.7.0` 已公开发布；它在保留 0.6.1 文本/模型能力的基础上，默认启用 DSH-owned tool bridge。0.6.1 仍可用于 legacy `agy-owned` 回滚。发布使用 npm Trusted Publishing，registry `latest` 已指向 `0.7.0`。
 
 ## 配置
 
@@ -70,7 +70,7 @@ enabled: true
 provider: agy
 agent: deepseek-proxy
 model: gemini-3.1-pro-high
-toolPolicy: reject       # reject | agy-owned
+toolPolicy: reject       # reject | agy-owned | dsh-owned
 models:
   - id: gemini-3.1-pro-high
     name: Gemini 3.1 Pro High
@@ -88,7 +88,17 @@ modelDiscoveryTimeoutMs: 10000
 
 `reasoningEffort` 是请求级字段，不写入上述 Provider 配置。可选值为 `low`、`medium`、`high`，Provider 会将其作为独立 `--effort` 参数传给 AGY；未指定时不传该参数。`temperature`、`stop` 和 `maxTokens` 仍会返回不支持错误。
 
-Provider 配置 `toolPolicy` 默认为 `reject`。只有在确认 AGY Agent 是唯一工具执行者时，才显式设置 `toolPolicy: agy-owned`；该模式忽略 DSH tool schemas，不产生 DSH tool chunks，也不会自动批准 AGY 权限请求。
+Provider 配置 `toolPolicy` 默认为 `reject`。0.7.0 DSH bundle 默认使用 `dsh-owned`：AGY 只生成经过本地校验的 DSH tool call，实际文件、shell、网络、MCP 和审批由 DSH 执行。`agy-owned` 只用于 0.6.x legacy 兼容，忽略 DSH tool schemas，不产生 DSH tool chunks，也不会自动批准 AGY 权限请求；doctor 会报告迁移 warning。
+
+## 0.7.0 项目与权限
+
+0.7.0 不要求在 Provider 中重复配置 `workspaceRoot`。项目目录来自 DSH 当前 Session 的 canonical `cwd`；`read-only`、`workspace-write` 和 `danger-full-access` 由 DSH UI/Session 选择并由 DSH sandbox/approval 强制执行。
+
+- `read-only`：read/search 可用，write/edit/shell 写入被 DSH 拒绝。
+- `workspace-write`：允许项目 workspace 内的 write/edit/shell 写入，越界仍由 DSH 拒绝或要求 approval。
+- `danger-full-access`：只有 DSH 明确选择后才可越过 workspace 边界；Provider 不自行提升权限。
+
+Provider 不执行 DSH tools，不传 `--dangerously-skip-permissions`，不把工具参数/结果写入日志。完整迁移步骤见 [0.7.0 迁移说明](migration-0.7.0.md)。
 
 推荐的资源边界：
 
@@ -115,7 +125,7 @@ modelDiscoveryTimeoutMs: 10000
 npm run diagnose
 ```
 
-诊断只执行 `agy --version`、`agy agents`、`agy models` 和可选 DSH `--dump-config`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力、`modelCatalog.source`、`modelCatalog.stale`、`modelCatalog.warning`、`modelCatalog.warningCode` 和稳定错误码。指定 profile 时额外包含 `profileSchemaVersion: 2`、effective Agent/session/retry/purpose/workspace/image 状态和只读 repair suggestions。
+诊断只执行 `agy --version`、`agy agents`、`agy models` 和可选 DSH `--dump-config`，不会发送模型 Prompt、消耗 AGY 额度或执行工具。默认输出适合人工查看；使用 `--json` 可获得 `schemaVersion: 1`、组件状态、模型能力、`modelCatalog.source`、`modelCatalog.stale`、`modelCatalog.warning`、`modelCatalog.warningCode` 和稳定错误码。0.7.0 指定 profile 时额外包含 `profileSchemaVersion: 3`、effective Agent/DSH context/bridge/retry/purpose/workspace/image 状态和只读 repair suggestions；静态 doctor 不伪造 live Session。
 
 ```powershell
 npm run diagnose -- --json
@@ -178,4 +188,4 @@ npm run smoke:dsh:self-contained
 
 ## 已知边界
 
-默认不桥接 DSH tools 与 AGY 内部 tools；DSH 传入非空 `tools` 时返回 `UNSUPPORTED_TOOLS`。显式 `toolPolicy: agy-owned` 时只忽略 DSH schemas，AGY 仍独占内部 tools；AGY headless 请求权限时返回 `PERMISSION_REQUIRED`。完整约束见 `docs/tool-capability-matrix.md`。
+0.7.0 bundle 默认桥接 DSH tools：AGY 只生成经过本地校验的 DSH tool call，文件、shell、网络和 MCP 由 DSH ToolRuntime 执行。程序化默认仍为 `reject`，非空 `tools` 返回 `UNSUPPORTED_TOOLS`；显式 `toolPolicy: agy-owned` 仅用于 legacy，AGY 独占内部 tools；AGY headless 请求权限时返回 `PERMISSION_REQUIRED`。完整约束见 `docs/tool-capability-matrix.md`。

@@ -124,3 +124,29 @@ Adapter 使用 `minimumAgyVersion`、`maxConcurrent`、`maxQueue` 和 `queueTime
 请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间、最终 AGY `status`、`eventCount`、固定类别计数、工具/权限事件计数、`toolPolicy` 和 `toolSchemaCount`。日志发送前会脱敏字符串，并且不包含 Prompt、stderr、环境变量、AGY 路径、工具参数或凭据。
 
 V2-M3 使用稳定错误分类：认证 `AUTH`、额度 `QUOTA`、速率限制 `RATE_LIMIT`、未知模型 `MODEL_NOT_FOUND`、Agent 缺失 `AGY_AGENT_MISSING`、上下文超限 `CONTEXT_WINDOW_EXCEEDED`，以及现有的 `PERMISSION_REQUIRED`、`TIMEOUT`、`ABORTED`、`AGY_PARSE`、`AGY_OUTPUT_LIMIT`、`AGY_STATUS` 和 `AGY_EXIT`。分类只基于有界的 AGY status/stderr/error event detail；未知文本保留 fallback code。
+
+## 0.7.0 DSH-owned tool bridge contract
+
+0.7.0 的 profile bundle 默认使用 `toolPolicy: dsh-owned`。Provider 与 DSH 的职责边界固定为：
+
+```text
+DSH GenerateOptions.tools
+        ↓
+request-scoped Session/workspace/permission snapshot
+        ↓
+bounded prompt contract → AGY text response
+        ↓
+local allowlist/schema/argument/result validation
+        ↓
+DSH tool-call chunk
+        ↓
+DSH ToolRuntime + sandbox + approval
+```
+
+- Provider 只返回经过校验的 DSH tool call，不直接执行文件、shell、网络或 MCP。
+- 项目目录只取自 live DSH Session 的 canonical `cwd`；静态 `workspaceRoot`、Prompt 和 `process.cwd()` 不能覆盖它。
+- `read-only`、`workspace-write`、`danger-full-access` 和 approval 由 DSH 当前 Session 决定；Provider 不复制开关、不自动批准、不传 `--dangerously-skip-permissions`。
+- AGY 内部 tool event 在 `dsh-owned` 下 fail closed，不伪装成 DSH tool call；`agy-owned` 仅为 0.6.x legacy 文本兼容模式。
+- 所有 bridge 错误、取消、超时和临时 schema cleanup 都必须保持稳定错误码和脱敏边界。
+
+验证证据见 [工具能力矩阵](tool-capability-matrix.md)、[0.7.0 迁移说明](migration-0.7.0.md) 和 [0.7.0 release checklist](v0.7.0-release-checklist.md)。

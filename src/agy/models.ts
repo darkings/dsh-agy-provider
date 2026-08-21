@@ -127,7 +127,7 @@ export function parseAgyModels(output: string): ModelConfig[] {
     seen.add(id)
     baseSeen.add(baseId.toLowerCase())
     // Preserve display but normalize id to base for DSH reasoningEffort split
-    const normalized: ModelConfig = display.length === 0 ? { id: baseId } : { id: baseId, name: display.replace(MODEL_EFFORT_SUFFIX_RE, '') }
+    const normalized: ModelConfig = display.length === 0 ? { id: baseId } : { id: baseId, name: display.replace(/(?:\s+|-)(?:low|medium|high)$/i, '').trim() }
     models.push(normalized)
   }
   return models

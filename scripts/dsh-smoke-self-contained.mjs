@@ -215,7 +215,7 @@ async function main() {
       'enabled: true',
       `toolPolicy: ${EXPECTED_TOOL_POLICY}`,
       'provider: agy',
-      'model: gemini-3.1-pro-high',
+      'model: gemini-3.1-pro',
     ]
     if (!webChecks.every(value => webDumpConfig.stdout.includes(value))) {
       const webConfigSummary = webDumpConfig.stdout
@@ -247,11 +247,11 @@ async function main() {
       || doctorParsed.profile?.bundleEnabled !== true
       || doctorParsed.profile?.toolPolicy !== EXPECTED_TOOL_POLICY
       || doctorParsed.profile?.effectiveProvider !== 'agy'
-      || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro-high'
+      || doctorParsed.profile?.effectiveModel !== 'gemini-3.1-pro'
       || (EXPECT_V3_DOCTOR && (doctorParsed.profile?.profileSchemaVersion !== 3
         || doctorParsed.profile?.effective?.dumpStatus !== 'ok'
         || doctorParsed.profile?.effective?.provider !== 'agy'
-        || doctorParsed.profile?.effective?.model !== 'gemini-3.1-pro-high'
+        || doctorParsed.profile?.effective?.model !== 'gemini-3.1-pro'
         || doctorParsed.profile?.effective?.agent !== 'deepseek-proxy'
         || doctorParsed.profile?.effective?.sessionMode !== 'full'
         || JSON.stringify(doctorParsed.profile?.effective?.modelCapability?.inputModalities) !== '["text"]'))) {
@@ -337,7 +337,7 @@ async function main() {
         enabled: true,
         toolPolicy: EXPECTED_TOOL_POLICY,
         provider: 'agy',
-        model: 'gemini-3.1-pro-high',
+        model: 'gemini-3.1-pro',
       },
       bundleInventory: inventory,
       response: EXPECTED_RESPONSE,

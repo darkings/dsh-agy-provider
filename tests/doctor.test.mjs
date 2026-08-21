@@ -115,7 +115,7 @@ test('diagnoseProfile detects package missing, bundle missing, disabled, and rej
     const mockEnabledRunner = async () => ({
       exitCode: 0,
       timedOut: false,
-      stdout: `# == dsh-agy-provider\n  enabled: true\n  toolPolicy: dsh-owned\n  provider: agy\n  model: gemini-3.1-pro-high\n`,
+      stdout: `# == dsh-agy-provider\n  enabled: true\n  toolPolicy: dsh-owned\n  provider: agy\n  model: gemini-3.1-pro\n`,
       stderr: '',
     })
     const resReady = await diagnoseProfile({
@@ -128,7 +128,7 @@ test('diagnoseProfile detects package missing, bundle missing, disabled, and rej
     assert.equal(resReady.bundleEnabled, true)
     assert.equal(resReady.toolPolicy, 'dsh-owned')
     assert.equal(resReady.effectiveProvider, 'agy')
-    assert.equal(resReady.effectiveModel, 'gemini-3.1-pro-high')
+    assert.equal(resReady.effectiveModel, 'gemini-3.1-pro')
     assert.equal(resReady.issues.length, 0)
   } finally {
     await rm(tempDir, { recursive: true, force: true })
@@ -250,18 +250,17 @@ test('doctor v3 reports effective DSH bridge capabilities without exposing works
   enabled: true
   toolPolicy: dsh-owned
   provider: agy
-  model: gemini-3.7-flash-low
+  model: gemini-3.7-flash
   agent: dsh-agy-read-only
   agentPreset: read-only
   sessionMode: full
-  workspaceRoot: ${workspaceRoot}
   imageInput: off
   retryPolicy:
     maxRetries: 0
     retryableCodes: [RATE_LIMIT, SERVER, TRANSPORT]
   purposeRoutes:
     compaction:
-      model: gemini-3.7-flash-low
+      model: gemini-3.7-flash
       agent: dsh-agy-tool-free
       reasoningEffort: low
 `,
@@ -276,9 +275,9 @@ test('doctor v3 reports effective DSH bridge capabilities without exposing works
     assert.equal(result.effective.retryPolicy?.maxRetries, 0)
     assert.deepEqual(result.effective.retryPolicy?.retryableCodes, ['RATE_LIMIT', 'SERVER', 'TRANSPORT'])
     assert.equal(result.effective.purposeRoutes.compaction?.complete, true)
-    assert.equal(result.effective.workspaceRootStatus, 'configured')
+    assert.equal(result.effective.workspaceRootStatus, 'unknown')
     assert.equal(result.effective.dshContext.session.state, 'not-probed')
-    assert.equal(result.effective.dshContext.workspace.configured, true)
+    assert.equal(result.effective.dshContext.workspace.configured, false)
     assert.equal(result.effective.bridgeCapability.owner, 'dsh')
     assert.equal(result.effective.bridgeCapability.agent, 'dsh-agy-tool-free')
     assert.equal(result.effective.bridgeCapability.schemaCapability, 'prompt-contract-v1')

@@ -105,7 +105,7 @@ export interface ModelConfig {
   contextWindow?: number
 }
 
-export const DEFAULT_MODEL = 'gemini-3.1-pro-high'
+export const DEFAULT_MODEL = 'gemini-3.1-pro'
 
 const ModelConfig = z.object({
   id: z.string().pattern(/^\S(?:.*\S)?$/).required(),
@@ -137,7 +137,7 @@ export function createConfigSchema(defaults: {
   const defaultEnabled = defaults.enabled ?? false
   const defaultToolPolicy = defaults.toolPolicy ?? 'reject'
 
-  const schema = z.object({
+  const schemaBase = z.object({
     enabled: z.boolean().default(defaultEnabled).description('Enable AGY provider'),
     provider: z.string().default('agy').description('Provider route id'),
     model: z.string().default(DEFAULT_MODEL).description('Default model id (base, without -high/-medium/-low suffix)'),
@@ -173,7 +173,13 @@ export function createConfigSchema(defaults: {
     delayMs: z.number().min(0).max(60_000).default(0).description('Mock delay ms'),
   })
 
-  return schema.i18n({
+  const schema = (z as any).transform(schemaBase, (data: any) => ({
+    ...data,
+    model: typeof data.model === 'string' ? (data.model as string).replace(/-(?:low|medium|high)$/i, '') : data.model,
+    models: Array.isArray(data.models) ? (data.models as any[]).map((m: any) => ({ ...m, id: typeof m.id === 'string' ? (m.id as string).replace(/-(?:low|medium|high)$/i, '') : m.id })) : data.models,
+    visibleModels: Array.isArray(data.visibleModels) ? (data.visibleModels as any[]).map((v: any) => typeof v === 'string' ? (v as string).replace(/-(?:low|medium|high)$/i, '') : v) : data.visibleModels,
+  }))
+  return (schema as any).i18n({
     'zh-CN': {
       enabled: { $description: '是否启用 AGY 提供方' },
       provider: { $description: '提供方路由 ID（固定为 agy）' },

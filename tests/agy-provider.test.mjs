@@ -193,7 +193,7 @@ test('AgyAdapter applies purpose routes only to matching auxiliary calls', async
   })) {}
   for await (const _chunk of adapter.stream(request)) {}
 
-  assert.equal(captured[0]?.model, 'gemini-3.7-flash-low')
+  assert.equal(captured[0]?.model, 'gemini-3.7-flash')
   assert.equal(captured[0]?.agent, 'deepseek-proxy')
   assert.equal(captured[0]?.reasoningEffort, 'low')
   assert.equal(captured[1]?.model, 'gemini-test')

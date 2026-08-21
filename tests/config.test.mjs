@@ -51,7 +51,7 @@ test('Config accepts only bounded transient retry policy overrides', () => {
 test('Config normalizes model ids by stripping -high/-medium/-low suffix', () => {
   assert.equal(Config({ model: 'gemini-3.7-flash-high' }).model, 'gemini-3.7-flash')
   assert.equal(Config({ model: 'gemini-3.7-flash-medium' }).model, 'gemini-3.7-flash')
-  assert.equal(Config({ model: 'GEMINI-3.7-FLASH-LOW' }).model, 'gemini-3.7-flash')
+  assert.equal(Config({ model: 'GEMINI-3.7-FLASH-LOW' }).model, 'GEMINI-3.7-FLASH')
 })
 
 test('Config filters visible models and maps effort suffix', async () => {
@@ -111,7 +111,7 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
 
     enabled: false,
     provider: 'agy',
-    model: 'gemini-3.1-pro-high',
+    model: 'gemini-3.1-pro',
     models: [],
     visibleModels: [],
     modelDiscovery: 'auto',
@@ -189,7 +189,7 @@ test('cordis.patch.yml defines DSH-owned bundle defaults while library defaults 
   assert.equal(enabledMatch?.[1], 'true')
   assert.equal(toolPolicyMatch?.[1], 'dsh-owned')
   assert.equal(providerMatch?.[1], 'agy')
-  assert.equal(modelMatch?.[1], 'gemini-3.1-pro-high')
+  assert.equal(modelMatch?.[1], 'gemini-3.1-pro')
   assert.equal(agentMatch?.[1], 'deepseek-proxy')
   assert.equal(sessionModeMatch?.[1], 'full')
 

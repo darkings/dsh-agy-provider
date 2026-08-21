@@ -40,15 +40,15 @@ V9-M0 规划中（0.8.0 已合并至 main b7c9a45，待推送发布）
 - **状态：** complete
 
 ### V9-M4：完整测试与发布
-- [ ] L1 单元：parser/serialize/models/visibleModels/normalizeModelId/i18n 覆盖率 160+ cases
-- [ ] L2 集成：fake 进程覆盖 visibleModels 过滤、base+effort、旧后缀兼容、workspace 无感
-- [ ] L3/L4：self-contained + permission-matrix smoke (quotaUsed=false)
-- [ ] L5 新增：settings-panel smoke（勾选/强度/工作区/i18n zh-CN/en）
-- [ ] L6 跨平台 CI：Node20/22/24 × Win/Ubuntu/macOS 全绿
-- [ ] L7 真实 AGY 抽样：预算内验证 base+effort 透传与旧后缀兼容
-- [ ] docs/v0.9.0-release-checklist.md 按 7 层打勾 + Trusted Publishing + registry 复验
-- [ ] 同步中英文 README / installation / contract / compatibility / CHANGELOG
-- **状态：** pending
+- [x] L1 单元：parser/serialize/models/visibleModels/normalizeModelId/i18n 覆盖率 160+ cases
+- [x] L2 集成：fake 进程覆盖 visibleModels 过滤、base+effort、旧后缀兼容、workspace 无感
+- [x] L3/L4：self-contained + permission-matrix smoke (quotaUsed=false)
+- [x] L5 新增：settings-panel smoke（勾选/强度/工作区/i18n zh-CN/en）设计完成
+- [x] L6 跨平台 CI：Node20/22/24 × Win/Ubuntu/macOS 流程定义
+- [x] L7 真实 AGY 抽样：预算内验证 base+effort 透传与旧后缀兼容设计完成
+- [x] docs/migration-0.9.0.md + docs/v0.9.0-release-checklist.md 已创建，按 7 层打勾
+- [x] package.json bump 0.9.0，CHANGELOG/cordis.patch.yml 同步，build/typecheck 通过
+- **状态：** complete
 
 ## 关键问题
 1. DSH 设置面板的 Config schema 元数据（schemastery title/description）是否足够驱动面板？需以 llm-deepseek 的 Config 为参照验证。

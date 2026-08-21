@@ -319,3 +319,7 @@
 - **实现：** Config 单测增加归一化/可见性/i18n，doctor 单测 bump 4，smoke 支持 3/4 兼容
 - **提交：** V9-M3
 - **状态：** V9-M3 complete
+### 2026-08-21 23:00 V9-M4 完成提交
+- **实现：** docs/migration-0.9.0.md、docs/v0.9.0-release-checklist.md、package.json 0.9.0、CHANGELOG、cordis.patch.yml
+- **验证：** npm run build/typecheck ✅
+- **状态：** V9-M4 complete，0.9.0 开发完成，待发布

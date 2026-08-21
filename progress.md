@@ -264,3 +264,36 @@
   - C:/Users/Jie/Projects/dsh-agy-provider/docs/migration-0.8.0.md
   - C:/Users/Jie/Projects/dsh-agy-provider/package.json
   - C:/Users/Jie/Projects/dsh-agy-provider/cordis.patch.yml
+---
+
+## 会话：2026-08-21 0.8.0 推送与 0.9.0 规划
+
+### 0.8.0 推送
+- **状态：** 本地完成，远程待手动推送
+- **执行：** git checkout main && git merge --no-ff codex/v0.8.0-m0-planning -m "release: merge 0.8.0 (V8-M0~M7 complete)" => b7c9a45 (31 commits ahead of origin/main)
+- **构建验证：** npm run build ✅, typecheck ✅, benchmark 740k events/s ✅
+- **推送尝试：** git push origin main / origin codex 均 schannel SEC_E_NO_CREDENTIALS (Windows 证书存储沙箱不可用)，curl https://github.com 亦同错；ssh 亦 Win32 error 5 pipe。gh auth 正常但 git 层 schannel 失败。
+- **解决：** 已将 origin 恢复为 https://github.com/darkings/dsh-agy-provider.git；需在宿主终端（退出 DSH 沙箱）手动执行：
+  ```powershell
+  git push origin main
+  git push origin codex/v0.8.0-m0-planning
+  git tag v0.8.0 b7c9a45 -m "v0.8.0"
+  git push origin v0.8.0
+  ```
+  然后等待 GitHub Actions publish 与 npm latest=0.8.0。
+
+### 0.9.0 规划启动
+- **主题：** 设置面板 + 工作区无感 + 模型平权
+- **用户痛点：** 现阶段需手动配置 workspaceRoot，工具才可用；希望像其他普通模型一样无感，且能在 DSH 设置面板直接配置
+- **决策：** 复用 src/dsh/context.ts 的 DSH Session cwd 权威，dsh-owned 废弃 workspaceRoot，面板隐藏该字段；文本请求无需 workspace，工具请求自动走 DSH 项目目录
+- **交付：** docs/v0.9.0-development-plan.md 已创建，task_plan.md 已切至 V9-M0 in_progress
+- **下一步：** 在宿主完成 0.8.0 推送后，切 codex/v0.9.0-panel-workspace 分支进入 V9-M1
+### 2026-08-21 18:30 模型可见性与强度分离追加
+- **输入：** 用户要求设置中可选显示模型，且拆分 high/medium/low 为 reasoningEffort
+- **操作：** 更新 docs/v0.9.0-development-plan.md 新增 §3.3 可见性、§3.4 分离、§5 必做/§6 草案/兼容表；更新 task_plan.md V9-M1~M3 与关键问题
+- **影响文件：** docs/v0.9.0-development-plan.md, task_plan.md, findings.md
+- **下一步：** 实现 Config.visibleModels + normalizeModelId + 面板多选
+### 2026-08-21 19:00 中/英切换与完整测试流程追加
+- **输入：** 设置要跟随 DSH 当前语言中/英切换；0.9.0 要有完整详细的测试流程
+- **操作：** docs/v0.9.0-development-plan.md 新增 §3.6 中/英切换（schemastery .i18n），新增 §8 7层测试流程（L1~L7 含 i18n/模型/工作区专项）； task_plan.md V9-M1 增加 i18n，V9-M4 展开为 7 层；重编号 §9/10
+- **设计：** Config 每个字段 .i18n({ 'zh-CN':{$description}, en:{$description} })，CI 校验覆盖率，L5 smoke 分别 --locale zh-CN/en 截图校验；测试流程按 verify→集成→自包含→权限矩阵→设置面板→跨平台→真实抽样顺序，全部 quotaUsed=false 除 L7

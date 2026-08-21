@@ -1,100 +1,79 @@
-# 任务计划：dsh-agy-provider 0.8.0
+# 任务计划：dsh-agy-provider 0.9.0
 
 ## 目标
-在保留 0.7.0 DSH-owned 权限与工具所有权的前提下，将 AGY 1.1.15 的 persistent `stream-json` 输入协议产品化，并建立 DSH rc.7/rc.8 双版本兼容门禁；以稳定 `one-shot` 为默认、`persistent` 为 opt-in 的方式交付，达到可发布的 0.8.0。
+让 AGY 模型在 DSH 中像原生模型一样无感可用：DSH 设置面板可视化配置，项目目录由 DSH Session/cwd 自动接管（废弃 workspaceRoot），模型列表/参数/工具行为与官方 Provider 对齐。
 
 ## 当前阶段
-全部完成（V8-M0~M7 complete）
+V9-M0 规划中（0.8.0 已合并至 main b7c9a45，待推送发布）
 
 ## 各阶段
 
-### V8-M0：规划与基线固化
-- [x] 完成 `docs/v0.8.0-development-plan.md` 范围、门禁、预算、DoD 定义
-- [x] 同步 README 中英文的 0.8.0 已规划声明
-- [x] 创建本 `task_plan.md` / `findings.md` / `progress.md` 文件规划系统（本步）
-- [x] 固化分支策略 `codex/v0.8.0-*` 与留痕规范（每步更新 progress + 必要时提交）
-- [x] 冻结 0.7.0 基线：`package.json 0.7.0` / `v0.7.0 -> b94fa32` / npm latest=0.7.0 不在 M0 中 bump
-- **状态：** complete
+### V9-M0：规划与基线固化
+- [ ] 完成 docs/v0.9.0-development-plan.md 范围、门禁、设计冻结
+- [ ] 同步中英文 README 的 0.9.0 规划声明
+- [ ] 固化分支策略 codex/v0.9.0-* 与留痕规范
+- [ ] 确认 0.8.0 发布收尾动作：push main + tag v0.8.0 + Trusted Publishing
+- **状态：** in_progress
 
-### V8-M1：AGY 真实协议 + DSH rc.7/rc.8 门禁
-- [x] 捕获 AGY 1.1.15 真实 `--input-format stream-json` 帧协议（request/ready/event/complete/error/shutdown），与 `src/agy/experimental-transport.ts` 的 prototype envelope 做差异对照
-- [x] 建立 DSH `0.1.0-rc.7` stable 回归与 `0.1.0-rc.8` next 兼容 lane，验证 Web/headless、Provider contract、AttachmentStore、ToolRuntime
-- [x] 输出 M1 go/no-go 判定：协议可产品化且 rc.7 无回归才进入 M2
-- **状态：** complete
-- **结论：** go — 单进程 3 连续 turn SUCCESS（conversation_id 一致，usage 可归属），真实输入为 {"event":"user","message":{...}}，与 prototype {kind:"request"} 不兼容，已以 three-turn.log 为证据
-- **交付：** `docs/agents.md` 更新、真实帧样例 fixture、双轨测试脚本
-- **门禁：** 捕获的真实帧与 prototype 不一致时，以真实帧为准重写 transport，不复用 fixture 契约
+### V9-M1：DSH 设置面板 + 中/英切换
+- [ ] 为 Config schema 补充 title/description/enumNames/advanced 分组，新增 visibleModels 多选；每个字段加 .i18n({ 'zh-CN':{}, en:{} })
+- [ ] src/index.ts 增加 ctx.llm.registerConfigurableProviders + registerModelDiscovery
+- [ ] 面板渲染发现模型为可勾选列表，勾选结果写回 visibleModels；推理强度分离为 base 下拉 + effort 下拉
+- [ ] 本地 DSH Web 验证面板中/英切换（locale zh-CN/en）时描述实时变更
+- **状态：** pending
 
-### V8-M2：Persistent Adapter（Session-affine Worker Pool）
-- [x] Step1: transport 配置（one-shot 默认，persistent opt-in，idle/ready/fallback）
-- [x] Step2: worker 产品化 — 将 experimental-transport 的 {kind:request} 改为真实 {event:"user"}，输出改为 init/step_update/result，复用 AgyStreamParser
-- [x] Step3: AgyAdapter 双 transport 分发（session-affine 一 Session 一 worker，单 active turn，maxConcurrent 限流，写入前 before-accept 回退）
-- [x] Step4: 验收 — 100 串行 / 8 并发 / cap / TTL / abort / timeout / crash / malformed / output limit / dispose 残余 0
-- **状态：** complete
-- **交付：** `src/agy/persistent-transport.ts` 产品化、`src/provider/agy.ts` 双 transport 分发、`src/provider/config.ts` 新增字段
-- **门禁：** 配置缺省仍为 one-shot；persistent 未显式启用时不启动 worker
+### V9-M2：工作区无感化 + 模型与推理强度分离
+- [ ] dsh-owned 下废弃 workspaceRoot：Config 标记 deprecated，面板隐藏，AgyAdapter 不再读取
+- [ ] 工具请求自动使用 DSH Session header.cwd + workspaceRegistry + sandboxPolicy 的 canonical 校验
+- [ ] 纯文本无 workspace 仍可用，有工具无 workspace 时返回 DSH_WORKSPACE_MISMATCH 可操作错误
+- [ ] 模型归一化：src/agy/models.ts normalizeModelId/extractEffort，configuredModels/parseAgyModels 按 base 去重；listModels 仅返回 base，reasoning.efforts 统一暴露
+- [ ] 兼容：请求 model 带 -high/-medium/-low 后缀时自动拆为 base+effort，warning 提示迁移
+- [ ] doctor v5 报告 settingsPanel/workspaceSource/effectiveWorkspace/visibleModels + DEPRECATED_WORKSPACE_ROOT/DEPRECATED_MODEL_EFFORT_SUFFIX warning
+- [ ] 文档与迁移说明：docs/migration-0.9.0.md
+- **状态：** pending
 
-### V8-M3：DSH-owned 工具/生命周期安全
-- [x] persistent 模式下完成 `tool-call → DSH ToolRuntime 执行 → tool-result → 下一轮模型回答` 闭环
-- [x] 覆盖 abort、timeout、CLI crash、malformed frame、output limit、dispose 后的确定性回收，下一轮不接收残余事件
-- [x] 复验 0.7.0 权限矩阵在 persistent 下不回退：`read-only / workspace-write / danger-full-access` + shell/local web/local MCP + approval + workspace 边界
-- [x] 审计：Provider 不执行工具、不维护工具白名单、不传 `--dangerously-skip-permissions`，进程树与临时文件清理
-- **状态：** complete
+### V9-M3：模型可见性与平权收口
+- [ ] visibleModels 过滤：listModels 按可见性过滤，未勾选不在选择器出现但显式请求仍兼容
+- [ ] temperature/maxTokens/stop 按 AGY 实际能力透传或面板禁用并提示
+- [ ] inputModalities 保持 text-only，imageInput 仅 off/experimental 且面板标注限制
+- [ ] 校验：面板勾选→选择器可见性、base+effort 下拉、旧后缀兼容、workspace 无感三者联动
+- **状态：** pending
 
-### V8-M4：真实可靠性与成本门禁（go/no-go）
-- [x] 真实对照：warm-turn 首事件延迟中位数改善 ≥15%，累计 input tokens 增幅 ≤5%，无重复/丢失响应
-- [x] 预算内完成（22/165k/12k 总预算，单次窗口 ≤2 请求），失败则按 no-go 停止，不发布虚假能力
-- [x] 复用目的路由（compaction/sessionTitle/无 sessionId 请求）保持 one-shot，避免长上下文成本膨胀
-- **状态：** complete
-- **结论：** go — warm 79.1% 改善，token 5.5% 增幅（累计 14955 vs 14176），无串线
-- **门禁：** M4 no-go → 停止 0.8.0 发布，评估 re-scope；不进入 M5/M6
-
-### V8-M5：条件性图片门禁（仅 M4 go 后）
-- [x] 像素盲测、DSH Web、工具所有权、临时资源清理四项全过才声明 `inputModalities: ["text","image"]`
-- [x] 否则保持 `imageInput: experimental/off` 与 text-only metadata，不阻塞主线
-- [x] 验证图片 staging 仅 `0600` 且成功/失败路径均清理，日志不含路径/payload/conversationId
-- **状态：** complete
-- **结论：** no-go for image — 保持 text-only，imageInput experimental，不阻塞 persistent 主线（条件性交付）
-
-### V8-M6：doctor v4 与 RC 门禁
-- [x] doctor v4 只读报告：configured/effective transport、AGY version gate、worker capability/limits、fallback 边界、DSH stable/next、image gate
-- **状态：** complete
-- [x] telemetry 仅 allowlisted 数值：transport、attempt/turn/process counts、worker reset reason、latency/usage、bridge outcome
-- [x] 审计：日志/argv/stdin frame/临时文件/进程树/package inventory；CI 覆盖 Node 20/22/24 + Windows/macOS/Ubuntu DSH native stable + rc.8 lane + self-contained smoke
-- [x] 从源码 pack 到 disposable Web/headless profile 复验 one-shot 默认与 persistent opt-in
-- **状态：** complete
-
-### V8-M7：迁移与发布
-- [x] 新增 `docs/migration-0.8.0.md` 与 `docs/v0.8.0-release-checklist.md`，同步中英文 README、installation、provider contract、compatibility、CHANGELOG
-- [x] 仅 M1-M4、M6 全过后 bump `package.json`/lockfile 到 0.8.0；M5 按 go/no-go 写入能力声明
-- [x] `npm ci` / verify / benchmark / pack / doctor / Web/headless / permission matrix / PR CI 全绿后打精确 `v0.8.0` tag，Trusted Publishing 发布
-- [x] 从 npm registry 全新安装 0.8.0 复验 latest、默认 one-shot、persistent opt-in、doctor v4、Mock、cleanup、条件性 image metadata
-- **状态：** complete
+### V9-M4：完整测试与发布
+- [ ] L1 单元：parser/serialize/models/visibleModels/normalizeModelId/i18n 覆盖率 160+ cases
+- [ ] L2 集成：fake 进程覆盖 visibleModels 过滤、base+effort、旧后缀兼容、workspace 无感
+- [ ] L3/L4：self-contained + permission-matrix smoke (quotaUsed=false)
+- [ ] L5 新增：settings-panel smoke（勾选/强度/工作区/i18n zh-CN/en）
+- [ ] L6 跨平台 CI：Node20/22/24 × Win/Ubuntu/macOS 全绿
+- [ ] L7 真实 AGY 抽样：预算内验证 base+effort 透传与旧后缀兼容
+- [ ] docs/v0.9.0-release-checklist.md 按 7 层打勾 + Trusted Publishing + registry 复验
+- [ ] 同步中英文 README / installation / contract / compatibility / CHANGELOG
+- **状态：** pending
 
 ## 关键问题
-1. AGY 1.1.15 真实 NDJSON 帧格式与现有 `experimental-transport.ts` 的 `PersistentRequestFrame` 是否一致？不一致时如何最小改动产品化？
-2. DSH rc.8 的 breaking changes 是否影响插件装载、AttachmentStore、ToolRuntime？stable/next 如何分离验证？
-3. persistent 多轮如何保证“写入后不重发”与“残余事件隔离”同时满足，不产生重复计费或跨 Session 串线？
+1. DSH 设置面板的 Config schema 元数据（schemastery title/description）是否足够驱动面板？需以 llm-deepseek 的 Config 为参照验证。
+2. workspaceRoot 废弃后，legacy agy-owned 用户如何平滑迁移？是否保留读取但忽略？
+3. temperature 等参数 AGY CLI 是否支持透传？不支持时面板应禁用还是报错？
+4. visibleModels 为空时是“显示全部”还是“显示已配置 models”？与 modelDiscovery:off 如何交互？
+5. 归一化后旧配置 gemini-3.7-flash-high 是否自动迁移为 model+effort，还是仅兼容期 warning？
+6. schemastery i18n 的 zh-CN/en 键名是否与 DSH Web locale 完全对齐（zh / zh-CN / en-US）？
+7. 7 层测试中 L5 设置面板 smoke 需 DSH Web 定制 fixture，如何保持 quotaUsed=false 且稳定？
 
 ## 已做决策
 | 决策 | 理由 |
 |------|------|
-| 0.8.0 保持 one-shot 默认，persistent 仅 opt-in | 降低切换风险，待 registry 反馈稳定后再评估默认迁移（v0.8.0 计划 §3.1） |
-| 一 Session 一 worker，不共享 conversation，不跨进程持久化 | 避免响应串线与上下文污染（计划 §3.2） |
-| 写入后不自动 fallback 到 one-shot | 无法证明未计费，重发会产生不可预测副作用（计划 §3.3） |
-| DSH 拥有工具/权限，Provider 不执行工具 | 延续 0.7.0 安全边界，避免权限提升（计划 §3.4） |
-| 采用文件规划系统（task_plan/findings/progress） | 满足“每步留痕”，支持 /clear 后恢复 |
-| 分支前缀 `codex/` | 遵循 AGENTS.md Git 规范 |
+| dsh-owned 废弃 workspaceRoot，DSH Session cwd 为唯一权威 | DSH 已有项目目录，无需用户二次配置，见 src/dsh/context.ts resolveDshContext |
+| 面板即 Config 的可视化，不另起存储 | 保持单一事实源，复用 Cordis/Schemastery 机制 |
+| 文本请求无需 workspace，工具请求 fail-closed | 降低无感门槛，同时保持安全边界 |
+| base 模型 + reasoningEffort 分离 | 与原生 Provider 对齐，面板强度下拉而非三个重复模型 |
+| V9 仍不强行公开 image modality | 沿用 V8-M5 四门门禁 |
 
 ## 遇到的错误
 | 错误 | 尝试次数 | 解决方案 |
 |------|---------|---------|
-| 暂无 | - | - |
+| git push schannel SEC_E_NO_CREDENTIALS | 2 | 沙箱内 schannel 证书不可用，已合并 main b7c9a45，待宿主终端手动 git push origin main && git push origin v0.8.0 |
+| .gitconfig Permission denied (openssl 切换) | 1 | 沙箱内文件锁，恢复 schannel，不阻塞 0.9.0 规划 |
 
 ## 备注
-- 阶段状态流转：pending → in_progress → complete；每完成一阶段更新本文件与 `progress.md`
-- 做重大决策前重读本计划
-- 记录所有错误，避免重复
-- 当前基线：`dsh-agy-provider@0.7.0` / AGY `1.1.15` / DSH `0.1.0-rc.7` stable / DSH `0.1.0-rc.8` next（规划基线，见 v0.8.0 计划 §2）
-
-
+- 0.8.0 遗留：本地已 git merge --no-ff b7c9a45，需宿主执行推送与打 tag
+- 分支建议：codex/v0.9.0-panel-workspace

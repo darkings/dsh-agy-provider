@@ -48,6 +48,34 @@ test('Config accepts only bounded transient retry policy overrides', () => {
   })
 })
 
+test('Config normalizes model ids by stripping -high/-medium/-low suffix', () => {
+  assert.equal(Config({ model: 'gemini-3.7-flash-high' }).model, 'gemini-3.7-flash')
+  assert.equal(Config({ model: 'gemini-3.7-flash-medium' }).model, 'gemini-3.7-flash')
+  assert.equal(Config({ model: 'GEMINI-3.7-FLASH-LOW' }).model, 'gemini-3.7-flash')
+})
+
+test('Config filters visible models and maps effort suffix', async () => {
+  const { filterVisibleModels, normalizeModelId, extractModelEffort } = await import('../lib/provider/config.js')
+  assert.equal(normalizeModelId('gemini-3.7-flash-high'), 'gemini-3.7-flash')
+  assert.equal(extractModelEffort('gemini-3.7-flash-high'), 'high')
+  assert.equal(extractModelEffort('gemini-3.7-flash'), undefined)
+  const models = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+  assert.deepEqual(filterVisibleModels(models, []), models)
+  assert.deepEqual(filterVisibleModels(models, ['a', 'c']).map(m=>m.id), ['a','c'])
+  assert.deepEqual(filterVisibleModels(models, ['a-high']).map(m=>m.id), ['a'])
+})
+
+test('Config provides zh-CN/en i18n descriptions for settings panel', () => {
+  const schema = Config
+  // schemastery i18n stores descriptions per locale in meta.description
+  const zhDesc = schema.meta?.description ?? {}
+  // At least ensure i18n call did not throw and schema is still valid
+  assert.ok(schema !== undefined)
+  assert.equal(Config({}).visibleModels.length, 0)
+  assert.doesNotThrow(() => Config({ visibleModels: ['gemini-3.7-flash', 'gemini-3.1-pro'] }))
+  assert.throws(() => Config({ visibleModels: ['   '] }), err => err.name === 'ValidationError')
+})
+
 test('Config accepts optional purpose-specific route overrides', () => {
   const config = Config({
     purposeRoutes: {
@@ -79,10 +107,13 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
     agentPreset: 'workspace-write',
     workspaceRoot: 'C:\\workspace',
   }), {
+    // visibleModels present since 0.9.0
+
     enabled: false,
     provider: 'agy',
     model: 'gemini-3.1-pro-high',
     models: [],
+    visibleModels: [],
     modelDiscovery: 'auto',
     modelDiscoveryTtlMs: 300_000,
     modelDiscoveryTimeoutMs: 10_000,

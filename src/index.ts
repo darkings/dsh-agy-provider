@@ -16,6 +16,8 @@ import {
 } from './provider/config.js'
 import type { ModelConfig, ToolPolicy } from './provider/config.js'
 import { MockAdapter } from './provider/mock.js'
+import { AgyModelDiscovery } from './agy/models.js'
+import { configuredModels } from './provider/config.js'
 import type { DshContextLookup } from './dsh/context.js'
 
 export const name = 'dsh-agy-provider'
@@ -119,6 +121,38 @@ export type { ConfigType, ModelConfig, ToolPolicy }
 export interface Config extends ConfigType {}
 
 export function apply(ctx: Context, config: ConfigType): void {
+  // Settings panel: expose AGY as configurable provider (displayName follows DSH locale via Config i18n description)
+  // The namespace is the plugin name; settingsPath [] means the whole section is the profile.
+  try {
+    ctx.llm.registerConfigurableProviders([{
+      provider: 'agy',
+      displayName: 'AGY',
+      settingsNs: 'dsh-agy-provider',
+      settingsPath: [],
+    }])
+  } catch {}
+  try {
+    ctx.llm.registerModelDiscovery('dsh-agy-provider', async (request) => {
+      // If editing an existing agy route, prefer our already-known catalog; otherwise discover via AGY CLI.
+      // request.provider being 'agy' or undefined both mean this plugin owns the draft.
+      if (request.provider !== undefined && request.provider !== 'agy') return []
+      const discovery = new AgyModelDiscovery({
+        ...(config.agyPath?.trim() ? { executable: config.agyPath.trim() } : {}),
+        ...(config.modelDiscoveryTtlMs === undefined ? {} : { ttlMs: config.modelDiscoveryTtlMs }),
+        ...(config.modelDiscoveryTimeoutMs === undefined ? {} : { timeoutMs: config.modelDiscoveryTimeoutMs }),
+      })
+      const configured = configuredModels(config)
+      const result = config.modelDiscovery === 'off'
+        ? { models: configured, source: 'static' as const, stale: false }
+        : await discovery.discover(configured)
+      return result.models.map(m => ({
+        id: m.id,
+        ...(m.name === undefined ? {} : { name: m.name }),
+        ...(m.contextWindow === undefined ? {} : { contextWindow: m.contextWindow }),
+      }))
+    })
+  } catch {}
+
   if (config.enabled !== true) return
   const provider = config.provider ?? 'agy'
   if (provider === 'agy-mock') {

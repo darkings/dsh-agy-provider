@@ -1,5 +1,6 @@
 import { resolveAgyExecutable, runProcess, type ProcessRequest, type ProcessResult } from './process.js'
 import type { ModelConfig } from '../provider/config.js'
+import { extractModelEffort, normalizeModelId } from '../provider/config.js'
 import {
   MODEL_DISCOVERY_EMPTY_CODE,
   MODEL_DISCOVERY_FAILED_CODE,
@@ -69,20 +70,23 @@ function metadataValue<T extends keyof ModelConfig>(
   return fallback?.[key]
 }
 
-/** Merge explicit configuration first, then add AGY-discovered models. */
+/** Merge explicit configuration first, then add AGY-discovered models. Normalizes base ids and dedupes. */
 export function mergeModelCatalog(
   configured: readonly ModelConfig[],
   discovered: readonly ModelConfig[],
 ): readonly ModelConfig[] {
-  const discoveredById = new Map(discovered.map(model => [model.id, model]))
+  const normalizedDiscovered = discovered.map(m => ({ ...m, id: normalizeModelId(m.id) }))
+  const discoveredById = new Map(normalizedDiscovered.map(model => [model.id.toLowerCase(), model]))
   const merged: ModelConfig[] = []
   const seen = new Set<string>()
 
   for (const configuredModel of configured) {
-    if (seen.has(configuredModel.id)) continue
-    seen.add(configuredModel.id)
-    const discoveredModel = discoveredById.get(configuredModel.id)
-    const model: ModelConfig = { id: configuredModel.id }
+    const baseId = normalizeModelId(configuredModel.id)
+    const key = baseId.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const discoveredModel = discoveredById.get(baseId.toLowerCase())
+    const model: ModelConfig = { id: baseId }
     const name = metadataValue(configuredModel, discoveredModel, 'name')
     const description = metadataValue(configuredModel, discoveredModel, 'description')
     const contextWindow = metadataValue(configuredModel, discoveredModel, 'contextWindow')
@@ -92,18 +96,23 @@ export function mergeModelCatalog(
     merged.push(model)
   }
 
-  for (const discoveredModel of discovered) {
-    if (seen.has(discoveredModel.id)) continue
-    seen.add(discoveredModel.id)
+  for (const discoveredModel of normalizedDiscovered) {
+    const key = discoveredModel.id.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
     merged.push({ ...discoveredModel })
   }
   return merged
 }
 
-/** Parse the tab-separated, non-interactive output of `agy models`. */
+/** @deprecated Use normalizeModelId/extractModelEffort for effort-split handling. */
+export const MODEL_EFFORT_SUFFIX_RE = /-(?:low|medium|high)$/i
+
+/** Parse the tab-separated, non-interactive output of `agy models`. Normalizes -high/-medium/-low suffix to base id and dedupes base. */
 export function parseAgyModels(output: string): ModelConfig[] {
   const models: ModelConfig[] = []
   const seen = new Set<string>()
+  const baseSeen = new Set<string>()
   for (const rawLine of output.split(/\r?\n/)) {
     const line = rawLine.trim()
     if (line.length === 0) continue
@@ -111,10 +120,15 @@ export function parseAgyModels(output: string): ModelConfig[] {
     const id = fields.shift()?.trim() ?? ''
     const display = fields.join(' ').trim()
     if (!MODEL_ID_PATTERN.test(id) || seen.has(id)) continue
+    const baseId = normalizeModelId(id)
+    if (baseSeen.has(baseId.toLowerCase())) continue
     if (id.toLowerCase() === 'id' && /display|name/i.test(display)) continue
     if (display.length > MAX_MODEL_DISPLAY_LENGTH || /[\u0000-\u001f\u007f]/.test(display)) continue
     seen.add(id)
-    models.push(display.length === 0 ? { id } : { id, name: display })
+    baseSeen.add(baseId.toLowerCase())
+    // Preserve display but normalize id to base for DSH reasoningEffort split
+    const normalized: ModelConfig = display.length === 0 ? { id: baseId } : { id: baseId, name: display.replace(MODEL_EFFORT_SUFFIX_RE, '') }
+    models.push(normalized)
   }
   return models
 }

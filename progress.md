@@ -297,3 +297,13 @@
 - **输入：** 设置要跟随 DSH 当前语言中/英切换；0.9.0 要有完整详细的测试流程
 - **操作：** docs/v0.9.0-development-plan.md 新增 §3.6 中/英切换（schemastery .i18n），新增 §8 7层测试流程（L1~L7 含 i18n/模型/工作区专项）； task_plan.md V9-M1 增加 i18n，V9-M4 展开为 7 层；重编号 §9/10
 - **设计：** Config 每个字段 .i18n({ 'zh-CN':{$description}, en:{$description} })，CI 校验覆盖率，L5 smoke 分别 --locale zh-CN/en 截图校验；测试流程按 verify→集成→自包含→权限矩阵→设置面板→跨平台→真实抽样顺序，全部 quotaUsed=false 除 L7
+### 2026-08-21 20:00 V9-M1 实施 - 设置面板基础
+- **状态：** 提交 32abadc
+- **分支：** codex/v0.9.0-panel-workspace (基于 main@7fafdbe)
+- **操作：**
+  - src/provider/config.ts: 新增 visibleModels 多选，workspaceRoot deprecated，i18n zh-CN/en 全量描述，helpers normalizeModelId/extractModelEffort/filterVisibleModels
+  - src/agy/models.ts: parseAgyModels/mergeModelCatalog 归一化 base id 去重，支持 -high/-medium/-low 后缀
+  - src/provider/agy.ts: 存储 visibleModels，effectiveModels 按可见性过滤，resolveModel/stream 支持旧后缀自动拆 base+effort
+  - src/index.ts: apply 内注册 registerConfigurableProviders(settingsNs dsh-agy-provider) + registerModelDiscovery 供面板模型发现
+- **验证：** npm run build ✅ typecheck ✅
+- **下一步：** V9-M2 工作区无感 doctor v5 与 V9-M3 可见性联调 + L1/L2 单测补充

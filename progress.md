@@ -315,3 +315,7 @@
 - **实现：** doctor profileSchemaVersion 3→4，新增 workspaceSource/visibleModels/modelEffortSplit，deprecation 警告 DEPRECATED_WORKSPACE_ROOT/DEPRECATED_MODEL_EFFORT_SUFFIX，dsh-owned 时 workspaceRoot 免校验
 - **提交：** doctor v5
 - **状态：** V9-M2 complete
+### 2026-08-21 22:00 V9-M3 完成提交
+- **实现：** Config 单测增加归一化/可见性/i18n，doctor 单测 bump 4，smoke 支持 3/4 兼容
+- **提交：** V9-M3
+- **状态：** V9-M3 complete

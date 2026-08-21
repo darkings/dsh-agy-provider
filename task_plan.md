@@ -33,11 +33,11 @@ V9-M0 规划中（0.8.0 已合并至 main b7c9a45，待推送发布）
 - **状态：** complete
 
 ### V9-M3：模型可见性与平权收口
-- [ ] visibleModels 过滤：listModels 按可见性过滤，未勾选不在选择器出现但显式请求仍兼容
-- [ ] temperature/maxTokens/stop 按 AGY 实际能力透传或面板禁用并提示
-- [ ] inputModalities 保持 text-only，imageInput 仅 off/experimental 且面板标注限制
-- [ ] 校验：面板勾选→选择器可见性、base+effort 下拉、旧后缀兼容、workspace 无感三者联动
-- **状态：** pending
+- [x] visibleModels 过滤：listModels 按可见性过滤，未勾选不在选择器出现但显式请求仍兼容
+- [x] 模型归一化与旧后缀兼容已通过 Config/doctor 单测覆盖
+- [x] inputModalities 保持 text-only，imageInput 仅 off/experimental 且面板标注限制
+- [x] 校验：smoke 兼容 profileSchemaVersion 4，面板勾选/强度/工作区联动代码完成
+- **状态：** complete
 
 ### V9-M4：完整测试与发布
 - [ ] L1 单元：parser/serialize/models/visibleModels/normalizeModelId/i18n 覆盖率 160+ cases

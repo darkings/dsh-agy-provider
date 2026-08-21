@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.0] - 2026-08-21
+
+### Added
+
+- 设置面板：`Config` 全量 `zh-CN/en i18n`（schemastery .i18n），`registerConfigurableProviders`(`settingsNs dsh-agy-provider`) + `registerModelDiscovery` 使 DSH 设置面板可直接勾选模型、选强度、切语言。
+- 模型可见性：`visibleModels: string[]` 空=全部，非空仅显示勾选的 base id；`filterVisibleModels()` 与面板多选联动，未勾选显式请求仍兼容。
+- 模型与推理强度分离：`normalizeModelId/extractModelEffort` 去 `-high/-medium/-low` 后缀，`parseAgyModels/mergeModelCatalog` 按 base 去重，`listModels` 仅返回 base 并带 `reasoning.efforts`，旧后缀自动拆 base+effort + `DEPRECATED_MODEL_EFFORT_SUFFIX` warning。
+- 工作区无感：`dsh-owned` 下废弃 `workspaceRoot`（`.deprecated()`，面板隐藏，`resolveAgyAgentRuntime` 强制 undefined），工具走 DSH Session `header.cwd + workspaceRegistry`，文本无需 workspace，工具无 workspace 返回 `DSH_WORKSPACE_MISMATCH` 可操作错误。
+- Doctor v5（`profileSchemaVersion 4`）：报告 `workspaceSource/visibleModels/modelEffortSplit`，新增 `DEPRECATED_WORKSPACE_ROOT/DEPRECATED_MODEL_EFFORT_SUFFIX` 警告，`doctor` 适配 zh-CN/en。
+- 7 层测试流程：L1 单元 160+ cases、L2 集成、L3 自包含、L4 权限矩阵、L5 设置面板(i18n)、L6 跨平台、L7 真实抽样；smoke 兼容 v3/v4。
+
+### Changed
+
+- `Config.model/models` 语义收口为 base id，`AgyAdapter` 的 `listModels/resolveModel/stream` 统一走 base + reasoningEffort。
+- `doctor` 与 `smoke` 兼容 `profileSchemaVersion 3/4`，迁移文档与发布清单按 7 层重组。
+
 ## [0.8.0] - 2026-08-20
 
 ### Added

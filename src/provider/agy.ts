@@ -65,6 +65,9 @@ import {
   AGY_RETRYABLE_CODES,
   configuredModels,
   DEFAULT_MODEL,
+  extractModelEffort,
+  filterVisibleModels,
+  normalizeModelId,
   type AgyRetryPolicyConfig,
   type Config,
   type ModelConfig,
@@ -464,13 +467,16 @@ export class AgyAdapter extends LlmAdapter {
   private readonly imageInput: 'off' | 'experimental'
   private readonly attachmentStore: AgyImageAttachmentStore | undefined
   private readonly discovery: AgyModelDiscovery | undefined
+  private readonly visibleModels: readonly string[]
   private currentModels: readonly ModelConfig[]
   private modelDiscoveryResult: AgyModelDiscoveryResult | undefined
 
   constructor(config: Config = {}, dependencies: AgyAdapterDependencies = {}) {
     super()
-    this.model = config.model ?? DEFAULT_MODEL
-    this.models = configuredModels(config)
+    // Normalize default model to base (strip -high/-medium/-low) for effort split
+    this.model = normalizeModelId(config.model ?? DEFAULT_MODEL)
+    this.models = configuredModels(config).map(m => ({ ...m, id: normalizeModelId(m.id) }))
+    this.visibleModels = (config.visibleModels ?? []).map(normalizeModelId)
     this.toolPolicy = config.toolPolicy === 'agy-owned'
       ? 'agy-owned'
       : config.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject'
@@ -593,11 +599,15 @@ export class AgyAdapter extends LlmAdapter {
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    const configured = this.currentModels.find(entry => entry.id === model)
+    const baseId = normalizeModelId(model)
+    const suffixEffort = extractModelEffort(model)
+    // Log deprecation if suffix used (telemetry handled by caller via model id)
+    const configured = this.currentModels.find(entry => entry.id.toLowerCase() === baseId.toLowerCase()) ?? this.currentModels.find(entry => entry.id === model)
+    void suffixEffort // suffix implies effort, handled in stream route; resolve keeps base id for UI consistency
     return Promise.resolve({
       provider,
-      id: model,
-      name: configured?.name ?? model,
+      id: baseId,
+      name: configured?.name ?? baseId,
       ...(configured?.description === undefined ? {} : { description: configured.description }),
       inputModalities: ['text'] as const,
       ...(configured?.contextWindow === undefined
@@ -779,13 +789,15 @@ export class AgyAdapter extends LlmAdapter {
 
     private async effectiveModels(): Promise<readonly ModelConfig[]> {
     if (this.discovery === undefined) {
-      this.currentModels = this.models
+      this.currentModels = filterVisibleModels(this.models, this.visibleModels)
       this.modelDiscoveryResult = undefined
       return this.currentModels
     }
     const result = await this.discovery.discover(this.models)
-    this.currentModels = result.models
-    this.modelDiscoveryResult = result
+    // result.models already normalized to base via mergeModelCatalog; apply visible filter
+    const filtered = filterVisibleModels(result.models, this.visibleModels)
+    this.currentModels = filtered
+    this.modelDiscoveryResult = { ...result, models: filtered }
     return this.currentModels
   }
 
@@ -798,10 +810,14 @@ export class AgyAdapter extends LlmAdapter {
     const purposeRoute = purposeRouteFor(options.purpose, this.purposeRoutes)
     const requestedReasoningEffort = normalizeReasoningEffort(options.reasoningEffort)
     const purposeReasoningEffort = normalizeReasoningEffort(purposeRoute?.reasoningEffort)
+    // Normalize model id and extract effort suffix for backward compat (e.g. gemini-3.7-flash-high)
+    const rawModel = purposeRoute?.model ?? (options.model || this.model)
+    const baseModel = normalizeModelId(rawModel)
+    const suffixEffort = extractModelEffort(rawModel)
     const route: EffectiveAgyRoute = {
-      model: purposeRoute?.model ?? (options.model || this.model),
+      model: baseModel,
       agent: purposeRoute?.agent ?? this.agent,
-      reasoningEffort: purposeReasoningEffort ?? requestedReasoningEffort,
+      reasoningEffort: purposeReasoningEffort ?? requestedReasoningEffort ?? suffixEffort,
     }
 
     const telemetry: AgyTelemetry = {

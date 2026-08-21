@@ -268,7 +268,7 @@ test('doctor v3 reports effective DSH bridge capabilities without exposing works
       }),
     })
 
-    assert.equal(result.profileSchemaVersion, 3)
+    assert.equal(result.profileSchemaVersion, 4)
     assert.equal(result.effective.dumpStatus, 'ok')
     assert.equal(result.effective.agent, 'dsh-agy-read-only')
     assert.equal(result.effective.agentPreset, 'read-only')

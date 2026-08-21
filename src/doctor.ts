@@ -142,6 +142,9 @@ export interface EffectiveProfileConfig {
     sessionTitle: EffectivePurposeRoute | null
   }
   workspaceRootStatus: 'configured' | 'missing' | 'not-directory' | 'unknown'
+  workspaceSource: 'dsh-session-cwd' | 'config-legacy' | 'unknown'
+  visibleModels: { raw: string | null; count: number | null; filtered: boolean }
+  modelEffortSplit: { baseModel: string | null; suffixDetected: boolean; normalized: boolean }
   imageInput: string | null
   modelCapability: {
     inputModalities: readonly ['text']
@@ -162,7 +165,7 @@ export interface EffectiveProfileConfig {
 }
 
 export interface ProfileDiagnosticResult {
-  profileSchemaVersion: 3
+  profileSchemaVersion: 4
   name: string
   dshHomePresent: boolean
   profilePresent: boolean
@@ -396,6 +399,9 @@ function emptyEffective(dumpStatus: ProfileDumpStatus): EffectiveProfileConfig {
     retryPolicy: null,
     purposeRoutes: { compaction: null, sessionTitle: null },
     workspaceRootStatus: 'unknown',
+    workspaceSource: 'unknown',
+    visibleModels: { raw: null, count: null, filtered: false },
+    modelEffortSplit: { baseModel: null, suffixDetected: false, normalized: false },
     imageInput: null,
     modelCapability: { inputModalities: ['text'], imageBridge: 'unknown' },
     agentCapability: {
@@ -498,6 +504,12 @@ function effectiveFromDump(
   const toolPolicy = valueOf(values, 'toolPolicy')
   const bundleEnabled = booleanValue(valueOf(values, 'enabled'))
   const workspaceRootStatus = workspaceStatus(valueOf(values, 'workspaceRoot'))
+  const workspaceSource = toolPolicy === 'dsh-owned' ? 'dsh-session-cwd' : workspaceRootStatus === 'configured' ? 'config-legacy' : 'unknown'
+  const rawVisible = valueOf(values, 'visibleModels')
+  const visibleCount = rawVisible === null ? null : (() => { try { const v = JSON.parse(rawVisible); return Array.isArray(v) ? v.length : null } catch { return rawVisible.length > 0 ? 1 : 0 } })()
+  const rawModel = valueOf(values, 'model')
+  const suffixDetected = rawModel !== null && /-(?:low|medium|high)$/i.test(rawModel)
+  const baseModel = rawModel !== null ? rawModel.replace(/-(?:low|medium|high)$/i, '') : null
   const configuredAgent = valueOf(values, 'agent')
   return {
     dumpStatus,
@@ -514,6 +526,9 @@ function effectiveFromDump(
       sessionTitle: routeFromDump(values, 'sessionTitle'),
     },
     workspaceRootStatus,
+    workspaceSource,
+    visibleModels: { raw: rawVisible, count: visibleCount, filtered: visibleCount !== null && visibleCount > 0 },
+    modelEffortSplit: { baseModel, suffixDetected, normalized: suffixDetected ? baseModel !== rawModel : false },
     imageInput,
     modelCapability: {
       inputModalities: ['text'],
@@ -682,7 +697,7 @@ export async function diagnoseProfile(
 
   if (!validProfileName) {
     return {
-      profileSchemaVersion: 3,
+      profileSchemaVersion: 4,
       name: '<invalid>',
       dshHomePresent,
       profilePresent: false,
@@ -859,8 +874,26 @@ export async function diagnoseProfile(
               })
             }
 
+            // 0.9.0: dsh-owned uses DSH session cwd, no workspaceRoot required; only warn for legacy agy-owned
+            if (toolPolicy === 'dsh-owned' && effective.workspaceRootStatus === 'configured') {
+              issues.push({
+                component: 'profile',
+                code: 'DEPRECATED_WORKSPACE_ROOT',
+                message: 'workspaceRoot is deprecated for toolPolicy dsh-owned; DSH session workspace is used automatically',
+              })
+              addSuggestion('Remove workspaceRoot from profile; open the project folder in DSH and rely on session workspace')
+            }
+            if (effective.modelEffortSplit.suffixDetected) {
+              issues.push({
+                component: 'profile',
+                code: 'DEPRECATED_MODEL_EFFORT_SUFFIX',
+                message: `Model id "${effective.model}" contains -low/-medium/-high suffix; use base model "${effective.modelEffortSplit.baseModel}" and select reasoningEffort separately`,
+              })
+              addSuggestion('Set model to ' + effective.modelEffortSplit.baseModel + ' and choose reasoningEffort low/medium/high via DSH')
+            }
             if (effective.agentCapability.writeTools === true
-              && effective.workspaceRootStatus !== 'configured') {
+              && effective.workspaceRootStatus !== 'configured'
+              && toolPolicy !== 'dsh-owned') {
               issues.push({
                 component: 'profile',
                 code: 'PROFILE_WORKSPACE_REQUIRED',
@@ -929,7 +962,7 @@ export async function diagnoseProfile(
   }
 
   return {
-    profileSchemaVersion: 3,
+    profileSchemaVersion: 4,
     name: profileName,
     dshHomePresent,
     profilePresent,

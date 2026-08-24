@@ -1,6 +1,6 @@
 {
   "name": "dsh-agy-provider",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -28,6 +28,7 @@
     "lib/**/*.js",
     "lib/**/*.d.ts",
     "bin/**/*.js",
+    "bin/**/*.exe",
     "agents/**/*.md",
     "cordis.patch.yml"
   ],
@@ -57,29 +58,31 @@
     "quota:experiment": "npm run build && node scripts/quota-experiment.mjs",
     "image:experiment": "npm run build && node scripts/image-protocol-experiment.mjs",
     "verify": "npm run typecheck && npm test && npm pack --dry-run",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "build:windows-launcher": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-launcher.ps1"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.1",
-    "@deepseek-ai/dsh-attachment": "^0.1.0-rc.7",
-    "@deepseek-ai/dsh-brand": "^0.1.0-rc.7",
-    "@deepseek-ai/dsh-invariants": "^0.1.0-rc.7",
-    "@deepseek-ai/dsh-llm": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-timeout": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-attachment": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-brand": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-invariants": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-settings": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-timeout": "^0.1.0-rc.8",
     "@deepseek-ai/schemastery": "3.18.1",
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-attachment": "^0.1.0-rc.7",
-    "@deepseek-ai/dsh-brand": "^0.1.0-rc.7",
-    "@deepseek-ai/dsh-invariants": "^0.1.0-rc.7",
-    "@deepseek-ai/dsh-llm": "^0.1.0-rc.7",
-    "@deepseek-ai/dsh-timeout": "^0.1.0-rc.7"
+    "@deepseek-ai/dsh-attachment": "^0.1.0-rc.7 || ^0.1.0-rc.8",
+    "@deepseek-ai/dsh-brand": "^0.1.0-rc.7 || ^0.1.0-rc.8",
+    "@deepseek-ai/dsh-invariants": "^0.1.0-rc.7 || ^0.1.0-rc.8",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.7 || ^0.1.0-rc.8",
+    "@deepseek-ai/dsh-timeout": "^0.1.0-rc.7 || ^0.1.0-rc.8"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1"

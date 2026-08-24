@@ -117,11 +117,13 @@ V1 选择 AGY 自治 Agent。默认 `toolPolicy: reject` 时 `GenerateOptions.to
 
 ## M7 配置与可观测性
 
+DSH-owned 模式下，普通 `step_update.name` 不视为内部工具；只有 `tool_call`、`tool_result`、`step_type=tool` 或明确的 `tool_name` 才会返回 `AGY_INTERNAL_TOOL_EVENT`。DSH tools schema 不支持仍返回 `UNSUPPORTED_TOOLS`。
+
 Adapter 使用 `minimumAgyVersion`、`maxConcurrent`、`maxQueue` 和 `queueTimeoutMs` 控制兼容性与本机进程资源。`diagnoseAgy()` 只调用 `agy --version` 和 `agy agents`；它不会发送 Prompt、使用 AGY 额度或触发工具。
 
 `Config.models` 提供显式模型目录，条目包含必填的精确 `id`，以及可选的 `name`、`description` 和 `contextWindow`。`Config.model` 仍兼容 0.1.0，并作为默认/回退条目；目录按 `id` 去重，未配置但由请求方明确传入的模型 ID 不会被静默改写。`diagnoseProvider()` 和 `npm run diagnose -- --json` 使用 `schemaVersion: 1` 返回插件、Node.js、DSH、AGY、Agent、配置和模型目录状态，并将诊断标记为 `quotaUsed: false`。
 
-请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间、最终 AGY `status`、`eventCount`、固定类别计数、工具/权限事件计数、`toolPolicy` 和 `toolSchemaCount`。日志发送前会脱敏字符串，并且不包含 Prompt、stderr、环境变量、AGY 路径、工具参数或凭据。
+请求生命周期日志通过 Cordis logger 输出白名单元数据：`requestId`、`sessionId`、`conversationId`、`durationMs`、`exitCode`、`termination`、队列等待时间、最终 AGY `status`、`eventCount`、固定类别计数、工具/权限事件计数、`toolPolicy` 和 `toolSchemaCount`。失败请求可额外包含脱敏的 `processDiagnostic`（启动阶段、内部错误名/code、stdout 行号/长度、stdout/stderr 字节计数和短行哈希），用于区分 launcher、spawn、stdin 和 stdout parser/handler 失败。日志发送前会脱敏字符串，并且不包含 Prompt、响应正文、stderr 原文、环境变量、AGY 路径、工具参数或凭据。
 
 V2-M3 使用稳定错误分类：认证 `AUTH`、额度 `QUOTA`、速率限制 `RATE_LIMIT`、未知模型 `MODEL_NOT_FOUND`、Agent 缺失 `AGY_AGENT_MISSING`、上下文超限 `CONTEXT_WINDOW_EXCEEDED`，以及现有的 `PERMISSION_REQUIRED`、`TIMEOUT`、`ABORTED`、`AGY_PARSE`、`AGY_OUTPUT_LIMIT`、`AGY_STATUS` 和 `AGY_EXIT`。分类只基于有界的 AGY status/stderr/error event detail；未知文本保留 fallback code。
 
@@ -150,3 +152,34 @@ DSH ToolRuntime + sandbox + approval
 - 所有 bridge 错误、取消、超时和临时 schema cleanup 都必须保持稳定错误码和脱敏边界。
 
 验证证据见 [工具能力矩阵](tool-capability-matrix.md)、[0.7.0 迁移说明](migration-0.7.0.md) 和 [0.7.0 release checklist](v0.7.0-release-checklist.md)。
+
+## 0.8.0 Persistent transport（AGY 1.1.15 stream-json）
+
+- 单进程多轮输入：每行 `{"event":"user","message":{"role":"user","content":[{"type":"text","text":...}]}}`，输出 `init/step_update/result`（`conversation_id` 一致，见 `src/agy/persistent-transport.ts`）。
+- `transport: one-shot | persistent` 默认 `one-shot`；`persistent` 时一 Session 一 worker（idle TTL + readyTimeout + before-accept 回退），仍复用 parser/错误分类/usage/tool protocol。
+- 目的路由：`compaction/sessionTitle` 与无 `sessionId` 请求固定走 `one-shot`；`M4` 实测 warm-turn 79% 改善，token 5.5% 增幅，无串线。
+
+## 0.9.0 设置面板 + 工作区无感 + 模型平权
+
+### 设置面板
+
+- 插件 `apply()` 注册 `ctx.llm.registerConfigurableProviders([{provider:'agy', displayName:'AGY', settingsNs:'dsh-agy-provider', settingsPath:[]}])`，设置面板由 `Config` schema 的 `description` 驱动。
+- `ctx.llm.registerModelDiscovery('dsh-agy-provider', ...)` 暴露发现模型，面板渲染为多选勾选框，勾选写回 `visibleModels`。
+- `Config` 每个字段配 `.i18n({'zh-CN':{$description},en:{$description}})`，DSH 按当前 locale 合并显示；`workspaceRoot` 加 `.deprecated()` 且 `dsh-owned` 时隐藏。
+
+### 工作区无感
+
+```text
+header.cwd (canonical) → workspaceRegistry.resolveByPath(cwd) → sandboxPolicy.resolve(session) → resolveDshContext 校验三者一致 → Provider 直接使用 canonicalCwd
+```
+
+- `dsh-owned` 下 `workspaceRoot` 不再读取（`resolveAgyAgentRuntime` 强制 `undefined`），`doctor v5` 报告 `workspaceSource: dsh-session-cwd` 与 `DEPRECATED_WORKSPACE_ROOT` warning。
+- 文本无需 workspace；有工具但无 workspace 时返回 `DSH_WORKSPACE_MISMATCH` 可操作错误，`doctor` 提示“请先在 DSH 中打开项目文件夹”。
+- 权限/沙箱仍由 DSH `read-only / workspace-write / danger-full-access` 与 `approval` 决定。
+
+### 模型平权
+
+- `src/agy/models.ts`：`normalizeModelId` 去 `-high/-medium/-low` 后缀，`extractEffort` 提取强度，`parseAgyModels/mergeModelCatalog` 按 base 去重；`configuredModels` 同。
+- `src/provider/config.ts`：`Config.visibleModels: string[]` 空=全部，非空按 base 过滤（`filterVisibleModels`）；`model/models` 语义收口为 base。
+- `src/provider/agy.ts`：`listModels()` 仅返回 base 并带 `reasoning: {efforts:[low,medium,high]}`，`resolveModel/stream` 兼容旧后缀请求自动拆 `base+effort` + warning；`effectiveModels()` 按 `visibleModels` 过滤。
+- `doctor v5` (`profileSchemaVersion: 4`) 报告 `visibleModels: {raw,count,filtered}` 与 `modelEffortSplit: {baseModel,suffixDetected,normalized}` 及 `DEPRECATED_MODEL_EFFORT_SUFFIX`。

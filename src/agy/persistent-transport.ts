@@ -9,6 +9,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { encodeAgyUserMessage } from './stream-protocol.js'
 import { AgyStreamParser } from './parser.js'
+import { buildWindowsNoConsoleLaunch } from './windows-launcher.js'
 
 export type PersistentTransportErrorCode =
   | 'ABORTED'
@@ -460,7 +461,10 @@ class PersistentAgyWorker {
       this.readyReject = reject
     })
     try {
-      const child = spawn(this.options.executable, [...this.options.args], {
+      const launch = process.platform === 'win32'
+        ? buildWindowsNoConsoleLaunch(this.options.executable, this.options.args)
+        : { executable: this.options.executable, args: this.options.args }
+      const child = spawn(launch.executable, [...launch.args], {
         cwd: this.options.cwd,
         env: {
           ...process.env,

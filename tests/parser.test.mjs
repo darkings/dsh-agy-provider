@@ -11,8 +11,10 @@ import {
   isToolEvent,
   parseAgyChunks,
   responseOf,
+  sendMessageOf,
   statusOf,
   textDeltaOf,
+  toolEventDiagnosticOf,
   usageOf,
 } from '../lib/agy/parser.js'
 import { AGY_EVENT_FIXTURES } from './fixtures/agy-events.mjs'
@@ -49,6 +51,159 @@ test('parser classifies internal tool and permission lifecycle events', () => {
   assert.equal(isToolEvent(events[0]), true)
   assert.equal(isPermissionEvent(events[0]), false)
   assert.equal(isPermissionEvent(events[1]), true)
+})
+
+test('parser does not classify a generic step name as an internal tool event', () => {
+  const parser = new AgyStreamParser()
+  const [event] = parser.push(JSON.stringify({
+    event: 'step_update',
+    step_update: { step_type: 'agent_response', name: 'Inspect' },
+  }) + '\n')
+  assert.equal(isToolEvent(event), false)
+  assert.equal(eventCategoryOf(event), 'step_update')
+})
+
+test('parser extracts the double-encoded default_api send_message carrier', () => {
+  const envelope = { kind: 'tool_call', name: 'read_file', arguments: { path: 'fixture.txt' } }
+  const parser = new AgyStreamParser()
+  const [event] = parser.push(JSON.stringify({
+    event: 'step_update',
+    step_update: {
+      step_type: 'tool',
+      tool_name: 'send_message',
+      tool_input: {
+        Recipient: JSON.stringify('default_api'),
+        Message: JSON.stringify(JSON.stringify(envelope)),
+      },
+    },
+  }) + '\n')
+  assert.deepEqual(sendMessageOf(event), {
+    recipient: 'default_api',
+    message: JSON.stringify(envelope),
+  })
+})
+
+test('parser classifies send_message carrier shape without retaining payload values', () => {
+  const parser = new AgyStreamParser()
+  const [event] = parser.push(JSON.stringify({
+    event: 'step_update',
+    step_update: {
+      step_type: 'tool',
+      tool_name: 'send_message',
+      tool_input: {
+        Recipient: JSON.stringify('default_api'),
+        Message: JSON.stringify(JSON.stringify({ kind: 'message', content: 'secret payload' })),
+      },
+    },
+  }) + '\n')
+
+  assert.deepEqual(toolEventDiagnosticOf(event), {
+    eventName: 'step_update',
+    kind: 'step-type-tool',
+    stepType: 'tool',
+    toolName: 'send_message',
+    carrierShape: 'complete',
+    recipientClass: 'default-api',
+    topLevelKeys: ['event', 'step_update'],
+    stepKeys: ['step_type', 'tool_input', 'tool_name'],
+    toolInputKeys: ['message', 'recipient'],
+  })
+  assert.equal(JSON.stringify(toolEventDiagnosticOf(event)).includes('secret payload'), false)
+})
+
+test('parser classifies a carrier recipient against the active conversation without retaining its value', () => {
+  const envelope = { kind: 'tool_call', name: 'read_file', arguments: { path: 'fixture.txt' } }
+  const parser = new AgyStreamParser()
+  const [event] = parser.push(JSON.stringify({
+    event: 'step_update',
+    step_update: {
+      step_type: 'tool',
+      tool_name: 'send_message',
+      state: {
+        tool_input: {
+          Recipient: JSON.stringify('conversation-self'),
+          Message: JSON.stringify(JSON.stringify(envelope)),
+        },
+      },
+    },
+  }) + '\n')
+
+  assert.equal(toolEventDiagnosticOf(event, 'conversation-self')?.recipientClass, 'self-conversation')
+  assert.equal(toolEventDiagnosticOf(event, 'conversation-other')?.recipientClass, 'other-conversation')
+  assert.equal(JSON.stringify(toolEventDiagnosticOf(event, 'conversation-self')).includes('conversation-self'), false)
+})
+
+test('parser classifies stable DSH runtime carrier recipients without retaining their values', () => {
+  for (const recipient of ['dsh', 'dsh-session', 'dsh-runner']) {
+    const parser = new AgyStreamParser()
+    const [event] = parser.push(JSON.stringify({
+      event: 'step_update',
+      step_update: {
+        step_type: 'tool',
+        tool_name: 'send_message',
+        tool_input: {
+          Recipient: JSON.stringify(recipient),
+          Message: JSON.stringify(JSON.stringify({ kind: 'message', content: 'secret payload' })),
+        },
+      },
+    }) + '\n')
+
+    assert.equal(toolEventDiagnosticOf(event)?.recipientClass, 'dsh-recipient')
+    assert.equal(JSON.stringify(toolEventDiagnosticOf(event)).includes(`"${recipient}"`), false)
+  }
+})
+
+test('parser rejects conflicting nested send_message carrier fields instead of choosing the first branch', () => {
+  const envelope = { kind: 'tool_call', name: 'read_file', arguments: { path: 'fixture.txt' } }
+  const parser = new AgyStreamParser()
+  const [event] = parser.push(JSON.stringify({
+    event: 'step_update',
+    step_update: {
+      step_type: 'tool',
+      tool_name: 'send_message',
+      tool_input: {
+        Recipient: JSON.stringify('default_api'),
+        Message: JSON.stringify(JSON.stringify(envelope)),
+      },
+      state: {
+        Recipient: JSON.stringify('different-conversation'),
+      },
+    },
+  }) + '\n')
+
+  assert.equal(sendMessageOf(event), undefined)
+  assert.equal(toolEventDiagnosticOf(event)?.carrierShape, 'unreadable-recipient')
+  assert.equal(toolEventDiagnosticOf(event)?.recipientClass, 'missing')
+})
+
+test('parser distinguishes a non-carrier internal tool event', () => {
+  const parser = new AgyStreamParser()
+  const [event] = parser.push(JSON.stringify({
+    event: 'step_update',
+    step_update: { step_type: 'tool', tool_name: 'shell', state: 'ACTIVE' },
+  }) + '\n')
+  assert.deepEqual(toolEventDiagnosticOf(event), {
+    eventName: 'step_update',
+    kind: 'step-type-tool',
+    stepType: 'tool',
+    toolName: 'shell',
+    carrierShape: 'not-send-message',
+    recipientClass: 'not-applicable',
+    topLevelKeys: ['event', 'step_update'],
+    stepKeys: ['state', 'step_type', 'tool_name'],
+    toolInputKeys: [],
+  })
+})
+
+test('parser preserves permission detection for the legacy ask_permission step name', () => {
+  const parser = new AgyStreamParser()
+  const [event] = parser.push(JSON.stringify({
+    event: 'step_update',
+    step_update: { name: 'ask_permission' },
+  }) + '\n')
+  assert.equal(isToolEvent(event), false)
+  assert.equal(isPermissionEvent(event), true)
+  assert.equal(eventCategoryOf(event), 'permission')
 })
 
 test('parser categorizes observed lifecycle fixtures and preserves unknown events', () => {

@@ -65,8 +65,8 @@ export function parseAgyAgents(output: string): string[] {
 
 function commandRequest(executable: string, args: readonly string[], timeoutMs: number | undefined): ProcessRequest {
   return timeoutMs === undefined
-    ? { executable, args }
-    : { executable, args, timeoutMs }
+    ? { executable, args, windowsNoConsole: true }
+    : { executable, args, timeoutMs, windowsNoConsole: true }
 }
 
 function commandFailure(label: string, result: ProcessResult): string | undefined {

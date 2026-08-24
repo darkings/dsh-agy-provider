@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { realpathSync, statSync } from 'node:fs'
-import { parse as parsePath } from 'node:path'
+import { isAbsolute, parse as parsePath, relative, resolve } from 'node:path'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import {
   CallId,
@@ -19,9 +19,10 @@ import type {
   TokenUsage,
   ResolvedRetryPolicy,
 } from '@deepseek-ai/dsh-llm'
-import { ExperimentalAgyTransport } from '../agy/persistent-transport.js'
+import { ExperimentalAgyTransport, PersistentTransportError } from '../agy/persistent-transport.js'
 import {
   AgyProcessError,
+  agyProcessDiagnosticOf,
   isAgyReasoningEffort,
   runAgyProcess,
   type AgyExecutionMode,
@@ -41,8 +42,12 @@ import {
   buildAgyLogRecord,
   emitAgyLog,
   type AgyBridgeOutcome,
+  type AgyCarrierValidation,
   type AgyLogger,
+  type AgyProtocolFailureDetail,
+  type AgyProtocolResponseShape,
   type AgyTelemetry,
+  type AgyUsageSource,
 } from '../agy/log.js'
 import { classifyAgyFailure, safeAgyFailureMessage } from '../agy/errors.js'
 import {
@@ -53,10 +58,16 @@ import {
   errorDetailOf,
   eventCategoryOf,
   isToolEvent,
+  isDshCarrierRecipient,
   isPermissionEvent,
   responseOf,
+  sendMessageOf,
   statusOf,
+  stepTypeOf,
   textDeltaOf,
+  toolEventDiagnosticOf,
+  toolEventKindOf,
+  toolNameOf,
   usageOf,
   type AgyJsonEvent,
 } from '../agy/parser.js'
@@ -78,6 +89,7 @@ import {
   type TransportMode,
 } from './config.js'
 import {
+  AGY_INTERNAL_TOOL_EVENT_CODE,
   DSH_CONTEXT_UNAVAILABLE_CODE,
   PERMISSION_REQUIRED_CODE,
   UNSUPPORTED_REASONING_EFFORT_CODE,
@@ -87,12 +99,29 @@ import { SessionRegistry, type SessionRecord } from '../session/store.js'
 import { AgyPromptError, serializeAgyTurnPrompt } from './serialize.js'
 import {
   appendToolProtocolPrompt,
+  appendToolProtocolRepairPrompt,
   createStructuredToolProtocol,
   parseStructuredEnvelope,
+  TOOL_PROTOCOL_ARGUMENTS_INVALID_CODE,
+  TOOL_PROTOCOL_RESPONSE_LIMIT_CODE,
   ToolProtocolError,
   TOOL_PROTOCOL_RESPONSE_INVALID_CODE,
+  TOOL_PROTOCOL_UNKNOWN_TOOL_CODE,
+  type ParseStructuredEnvelopeOptions,
+  type ToolProtocolArgumentDiagnostic,
+  type ToolProtocolRepairReason,
   type StructuredToolProtocol,
 } from './tool-protocol.js'
+import {
+  AgyPromptBudgetError,
+  boundAgyPrompt,
+  DEFAULT_AGY_PROMPT_CONTENT_LIMIT_BYTES,
+  DEFAULT_DSH_TOOL_PROMPT_CONTENT_LIMIT_BYTES,
+  DEFAULT_INPUT_FRAME_LIMIT_BYTES,
+  DEFAULT_MAX_HISTORICAL_TOOL_RESULT_BYTES,
+  DEFAULT_MAX_SINGLE_TOOL_RESULT_BYTES,
+  stableAgyPromptPrefix,
+} from './prompt-budget.js'
 import {
   AgyImageBridgeError,
   prepareAgyPrompts,
@@ -121,6 +150,8 @@ export interface AgyAdapterDependencies {
   concurrencyLimiter?: AgyConcurrencyLimiter
   /** Optional DSH AttachmentStore; text-only requests do not require it. */
   attachmentStore?: Pick<AttachmentStore, 'readImage'>
+  /** Lazy resolver for runtimes that compose the optional store after this plugin. */
+  resolveAttachmentStore?: () => Pick<AttachmentStore, 'readImage'> | undefined
   /** Optional Cordis reflection seam for the DSH-owned capability context. */
   dshContext?: DshContextLookup
 }
@@ -192,12 +223,201 @@ class AsyncQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
 }
 
 const DEFAULT_AGENT = 'deepseek-proxy'
-const DEFAULT_MINIMUM_AGY_VERSION = '1.1.13'
+const DEFAULT_MINIMUM_AGY_VERSION = '1.1.15'
 const DEFAULT_MAX_CONCURRENT = 4
 const DEFAULT_MAX_QUEUE = 32
 const DEFAULT_QUEUE_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const DEFAULT_MAX_EVENT_LINE_LENGTH = 1_048_576
+const IMAGE_TOOL_PATH_KEYS = new Set(['AbsolutePath', 'absolutePath', 'path', 'file_path', 'filePath'])
+const IMAGE_TOOL_JSON_KEYS = new Set(['args', 'arguments', 'input', 'parameters', 'tool_input', 'toolInput'])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function unwrapToolPath(value: string): string {
+  let current = value.trim()
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (!(current.startsWith('"') && current.endsWith('"'))) break
+    try {
+      const decoded: unknown = JSON.parse(current)
+      if (typeof decoded !== 'string') break
+      current = decoded.trim()
+    } catch {
+      current = current.slice(1, -1).trim()
+    }
+  }
+  return current
+}
+
+function imageToolPathCandidates(event: AgyJsonEvent): string[] {
+  const candidates: string[] = []
+  const visit = (value: unknown, key: string | undefined, depth: number): void => {
+    if (depth > 8) return
+    if (typeof value === 'string') {
+      if (key !== undefined && IMAGE_TOOL_PATH_KEYS.has(key)) {
+        candidates.push(unwrapToolPath(value))
+        return
+      }
+      if (key !== undefined && IMAGE_TOOL_JSON_KEYS.has(key)) {
+        try {
+          visit(JSON.parse(value), undefined, depth + 1)
+        } catch {
+          // Some lifecycle events intentionally omit structured tool arguments.
+        }
+      }
+      return
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(entry, undefined, depth + 1)
+      return
+    }
+    if (!isRecord(value)) return
+    for (const [childKey, child] of Object.entries(value)) visit(child, childKey, depth + 1)
+  }
+  visit(event, undefined, 0)
+  return candidates
+}
+
+function samePath(left: string, right: string): boolean {
+  const a = resolve(left)
+  const b = resolve(right)
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b
+}
+
+function isExpectedImagePath(candidate: string, prepared: PreparedAgyPrompts): boolean {
+  if (!isAbsolute(candidate) || prepared.imageDirectory === undefined) return false
+  const directory = resolve(prepared.imageDirectory)
+  const selected = resolve(candidate)
+  const rel = relative(directory, selected)
+  if (rel.startsWith('..') || isAbsolute(rel)) return false
+  return prepared.imagePaths.some(expected => samePath(expected, selected))
+}
+
+function isAllowedImageToolEvent(
+  event: AgyJsonEvent,
+  prepared: PreparedAgyPrompts,
+  imageRuntime: AgyAgentRuntime | undefined,
+): boolean {
+  if (
+    prepared.imageDirectory === undefined
+    || imageRuntime?.agentPreset !== 'image-view'
+    || imageRuntime.agent !== 'dsh-agy-image-view'
+  ) return false
+
+  const toolName = toolNameOf(event)
+  if (toolName !== undefined && toolName !== 'view_file') return false
+  if (toolName === undefined && event.event !== 'tool_result') return false
+
+  const candidates = imageToolPathCandidates(event)
+  return candidates.length === 0 || candidates.every(candidate => isExpectedImagePath(candidate, prepared))
+}
+
+/**
+ * AGY may expose its own task-orchestration lifecycle as a step_update tool
+ * event even when the selected AGY Agent is tool-free. `manage_task` is an
+ * AGY-internal bookkeeping event: it never becomes a DSH tool call and its
+ * input is never executed by this provider. Keep this allowlist deliberately
+ * narrow; every other AGY tool event remains fail-closed below.
+ */
+function isIgnorableAgyOrchestrationToolEvent(event: AgyJsonEvent): boolean {
+  return event.event === 'step_update'
+    && stepTypeOf(event) === 'tool'
+    && toolNameOf(event) === 'manage_task'
+}
+
+function dshOwnedToolEventError(
+  event: AgyJsonEvent,
+  toolProtocol: StructuredToolProtocol | undefined,
+  imageContext?: {
+    prepared: PreparedAgyPrompts
+    runtime: AgyAgentRuntime | undefined
+  },
+): LlmError | undefined {
+  if (toolProtocol === undefined || !isToolEvent(event)) return undefined
+  if (
+    imageContext !== undefined
+    && isAllowedImageToolEvent(event, imageContext.prepared, imageContext.runtime)
+  ) return undefined
+  if (isIgnorableAgyOrchestrationToolEvent(event)) return undefined
+  return new LlmError(
+    'AGY emitted an internal tool event while DSH-owned tools were enabled',
+    AGY_INTERNAL_TOOL_EVENT_CODE,
+  )
+}
+
+/**
+ * AGY's main-agent wrapper may deliver a DSH tool envelope through its
+ * orchestration-only send_message primitive. Accept only the default_api
+ * carrier or a carrier addressed to the active root conversation, and only
+ * after validating the payload against the current DSH protocol. Every other
+ * internal event remains rejected by dshOwnedToolEventError. AGY 1.1.x can
+ * address the same DSH-owned carrier through one of its stable DSH runtime
+ * recipients (`dsh`, `dsh-session`, or `dsh-runner`) instead of a UUID.
+ */
+function dshOwnedCarrierResponseOf(
+  event: AgyJsonEvent,
+  toolProtocol: StructuredToolProtocol | undefined,
+  activeConversationId: string | undefined,
+  telemetry: AgyTelemetry,
+): string | undefined {
+  if (toolProtocol === undefined) return undefined
+  const carrier = sendMessageOf(event)
+  if (carrier === undefined) return undefined
+  const isDefaultApiCarrier = carrier.recipient === 'default_api'
+  const isDshRuntimeCarrier = isDshCarrierRecipient(carrier.recipient)
+  const isSelfConversationCarrier = activeConversationId !== undefined
+    && carrier.recipient === activeConversationId
+  if (!isDefaultApiCarrier && !isDshRuntimeCarrier && !isSelfConversationCarrier) {
+    telemetry.carrierValidation = 'recipient-rejected'
+    return undefined
+  }
+  // Validation is deliberately performed here, before the carrier is
+  // converted into a normal DSH result. This prevents arbitrary AGY messages
+  // from becoming tool calls.
+  try {
+    const envelope = parseStructuredEnvelope(carrier.message, toolProtocol, {
+      onCompatibilityApplied: compatibility => {
+        telemetry.protocolCompatibilityApplied = compatibility
+      },
+    })
+    telemetry.carrierValidation = envelope.kind === 'message' ? 'valid-message' : 'valid-tool-call'
+  } catch (error) {
+    telemetry.carrierValidation = carrierValidationOf(error)
+    recordProtocolFailure(telemetry, carrier.message, error)
+    throw error
+  }
+  return carrier.message
+}
+
+function carrierValidationOf(error: unknown): AgyCarrierValidation {
+  if (!(error instanceof ToolProtocolError)) return 'invalid-envelope'
+  switch (error.code) {
+    case TOOL_PROTOCOL_UNKNOWN_TOOL_CODE:
+      return 'unknown-tool'
+    case TOOL_PROTOCOL_ARGUMENTS_INVALID_CODE:
+      return 'arguments-invalid'
+    case TOOL_PROTOCOL_RESPONSE_LIMIT_CODE:
+      return 'response-limit'
+    case TOOL_PROTOCOL_RESPONSE_INVALID_CODE:
+    default:
+      return 'invalid-envelope'
+  }
+}
+
+function recordToolEvent(
+  telemetry: AgyTelemetry,
+  event: AgyJsonEvent,
+  activeConversationId?: string,
+): void {
+  const kind = toolEventKindOf(event)
+  if (kind === undefined) return
+  telemetry.toolEventCount += 1
+  telemetry.toolEventKind ??= kind
+  telemetry.toolEventStreamIndex = telemetry.eventCount
+  telemetry.toolEventDiagnostic = toolEventDiagnosticOf(event, activeConversationId)
+}
 
 function canonicalWorkspaceRoot(value: string | undefined): string | undefined {
   const selected = value?.trim()
@@ -244,17 +464,14 @@ const AGY_REASONING_METADATA = [
   {
     id: 'low' as ReasoningEffortId,
     name: 'Low',
-    description: 'Lower reasoning budget through the AGY model backend.',
   },
   {
     id: 'medium' as ReasoningEffortId,
     name: 'Medium',
-    description: 'Balanced reasoning budget through the AGY model backend.',
   },
   {
     id: 'high' as ReasoningEffortId,
     name: 'High',
-    description: 'Higher reasoning budget through the AGY model backend.',
   },
 ] as const
 
@@ -296,12 +513,32 @@ export function mapAgyUsage(raw: Record<string, unknown>): TokenUsage {
   }
 }
 
+function recordUsageTelemetry(
+  telemetry: AgyTelemetry,
+  usage: TokenUsage,
+  source: AgyUsageSource,
+  cumulativeRaw: Record<string, unknown> | undefined,
+): void {
+  telemetry.usageSource = source
+  telemetry.usage = addUsage(telemetry.usage, usage)
+  if (cumulativeRaw !== undefined) telemetry.cumulativeUsage = mapAgyUsage(cumulativeRaw)
+  const cacheRead = usage.cacheReadTokens
+  if (cacheRead !== undefined) {
+    telemetry.cacheHit = cacheRead > 0
+    const denominator = usage.inputTokens + cacheRead
+    telemetry.cacheTokenShare = denominator > 0 ? cacheRead / denominator : 0
+  }
+}
+
 function asLlmError(error: unknown): LlmError {
   if (error instanceof LlmError) return error
   if (error instanceof DshContextError) {
     return new LlmError(error.message, error.code, { cause: error })
   }
   if (error instanceof AgyPromptError) {
+    return new LlmError(error.message, error.code, { cause: error })
+  }
+  if (error instanceof AgyPromptBudgetError) {
     return new LlmError(error.message, error.code, { cause: error })
   }
   if (error instanceof ToolProtocolError) {
@@ -316,8 +553,19 @@ function asLlmError(error: unknown): LlmError {
   if (error instanceof AgyQueueError) {
     return new LlmError(error.message, error.code, { cause: error })
   }
+  if (error instanceof PersistentTransportError) {
+    return new LlmError(
+      error.message,
+      error.code === 'TIMEOUT' ? 'TIMEOUT' : `AGY_${error.code}`,
+      { cause: error },
+    )
+  }
   if (error instanceof AgyProcessError) {
-    return new LlmError(error.message, `AGY_${error.code}`, { cause: error })
+    return new LlmError(
+      error.message,
+      error.code === 'INPUT_TOO_LARGE' ? 'AGY_INPUT_TOO_LARGE' : `AGY_${error.code}`,
+      { cause: error },
+    )
   }
   return new LlmError('AGY provider request failed', 'AGY_REQUEST', {
     cause: error instanceof Error ? error : new Error(String(error)),
@@ -349,9 +597,142 @@ function isSuccessStatus(status: string | undefined): boolean {
   return status === undefined || status.toUpperCase() === 'SUCCESS'
 }
 
+/**
+ * Claude 4.6 occasionally ignores the final JSON-envelope instruction even
+ * though its tool-free AGY Agent has no native tools available. Preserve the
+ * strict parser for JSON-looking output and every other model, but treat a
+ * genuinely plain Claude response as a final DSH message. This fallback can
+ * never create a tool call; malformed structured output still fails closed.
+ */
+function parseAgyToolEnvelope(
+  raw: unknown,
+  protocol: StructuredToolProtocol,
+  model: string,
+  allowPlainTextFallback: boolean,
+  options: ParseStructuredEnvelopeOptions = {},
+): ReturnType<typeof parseStructuredEnvelope> {
+  try {
+    return parseStructuredEnvelope(raw, protocol, options)
+  } catch (error) {
+    if (
+      !(error instanceof ToolProtocolError)
+      || error.code !== TOOL_PROTOCOL_RESPONSE_INVALID_CODE
+      || (!allowPlainTextFallback && !/^claude-/i.test(model))
+      || typeof raw !== 'string'
+    ) throw error
+
+    const content = raw.trim()
+    if (content.length === 0 || /^[{[]/.test(content) || /^```/i.test(content)) throw error
+    return parseStructuredEnvelope({ kind: 'message', content }, protocol, options)
+  }
+}
+
+function toolProtocolErrorOf(error: unknown): ToolProtocolError | undefined {
+  let current: unknown = error
+  for (let depth = 0; depth < 8 && current !== undefined; depth += 1) {
+    if (current instanceof ToolProtocolError) return current
+    if (!(current instanceof Error)) return undefined
+    current = current.cause
+  }
+  return undefined
+}
+
+function isRepairableToolProtocolError(error: unknown): boolean {
+  const protocolError = toolProtocolErrorOf(error)
+  return protocolError !== undefined
+    && (
+      (protocolError.code === TOOL_PROTOCOL_RESPONSE_INVALID_CODE && protocolError.detail === 'not JSON')
+      || protocolError.code === TOOL_PROTOCOL_ARGUMENTS_INVALID_CODE
+    )
+}
+
+function errorCodeOf(error: unknown): string | undefined {
+  let current: unknown = error
+  for (let depth = 0; depth < 8 && current !== undefined; depth += 1) {
+    if (current instanceof Error) {
+      const code = (current as Error & { code?: unknown }).code
+      if (typeof code === 'string') return code
+      current = current.cause
+      continue
+    }
+    return undefined
+  }
+  return undefined
+}
+
+function isRepairableAgyRequestError(error: unknown): boolean {
+  return isRepairableToolProtocolError(error) || errorCodeOf(error) === AGY_INTERNAL_TOOL_EVENT_CODE
+}
+
+function protocolRepairReasonOf(error: unknown): ToolProtocolRepairReason | undefined {
+  return errorCodeOf(error) === AGY_INTERNAL_TOOL_EVENT_CODE ? 'internal-tool-event' : undefined
+}
+
+function protocolRepairHintOf(error: unknown): Pick<
+  ToolProtocolArgumentDiagnostic,
+  'toolName' | 'issue' | 'missingRequiredKeys'
+> | undefined {
+  const diagnostic = toolProtocolErrorOf(error)?.diagnostic
+  if (diagnostic === undefined) return undefined
+  return {
+    toolName: diagnostic.toolName,
+    issue: diagnostic.issue,
+    ...(diagnostic.missingRequiredKeys === undefined
+      ? {}
+      : { missingRequiredKeys: diagnostic.missingRequiredKeys }),
+  }
+}
+
+function protocolFailureDetailOf(error: ToolProtocolError): AgyProtocolFailureDetail {
+  if (error.detail === 'not JSON') return 'not-json'
+  if (error.detail === 'envelope') return 'envelope'
+  if (error.detail === 'message shape') return 'message-shape'
+  if (error.detail === 'tool_call shape') return 'tool-call-shape'
+  if (error.code === TOOL_PROTOCOL_RESPONSE_LIMIT_CODE) return 'response-limit'
+  if (error.code.startsWith('TOOL_PROTOCOL_')) return 'validation'
+  return 'unknown'
+}
+
+function protocolResponseShapeOf(raw: unknown): AgyProtocolResponseShape {
+  if (typeof raw !== 'string') return 'non-string'
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return 'empty'
+  if (/^```/i.test(trimmed)) return 'fenced'
+  if (trimmed.startsWith('{')) return 'object-like'
+  if (trimmed.startsWith('[')) return 'array-like'
+  return 'plain-text'
+}
+
+function recordProtocolFailure(
+  telemetry: AgyTelemetry,
+  raw: unknown,
+  error: unknown,
+): void {
+  const protocolError = toolProtocolErrorOf(error)
+  if (protocolError === undefined) return
+  telemetry.protocolFailureDetail = protocolFailureDetailOf(protocolError)
+  telemetry.protocolResponseShape = protocolResponseShapeOf(raw)
+  telemetry.protocolResponseBytes = typeof raw === 'string'
+    ? Buffer.byteLength(raw, 'utf8')
+    : undefined
+  if (protocolError.code === TOOL_PROTOCOL_RESPONSE_INVALID_CODE && protocolError.detail === 'not JSON') {
+    telemetry.protocolRepairReason ??= 'not-json'
+  } else if (protocolError.code === TOOL_PROTOCOL_ARGUMENTS_INVALID_CODE) {
+    telemetry.protocolRepairReason ??= 'arguments-invalid'
+  }
+  const diagnostic = protocolError.diagnostic
+  if (diagnostic !== undefined) {
+    telemetry.protocolToolName = diagnostic.toolName
+    telemetry.protocolArgumentIssue = diagnostic.issue
+    telemetry.protocolMissingRequiredKeys = diagnostic.missingRequiredKeys
+    telemetry.protocolReceivedArgumentKeys = diagnostic.receivedArgumentKeys
+  }
+}
+
 function bridgeOutcomeForError(code: string, current: AgyBridgeOutcome): AgyBridgeOutcome {
   if (code.startsWith('DSH_')) return 'context-rejected'
   if (code === PERMISSION_REQUIRED_CODE) return 'permission-required'
+  if (code === AGY_INTERNAL_TOOL_EVENT_CODE) return 'agy-internal-tool'
   if (code === 'TOOL_PROTOCOL_SCHEMA_INVALID' || code === 'TOOL_PROTOCOL_SCHEMA_LIMIT') {
     return 'schema-rejected'
   }
@@ -386,9 +767,9 @@ function normalizeReasoningEffort(value: unknown): AgyReasoningEffort | undefine
 }
 
 function resolveAgyRetryPolicy(config: AgyRetryPolicyConfig | undefined): ResolvedRetryPolicy {
-  const maxRetries = config?.maxRetries ?? 0
-  if (!Number.isSafeInteger(maxRetries) || maxRetries < 0 || maxRetries > 2) {
-    throw new RangeError('AGY retryPolicy.maxRetries must be an integer between 0 and 2')
+  const maxRetries = config?.maxRetries ?? 5
+  if (!Number.isSafeInteger(maxRetries) || maxRetries < 0 || maxRetries > 5) {
+    throw new RangeError('AGY retryPolicy.maxRetries must be an integer between 0 and 5')
   }
   const retryableCodes = config?.retryableCodes ?? [...AGY_RETRYABLE_CODES]
   if (retryableCodes.length === 0 || retryableCodes.some(code => !AGY_RETRYABLE_CODES.includes(code))) {
@@ -399,6 +780,20 @@ function resolveAgyRetryPolicy(config: AgyRetryPolicyConfig | undefined): Resolv
     maxRetries,
     retryableCodes: [...retryableCodes],
   }, 'dsh-agy-provider.retryPolicy')
+}
+
+function resolveBoundedInteger(
+  name: string,
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const resolved = value ?? fallback
+  if (!Number.isSafeInteger(resolved) || resolved < minimum || resolved > maximum) {
+    throw new RangeError(`${name} must be an integer between ${minimum} and ${maximum}`)
+  }
+  return resolved
 }
 
 function addUsage(left: TokenUsage | undefined, right: TokenUsage): TokenUsage {
@@ -444,7 +839,6 @@ export class AgyAdapter extends LlmAdapter {
   private readonly addDirs: readonly string[] | undefined
   private readonly mode: AgyExecutionMode | undefined
   private readonly disableSlashCommands: boolean | undefined
-  private readonly agentCanViewFile: boolean
   private readonly toolPolicy: ToolPolicy
   private readonly dshContext: DshContextLookup | undefined
   private readonly agyPath: string | undefined
@@ -457,6 +851,11 @@ export class AgyAdapter extends LlmAdapter {
   private readonly logger: AgyLogger | undefined
   private readonly maxOutputBytes: number
   private readonly maxEventLineLength: number
+  private readonly inputFrameLimitBytes: number
+  private readonly maxSingleToolResultBytes: number
+  private readonly maxHistoricalToolResultBytes: number
+  private readonly toolProtocolRepairRetries: number
+  private readonly toolProtocolPlainTextFallback: 'off' | 'final-message'
   private readonly retryPolicy: ResolvedRetryPolicy
   private readonly purposeRoutes: PurposeRoutesConfig | undefined
   private readonly transport: TransportMode
@@ -465,7 +864,8 @@ export class AgyAdapter extends LlmAdapter {
   private readonly persistentFallback: PersistentFallbackMode
   private readonly persistentTransport: ExperimentalAgyTransport | undefined
   private readonly imageInput: 'off' | 'experimental'
-  private readonly attachmentStore: AgyImageAttachmentStore | undefined
+  private readonly imageAgent: AgyAgentRuntime | undefined
+  private readonly resolveAttachmentStore: () => AgyImageAttachmentStore | undefined
   private readonly discovery: AgyModelDiscovery | undefined
   private readonly visibleModels: readonly string[]
   private currentModels: readonly ModelConfig[]
@@ -482,7 +882,6 @@ export class AgyAdapter extends LlmAdapter {
       : config.toolPolicy === 'dsh-owned' ? 'dsh-owned' : 'reject'
     const agentRuntime = resolveAgyAgentRuntime(config, this.toolPolicy)
     this.agent = agentRuntime.agent
-    this.agentCanViewFile = agentRuntime.agentCanViewFile
     this.workspaceRoot = agentRuntime.workspaceRoot
     this.addDirs = agentRuntime.addDirs
     this.mode = agentRuntime.mode
@@ -502,6 +901,39 @@ export class AgyAdapter extends LlmAdapter {
     this.logger = dependencies.logger
     this.maxOutputBytes = config.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES
     this.maxEventLineLength = config.maxEventLineLength ?? DEFAULT_MAX_EVENT_LINE_LENGTH
+    this.inputFrameLimitBytes = resolveBoundedInteger(
+      'inputFrameLimitBytes',
+      config.inputFrameLimitBytes,
+      DEFAULT_INPUT_FRAME_LIMIT_BYTES,
+      128,
+      16 * 1024 * 1024,
+    )
+    this.maxSingleToolResultBytes = resolveBoundedInteger(
+      'maxSingleToolResultBytes',
+      config.maxSingleToolResultBytes,
+      DEFAULT_MAX_SINGLE_TOOL_RESULT_BYTES,
+      1_024,
+      512 * 1024,
+    )
+    this.maxHistoricalToolResultBytes = resolveBoundedInteger(
+      'maxHistoricalToolResultBytes',
+      config.maxHistoricalToolResultBytes,
+      DEFAULT_MAX_HISTORICAL_TOOL_RESULT_BYTES,
+      1_024,
+      2 * 1024 * 1024,
+    )
+    this.toolProtocolRepairRetries = resolveBoundedInteger(
+      'toolProtocolRepairRetries',
+      config.toolProtocolRepairRetries,
+      1,
+      0,
+      1,
+    )
+    const plainTextFallback = config.toolProtocolPlainTextFallback ?? 'final-message'
+    if (plainTextFallback !== 'off' && plainTextFallback !== 'final-message') {
+      throw new RangeError('toolProtocolPlainTextFallback must be off or final-message')
+    }
+    this.toolProtocolPlainTextFallback = plainTextFallback
     this.retryPolicy = resolveAgyRetryPolicy(config.retryPolicy)
     this.transport = config.transport === 'persistent' ? 'persistent' : 'one-shot'
     this.persistentIdleTtlMs = config.persistentIdleTtlMs ?? 30_000
@@ -509,7 +941,20 @@ export class AgyAdapter extends LlmAdapter {
     this.persistentFallback = config.persistentFallback === 'never' ? 'never' : 'before-accept'
     this.purposeRoutes = config.purposeRoutes
     this.imageInput = config.imageInput === 'experimental' ? 'experimental' : 'off'
-    this.attachmentStore = dependencies.attachmentStore
+    const imagePreset = getAgentPreset('image-view')
+    this.imageAgent = this.imageInput !== 'experimental' || imagePreset === undefined
+      ? undefined
+      : {
+          agent: imagePreset.agentName,
+          agentPreset: imagePreset.id,
+          agentCanViewFile: true,
+          workspaceRoot: undefined,
+          addDirs: undefined,
+          mode: imagePreset.mode,
+          disableSlashCommands: true,
+        }
+    this.resolveAttachmentStore = dependencies.resolveAttachmentStore
+      ?? (() => dependencies.attachmentStore)
     this.currentModels = this.models
     this.discovery = config.modelDiscovery === 'off'
       ? undefined
@@ -537,8 +982,50 @@ export class AgyAdapter extends LlmAdapter {
       ...(this.workspaceRoot === undefined ? {} : { cwd: this.workspaceRoot }),
       idleTtlMs: this.persistentIdleTtlMs,
       readyTimeoutMs: this.persistentReadyTimeoutMs,
+      maxFrameBytes: this.inputFrameLimitBytes,
       maxWorkers: config.maxConcurrent ?? 4,
     })
+  }
+
+  private preparePrompt(
+    basePrompt: string,
+    toolProtocol: StructuredToolProtocol | undefined,
+    protocolRepair: boolean,
+    protocolRepairHint: Pick<
+      ToolProtocolArgumentDiagnostic,
+      'toolName' | 'issue' | 'missingRequiredKeys'
+    > | undefined,
+    protocolRepairReason: ToolProtocolRepairReason | undefined,
+    telemetry: AgyTelemetry,
+  ): string {
+    let prompt = toolProtocol === undefined
+      ? basePrompt
+      : appendToolProtocolPrompt(basePrompt, toolProtocol)
+    if (toolProtocol !== undefined) telemetry.toolSchemaHash = toolProtocol.schemaHash
+    if (toolProtocol !== undefined && protocolRepair) {
+      prompt = appendToolProtocolRepairPrompt(prompt, protocolRepairHint, protocolRepairReason)
+    }
+    const bounded = boundAgyPrompt(prompt, {
+      maxFrameBytes: this.inputFrameLimitBytes,
+      maxPromptBytes: toolProtocol === undefined
+        ? DEFAULT_AGY_PROMPT_CONTENT_LIMIT_BYTES
+        : DEFAULT_DSH_TOOL_PROMPT_CONTENT_LIMIT_BYTES,
+      maxSingleToolResultBytes: this.maxSingleToolResultBytes,
+      maxHistoricalToolResultBytes: this.maxHistoricalToolResultBytes,
+    })
+    telemetry.promptBytes = bounded.promptBytes
+    telemetry.promptLimitBytes = bounded.promptLimitBytes
+    telemetry.inputFrameBytes = bounded.frameBytes
+    telemetry.inputFrameLimitBytes = bounded.frameLimitBytes
+    telemetry.toolResultCount = bounded.toolResultCount
+    telemetry.largestToolResultBytes = bounded.largestToolResultBytes
+    telemetry.truncatedToolResultCount = bounded.truncatedToolResultCount
+    telemetry.historyCompacted = bounded.historyCompacted
+    telemetry.omittedMessageCount = bounded.omittedMessageCount
+    const stablePrefix = stableAgyPromptPrefix(bounded.prompt)
+    telemetry.stablePrefixBytes = Buffer.byteLength(stablePrefix, 'utf8')
+    telemetry.stablePrefixHash = createHash('sha256').update(stablePrefix, 'utf8').digest('hex').slice(0, 16)
+    return bounded.prompt
   }
 
   /** Remove the in-memory AGY mapping; the next call sends complete DSH history. */
@@ -567,7 +1054,7 @@ export class AgyAdapter extends LlmAdapter {
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
-    return { id: provider, name: 'AGY' }
+    return { id: provider, name: 'Antigravity CLI' }
   }
 
   override providerRetryPolicy(_provider: string): ResolvedRetryPolicy {
@@ -576,12 +1063,14 @@ export class AgyAdapter extends LlmAdapter {
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     const models = await this.effectiveModels()
+    const inputModalities = this.imageInput === 'experimental'
+      ? ['text', 'image'] as const
+      : ['text'] as const
     return models.map(model => ({
       provider,
       id: model.id,
       name: model.name ?? model.id,
-      description: model.description ?? `AGY agent ${this.agent}; uses the local AGY account quota.`,
-      inputModalities: ['text'] as const,
+      inputModalities,
     }))
   }
 
@@ -604,12 +1093,14 @@ export class AgyAdapter extends LlmAdapter {
     // Log deprecation if suffix used (telemetry handled by caller via model id)
     const configured = this.currentModels.find(entry => entry.id.toLowerCase() === baseId.toLowerCase()) ?? this.currentModels.find(entry => entry.id === model)
     void suffixEffort // suffix implies effort, handled in stream route; resolve keeps base id for UI consistency
+    const inputModalities = this.imageInput === 'experimental'
+      ? ['text', 'image'] as const
+      : ['text'] as const
     return Promise.resolve({
       provider,
       id: baseId,
       name: configured?.name ?? baseId,
-      ...(configured?.description === undefined ? {} : { description: configured.description }),
-      inputModalities: ['text'] as const,
+      inputModalities,
       ...(configured?.contextWindow === undefined
         ? {}
         : { context: { contextWindow: configured.contextWindow } }),
@@ -625,11 +1116,18 @@ export class AgyAdapter extends LlmAdapter {
     sessionKey: string | undefined,
     dshContextSnapshot: DshContextSnapshot | undefined,
     toolSchemaCount: number,
+    hasImage: boolean,
   ): boolean {
     if (this.transport !== 'persistent' || this.persistentTransport === undefined) return false
     if (sessionKey === undefined) return false
     if ((options.purpose as string) === 'compaction' || (options.purpose as string) === 'sessionTitle' || (options.purpose as string) === 'session-title') return false
     if (this.sessionMode === 'resume') return false
+    if (hasImage) return false
+    // The AGY main-agent wrapper can emit send_message before a DSH-owned
+    // tool turn reaches its final result. Keep these turns on one-shot so the
+    // carrier can be captured and the tainted process can be terminated
+    // deterministically; persistent remains available for text-only turns.
+    if (this.toolPolicy === 'dsh-owned' && toolSchemaCount > 0) return false
     if (toolSchemaCount > 0 && dshContextSnapshot?.state !== 'ready') return false
     return true
   }
@@ -642,6 +1140,12 @@ export class AgyAdapter extends LlmAdapter {
     prepared: PreparedAgyPrompts,
     toolProtocol: StructuredToolProtocol | undefined,
     dshContextSnapshot: DshContextSnapshot | undefined,
+    protocolRepair: boolean,
+    protocolRepairHint: Pick<
+      ToolProtocolArgumentDiagnostic,
+      'toolName' | 'issue' | 'missingRequiredKeys'
+    > | undefined,
+    protocolRepairReason: ToolProtocolRepairReason | undefined,
   ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
     if (toolProtocol !== undefined && (
       dshContextSnapshot?.state !== 'ready'
@@ -655,9 +1159,7 @@ export class AgyAdapter extends LlmAdapter {
     const basePrompt = hasConversation
       ? (prepared.turnPrompt ?? serializeAgyTurnPrompt(options))
       : prepared.fullPrompt
-    const prompt = toolProtocol === undefined
-      ? basePrompt
-      : appendToolProtocolPrompt(basePrompt, toolProtocol)
+    const prompt = this.preparePrompt(basePrompt, toolProtocol, protocolRepair, protocolRepairHint, protocolRepairReason, telemetry)
     // Persistent worker is session-affine, single active turn, reuse AGY conversation
     const result = await this.persistentTransport!.request({
       sessionId: sessionKey,
@@ -666,15 +1168,17 @@ export class AgyAdapter extends LlmAdapter {
       maxOutputBytes: this.maxOutputBytes,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
-    // Reuse one-shot event handling by feeding raw events through the same parser logic
-    // For simplicity, treat result.events as already-parsed AGY JSON objects
+    // Reuse one-shot event handling by feeding raw events through the same parser logic.
+    // Persistent transport returns already-parsed AGY JSON objects.
     let blockStarted = false
     let visibleText = ''
     let resultSeen = false
     let finalResponse: string | undefined
     let finalStatus: string | undefined
     let finalErrorDetail: string | undefined
-    let finalUsage: Record<string, unknown> | undefined
+    let latestStepUsage: Record<string, unknown> | undefined
+    let resultUsage: Record<string, unknown> | undefined
+    let fallbackUsage: Record<string, unknown> | undefined
     const queue: AgyJsonEvent[] = []
     // Convert raw events to AgyJsonEvent via a lightweight parser
     for (const raw of result.events) {
@@ -682,23 +1186,23 @@ export class AgyAdapter extends LlmAdapter {
       const ev = r.event as string | undefined
       if (ev === 'step_update') {
         const su = r.step_update as Record<string, unknown> | undefined
-        const textDelta = su?.text_delta as string | undefined
+        const event = {
+          event: 'step_update',
+          ...(su === undefined ? {} : { step_update: su }),
+        } as AgyJsonEvent
         const usage = su?.usage as Record<string, unknown> | undefined
         const convId = su?.conversation_id as string | undefined
         if (convId !== undefined) {
           telemetry.conversationId = convId
           this.sessions.set(sessionKey, convId)
         }
-        if (usage !== undefined) finalUsage = usage
-        if (textDelta !== undefined && toolProtocol === undefined) {
-          queue.push({ event: 'step_update', step_update: su } as unknown as AgyJsonEvent)
-        } else if (textDelta !== undefined && toolProtocol !== undefined) {
-          // For toolProtocol, ignore step_update delta, finalResponse comes from result.response
-          queue.push({ event: 'step_update', step_update: su } as unknown as AgyJsonEvent)
-        }
-        // Also count events
+        if (usage !== undefined) latestStepUsage = usage
         telemetry.eventCount += 1
-        telemetry.eventCategoryCounts[eventCategoryOf({ event: 'step_update' } as unknown as AgyJsonEvent)] += 1
+        telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
+        recordToolEvent(telemetry, event)
+        const internalToolError = dshOwnedToolEventError(event, toolProtocol)
+        if (internalToolError !== undefined) throw internalToolError
+        queue.push(event)
       } else if (ev === 'result') {
         const res = r.result as Record<string, unknown> | undefined
         const convId = res?.conversation_id as string | undefined
@@ -709,28 +1213,32 @@ export class AgyAdapter extends LlmAdapter {
         finalResponse = typeof res?.response === 'string' ? res.response as string : undefined
         finalStatus = typeof res?.status === 'string' ? res.status as string : undefined
         finalErrorDetail = typeof res?.error === 'string' ? res.error as string : undefined
-        finalUsage = (res?.usage as Record<string, unknown> | undefined) ?? finalUsage
+        resultUsage = res?.usage as Record<string, unknown> | undefined
         resultSeen = true
         telemetry.finalStatus = finalStatus
-        queue.push({ event: 'result', result: res } as unknown as AgyJsonEvent)
+        const event = {
+          event: 'result',
+          ...(res === undefined ? {} : { result: res }),
+        } as AgyJsonEvent
+        queue.push(event)
         telemetry.eventCount += 1
+        telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
       } else if (ev === 'init') {
         const convId = r.conversation_id as string | undefined
         if (convId !== undefined) {
           telemetry.conversationId = convId
           this.sessions.set(sessionKey, convId)
         }
-        queue.push({ event: 'init' } as unknown as AgyJsonEvent)
+        const event = r as AgyJsonEvent
+        queue.push(event)
         telemetry.eventCount += 1
+        telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
       }
     }
     // Now yield using same logic as one-shot for toolProtocol handling
     for (const event of queue) {
-      telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
-      if (isToolEvent(event)) telemetry.toolEventCount += 1
-      if (toolProtocol !== undefined && isToolEvent(event)) {
-        throw new LlmError('AGY emitted an internal tool event while DSH-owned tools were enabled', UNSUPPORTED_TOOLS_CODE)
-      }
+      const internalToolError = dshOwnedToolEventError(event, toolProtocol)
+      if (internalToolError !== undefined) throw internalToolError
       const delta = toolProtocol === undefined ? textDeltaOf(event) : undefined
       if (delta !== undefined && delta.length > 0) {
         if (!blockStarted) {
@@ -746,13 +1254,34 @@ export class AgyAdapter extends LlmAdapter {
         }
       }
     }
-    const attemptUsage = finalUsage === undefined ? undefined : mapAgyUsage(finalUsage)
-    if (attemptUsage !== undefined) telemetry.usage = addUsage(telemetry.usage, attemptUsage)
+    const selectedUsage = latestStepUsage ?? fallbackUsage ?? resultUsage
+    const usageSource: AgyUsageSource | undefined = latestStepUsage !== undefined
+      ? 'step'
+      : selectedUsage === undefined ? undefined : 'result-fallback'
+    const attemptUsage = selectedUsage === undefined ? undefined : mapAgyUsage(selectedUsage)
+    if (attemptUsage !== undefined) recordUsageTelemetry(telemetry, attemptUsage, usageSource!, resultUsage)
     if (toolProtocol !== undefined) {
       if (finalResponse === undefined) {
         throw new ToolProtocolError(TOOL_PROTOCOL_RESPONSE_INVALID_CODE, 'missing final response')
       }
-      const envelope = parseStructuredEnvelope(finalResponse, toolProtocol)
+      let envelope: ReturnType<typeof parseStructuredEnvelope>
+      try {
+        envelope = parseAgyToolEnvelope(
+          finalResponse,
+          toolProtocol,
+          route.model,
+          this.toolProtocolPlainTextFallback === 'final-message'
+            && /^claude-/i.test(route.model),
+          {
+            onCompatibilityApplied: compatibility => {
+              telemetry.protocolCompatibilityApplied = compatibility
+            },
+          },
+        )
+      } catch (error) {
+        recordProtocolFailure(telemetry, finalResponse, error)
+        throw error
+      }
       if (envelope.kind === 'message') {
         telemetry.bridgeOutcome = 'dsh-message'
         yield { type: 'block-start', index: 0, blockType: 'text' }
@@ -814,11 +1343,23 @@ export class AgyAdapter extends LlmAdapter {
     const rawModel = purposeRoute?.model ?? (options.model || this.model)
     const baseModel = normalizeModelId(rawModel)
     const suffixEffort = extractModelEffort(rawModel)
+    // AGY 1.1.17+ requires --effort for gemini-* flash/pro models (low/high/medium variants), but claude-* does NOT support --effort.
+    // Default to 'high' only for gemini-* when no explicit effort is provided to avoid AGY_REQUEST "requires --effort".
+    const defaultEffortForModel = baseModel.toLowerCase().startsWith('gemini-') ? 'high' as const : undefined
+    let effectiveEffort: AgyReasoningEffort | undefined = purposeReasoningEffort ?? requestedReasoningEffort ?? suffixEffort ?? defaultEffortForModel
+    // Claude models in AGY 1.1.17 report "is not supported for model" when --effort is sent; suppress for claude-*
+    if (baseModel.toLowerCase().startsWith('claude-')) effectiveEffort = undefined
     const route: EffectiveAgyRoute = {
       model: baseModel,
       agent: purposeRoute?.agent ?? this.agent,
-      reasoningEffort: purposeReasoningEffort ?? requestedReasoningEffort ?? suffixEffort,
+      reasoningEffort: effectiveEffort,
     }
+    const existingConversationId = sessionKey === undefined || this.sessionMode === 'full'
+      ? undefined
+      : this.sessions.get(sessionKey)?.conversationId
+    const initialRequestMode = this.sessionMode === 'full'
+      ? 'full' as const
+      : existingConversationId === undefined ? 'bootstrap' as const : 'delta' as const
 
     const telemetry: AgyTelemetry = {
       requestId: randomUUID(),
@@ -846,10 +1387,36 @@ export class AgyAdapter extends LlmAdapter {
                 : { modelDiscoveryWarningCode: this.modelDiscoveryResult.warningCode }),
             }),
       sessionId: sessionKey,
+      requestMode: initialRequestMode,
+      conversationReused: existingConversationId !== undefined,
       startedAt: Date.now(),
       attempt: 1,
       processAttemptCount: 0,
       retryMaxRetries: this.retryPolicy.mode === 'normal' ? this.retryPolicy.maxRetries : 0,
+      inputFrameBytes: undefined,
+      inputFrameLimitBytes: undefined,
+      promptBytes: undefined,
+      promptLimitBytes: undefined,
+      toolResultCount: undefined,
+      largestToolResultBytes: undefined,
+      truncatedToolResultCount: undefined,
+      historyCompacted: false,
+      omittedMessageCount: 0,
+      toolEventKind: undefined,
+      toolEventStreamIndex: undefined,
+      toolEventDiagnostic: undefined,
+      carrierAbortExpected: false,
+      carrierValidation: undefined,
+      protocolRepairAttempts: 0,
+      protocolRepairReason: undefined,
+      protocolFailureDetail: undefined,
+      protocolResponseShape: undefined,
+      protocolResponseBytes: undefined,
+      protocolToolName: undefined,
+      protocolArgumentIssue: undefined,
+      protocolMissingRequiredKeys: undefined,
+      protocolReceivedArgumentKeys: undefined,
+      protocolCompatibilityApplied: undefined,
       eventCount: 0,
       toolEventCount: 0,
       permissionEventCount: 0,
@@ -859,6 +1426,14 @@ export class AgyAdapter extends LlmAdapter {
       queueWaitMs: undefined,
       process: undefined,
       usage: undefined,
+      usageSource: undefined,
+      cumulativeUsage: undefined,
+      cacheHit: undefined,
+      cacheTokenShare: undefined,
+      stablePrefixBytes: undefined,
+      stablePrefixHash: undefined,
+      toolSchemaHash: undefined,
+      processDiagnostic: undefined,
       durationMs: undefined,
     }
     emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.started'))
@@ -873,11 +1448,13 @@ export class AgyAdapter extends LlmAdapter {
           toolSchemaCount,
         })
         setDshTelemetrySnapshot(telemetry, dshContextSnapshot)
-        try {
-          toolProtocol = createStructuredToolProtocol(options.tools ?? [])
-        } catch (error) {
-          telemetry.bridgeOutcome = 'schema-rejected'
-          throw error
+        if (dshContextSnapshot !== undefined) {
+          try {
+            toolProtocol = createStructuredToolProtocol(options.tools ?? [])
+          } catch (error) {
+            telemetry.bridgeOutcome = 'schema-rejected'
+            throw error
+          }
         }
       }
       if (toolSchemaCount > 0 && this.toolPolicy === 'reject') {
@@ -887,15 +1464,13 @@ export class AgyAdapter extends LlmAdapter {
         )
       }
       if (options.temperature !== undefined || options.maxTokens !== undefined || options.stop !== undefined) {
-        throw new LlmError(
-          'AGY text MVP does not yet map sampling, maxTokens, or stop controls',
-          'UNSUPPORTED_OPTIONS',
-        )
+        // 0.9.0 fix: DSH web may send default temperature/maxTokens/stop; AGY does not support them.
+        // Do not block the request; continue with AGY defaults (previously threw UNSUPPORTED_OPTIONS).
       }
       const prepared = await prepareAgyPrompts(options, {
         enabled: this.imageInput === 'experimental',
-        agentCanViewFile: this.agentCanViewFile,
-        attachmentStore: this.attachmentStore,
+        agentCanViewFile: this.imageAgent?.agentCanViewFile === true,
+        attachmentStore: this.resolveAttachmentStore(),
         ...(options.signal === undefined ? {} : { signal: options.signal }),
       })
       preparedPrompts = prepared
@@ -905,29 +1480,63 @@ export class AgyAdapter extends LlmAdapter {
       telemetry.queueWaitMs = Date.now() - queueStartedAt
 
       // V8-M2 persistent dispatch: one Session one worker, before-accept fallback
-      if (this.shouldUsePersistent(options, sessionKey, dshContextSnapshot, toolSchemaCount)) {
-        try {
-          const outcome = yield* this.streamPersistentAttempt(
-            options,
-            sessionKey!,
-            telemetry,
-            route,
-            prepared,
-            toolProtocol,
-            dshContextSnapshot,
-          )
-          if (!outcome.retryWithFullPrompt) {
-            telemetry.durationMs = Date.now() - telemetry.startedAt
-            emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.completed'))
-            return
-          }
-        } catch (error) {
-          const beforeAccept = error instanceof Error && (error as any).code !== undefined
-            ? ['WORKER_START_FAILED','WORKER_LIMIT','DISPOSED','ABORTED','WORKER_STOPPED'].includes((error as any).code)
-            : false
-          if (this.persistentFallback === 'before-accept' && beforeAccept) {
-            // fallback to one-shot, keep telemetry for retry
-          } else {
+      if (this.shouldUsePersistent(
+        options,
+        sessionKey,
+        dshContextSnapshot,
+        toolSchemaCount,
+        prepared.imageDirectory !== undefined,
+      )) {
+        let persistentRepairAttempts = 0
+        let persistentProtocolRepair = false
+      let persistentProtocolRepairHint: Pick<
+          ToolProtocolArgumentDiagnostic,
+        'toolName' | 'issue' | 'missingRequiredKeys'
+      > | undefined
+        let persistentProtocolRepairReason: ToolProtocolRepairReason | undefined
+        while (true) {
+          try {
+            telemetry.attempt = persistentRepairAttempts + 1
+            const outcome = yield* this.streamPersistentAttempt(
+              options,
+              sessionKey!,
+              telemetry,
+              route,
+              prepared,
+              toolProtocol,
+              dshContextSnapshot,
+              persistentProtocolRepair,
+              persistentProtocolRepairHint,
+              persistentProtocolRepairReason,
+            )
+            persistentProtocolRepair = false
+            persistentProtocolRepairHint = undefined
+            persistentProtocolRepairReason = undefined
+            if (!outcome.retryWithFullPrompt) {
+              telemetry.durationMs = Date.now() - telemetry.startedAt
+              emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.completed'))
+              return
+            }
+            break
+          } catch (error) {
+            if (toolProtocol !== undefined
+              && isRepairableAgyRequestError(error)
+              && persistentRepairAttempts < this.toolProtocolRepairRetries) {
+              persistentRepairAttempts += 1
+              telemetry.protocolRepairAttempts += 1
+              persistentProtocolRepair = true
+              persistentProtocolRepairHint = protocolRepairHintOf(error)
+              persistentProtocolRepairReason = protocolRepairReasonOf(error)
+              if (persistentProtocolRepairReason !== undefined) telemetry.protocolRepairReason = persistentProtocolRepairReason
+              continue
+            }
+            const beforeAccept = error instanceof Error && (error as any).code !== undefined
+              ? ['WORKER_START_FAILED','WORKER_LIMIT','DISPOSED','ABORTED','WORKER_STOPPED'].includes((error as any).code)
+              : false
+            if (this.persistentFallback === 'before-accept' && beforeAccept) {
+              // fallback to one-shot, keep telemetry for retry
+              break
+            }
             throw error
           }
         }
@@ -937,23 +1546,56 @@ export class AgyAdapter extends LlmAdapter {
         ? undefined
         : this.sessions.get(sessionKey)?.conversationId
 
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      let protocolRepairAttempts = 0
+      let protocolRepair = false
+      let protocolRepairHint: Pick<
+        ToolProtocolArgumentDiagnostic,
+        'toolName' | 'issue' | 'missingRequiredKeys'
+      > | undefined
+      let protocolRepairReason: ToolProtocolRepairReason | undefined
+      for (let attempt = 0; attempt < 2 + this.toolProtocolRepairRetries; attempt += 1) {
         telemetry.attempt = attempt + 1
-        const outcome = yield* this.streamAttempt(
-          options,
-          sessionKey,
-          requestedConversationId,
-          telemetry,
-          route,
-          prepared,
-          toolProtocol,
-          dshContextSnapshot,
-        )
+        let outcome: AttemptOutcome
+        try {
+          outcome = yield* this.streamAttempt(
+            options,
+            sessionKey,
+            requestedConversationId,
+            telemetry,
+            route,
+            prepared,
+            toolProtocol,
+            dshContextSnapshot,
+            protocolRepair,
+            protocolRepairHint,
+            protocolRepairReason,
+          )
+          protocolRepair = false
+          protocolRepairHint = undefined
+          protocolRepairReason = undefined
+        } catch (error) {
+          if (toolProtocol !== undefined
+            && isRepairableAgyRequestError(error)
+            && protocolRepairAttempts < this.toolProtocolRepairRetries) {
+            protocolRepairAttempts += 1
+            telemetry.protocolRepairAttempts += 1
+            protocolRepair = true
+            protocolRepairHint = protocolRepairHintOf(error)
+            protocolRepairReason = protocolRepairReasonOf(error)
+            if (protocolRepairReason !== undefined) {
+              telemetry.protocolRepairReason = protocolRepairReason
+              requestedConversationId = undefined
+            }
+            continue
+          }
+          throw error
+        }
         if (!outcome.retryWithFullPrompt) {
           telemetry.durationMs = Date.now() - telemetry.startedAt
           emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.completed'))
           return
         }
+        telemetry.requestMode = 'full-fallback'
         requestedConversationId = undefined
       }
       throw new LlmError(
@@ -961,7 +1603,12 @@ export class AgyAdapter extends LlmAdapter {
         'SESSION_RESUME_FAILED',
       )
     } catch (error) {
+      telemetry.processDiagnostic = agyProcessDiagnosticOf(error)
       const mapped = asLlmError(error)
+      // A timed-out AGY conversation may have emitted an init/step event before
+      // its process tree was killed. Do not let DSH retry against that partial
+      // conversation; the next attempt must use the complete DSH history.
+      if (mapped.code === 'TIMEOUT' && sessionKey !== undefined) this.sessions.delete(sessionKey)
       telemetry.bridgeOutcome = bridgeOutcomeForError(mapped.code, telemetry.bridgeOutcome)
       telemetry.durationMs = Date.now() - telemetry.startedAt
       emitAgyLog(this.logger, buildAgyLogRecord(telemetry, 'agy.request.failed', mapped.code))
@@ -983,6 +1630,12 @@ export class AgyAdapter extends LlmAdapter {
     prepared: PreparedAgyPrompts,
     toolProtocol: StructuredToolProtocol | undefined,
     dshContextSnapshot: DshContextSnapshot | undefined,
+    protocolRepair: boolean,
+    protocolRepairHint: Pick<
+      ToolProtocolArgumentDiagnostic,
+      'toolName' | 'issue' | 'missingRequiredKeys'
+    > | undefined,
+    protocolRepairReason: ToolProtocolRepairReason | undefined,
   ): AsyncGenerator<StreamChunk, AttemptOutcome, void> {
     if (toolProtocol !== undefined && (
       dshContextSnapshot?.state !== 'ready'
@@ -995,13 +1648,14 @@ export class AgyAdapter extends LlmAdapter {
     const basePrompt = requestedConversationId === undefined
       ? prepared.fullPrompt
       : prepared.turnPrompt ?? serializeAgyTurnPrompt(options)
-    const prompt = toolProtocol === undefined
-      ? basePrompt
-      : appendToolProtocolPrompt(basePrompt, toolProtocol)
+    const prompt = this.preparePrompt(basePrompt, toolProtocol, protocolRepair, protocolRepairHint, protocolRepairReason, telemetry)
     const addDirs = [
       ...(this.addDirs ?? []),
       ...(prepared.imageDirectory === undefined ? [] : [prepared.imageDirectory]),
     ]
+    const imageRuntime = prepared.imageDirectory === undefined ? undefined : this.imageAgent
+    const requestMode = imageRuntime?.mode ?? this.mode
+    const requestDisableSlashCommands = imageRuntime?.disableSlashCommands ?? this.disableSlashCommands
     const queue = new AsyncQueue<AgyJsonEvent>()
     const parser = new AgyStreamParser({ maxLineLength: this.maxEventLineLength })
     const controller = new AbortController()
@@ -1012,11 +1666,12 @@ export class AgyAdapter extends LlmAdapter {
     let settled = false
     const request: AgyRequest = {
       prompt,
-      agent: route.agent,
+      agent: imageRuntime?.agent ?? route.agent,
       model: route.model,
       timeoutMs: this.timeoutMs,
       maxStdoutBytes: this.maxOutputBytes,
       maxStderrBytes: this.maxOutputBytes,
+      maxInputFrameBytes: this.inputFrameLimitBytes,
       signal: controller.signal,
       onStdoutLine: line => {
         for (const event of parser.push(`${line}\n`)) queue.push(event)
@@ -1026,8 +1681,8 @@ export class AgyAdapter extends LlmAdapter {
       ...(this.agyPath === undefined ? {} : { executable: this.agyPath }),
       ...(this.workspaceRoot === undefined ? {} : { cwd: this.workspaceRoot }),
       ...(addDirs.length === 0 ? {} : { addDirs }),
-      ...(this.mode === undefined ? {} : { mode: this.mode }),
-      ...(this.disableSlashCommands === undefined ? {} : { disableSlashCommands: this.disableSlashCommands }),
+      ...(requestMode === undefined ? {} : { mode: requestMode }),
+      ...(requestDisableSlashCommands === undefined ? {} : { disableSlashCommands: requestDisableSlashCommands }),
     }
     const processPromise = this.run(request).then(processResultValue => {
       result = processResultValue
@@ -1046,37 +1701,72 @@ export class AgyAdapter extends LlmAdapter {
     let finalResponse: string | undefined
     let finalStatus: string | undefined
     let finalErrorDetail: string | undefined
-    let finalUsage: Record<string, unknown> | undefined
+    let latestStepUsage: Record<string, unknown> | undefined
+    let resultUsage: Record<string, unknown> | undefined
+    let fallbackUsage: Record<string, unknown> | undefined
     let conversationMismatch = false
+    let activeConversationId: string | undefined
     let permissionRequested = false
+    let carrierResponseAccepted = false
 
     try {
       for await (const event of queue) {
+        if (carrierResponseAccepted) continue
         telemetry.eventCount += 1
         telemetry.eventCategoryCounts[eventCategoryOf(event)] += 1
-        if (isToolEvent(event)) telemetry.toolEventCount += 1
-        if (toolProtocol !== undefined && isToolEvent(event)) {
-          telemetry.bridgeOutcome = 'agy-internal-tool'
-          controller.abort()
-          throw new LlmError(
-            'AGY emitted an internal tool event while DSH-owned tools were enabled',
-            UNSUPPORTED_TOOLS_CODE,
-          )
-        }
-        if (isPermissionEvent(event)) telemetry.permissionEventCount += 1
-        const errorDetail = errorDetailOf(event)
-        if (errorDetail !== undefined) finalErrorDetail = errorDetail
         const observedConversationId = conversationIdOf(event)
         if (observedConversationId !== undefined) {
+          activeConversationId = observedConversationId
           telemetry.conversationId = observedConversationId
           if (requestedConversationId !== undefined && observedConversationId !== requestedConversationId) {
             conversationMismatch = true
             controller.abort()
+          } else if (sessionKey !== undefined) {
+            this.sessions.set(sessionKey, observedConversationId)
+          }
+        }
+        recordToolEvent(telemetry, event, activeConversationId)
+        if (conversationMismatch) continue
+        if (toolProtocol !== undefined) {
+          const carrierResponse = dshOwnedCarrierResponseOf(
+            event,
+            toolProtocol,
+            activeConversationId,
+            telemetry,
+          )
+          if (carrierResponse !== undefined) {
+            carrierResponseAccepted = true
+            resultSeen = true
+            finalResponse = carrierResponse
+            finalStatus = 'SUCCESS'
+            telemetry.finalStatus = finalStatus
+            telemetry.bridgeOutcome = 'dsh-tool-call'
+            telemetry.carrierAbortExpected = true
+            // The wrapper conversation has just emitted an internal carrier.
+            // Do not resume that potentially tainted AGY session on the next
+            // DSH turn; the next request must start from the full DSH history.
+            if (sessionKey !== undefined) this.sessions.delete(sessionKey)
+            // No DSH service is attached to AGY's internal default_api in
+            // this mode. Stop the wrapper after capturing the validated
+            // envelope; runProcess maps this expected abort below.
+            controller.abort()
             continue
           }
-          if (sessionKey !== undefined) this.sessions.set(sessionKey, observedConversationId)
         }
-        if (conversationMismatch) continue
+        const internalToolError = dshOwnedToolEventError(
+          event,
+          toolProtocol,
+          { prepared, runtime: imageRuntime },
+        )
+        if (internalToolError !== undefined) {
+          telemetry.bridgeOutcome = 'agy-internal-tool'
+          if (sessionKey !== undefined) this.sessions.delete(sessionKey)
+          controller.abort()
+          throw internalToolError
+        }
+        if (isPermissionEvent(event)) telemetry.permissionEventCount += 1
+        const errorDetail = errorDetailOf(event)
+        if (errorDetail !== undefined) finalErrorDetail = errorDetail
         if (isPermissionEvent(event)) {
           if (toolProtocol !== undefined) telemetry.bridgeOutcome = 'permission-required'
           permissionRequested = true
@@ -1103,11 +1793,11 @@ export class AgyAdapter extends LlmAdapter {
           finalResponse = responseOf(event)
           finalStatus = statusOf(event)
           telemetry.finalStatus = finalStatus
+          resultUsage = usageOf(event)
         }
         const usage = usageOf(event)
-        if (usage !== undefined) {
-          finalUsage = usage
-        }
+        if (usage !== undefined && event.event === 'step_update') latestStepUsage = usage
+        else if (usage !== undefined && event.event !== 'result') fallbackUsage = usage
       }
       await processPromise
     } catch (error) {
@@ -1118,8 +1808,12 @@ export class AgyAdapter extends LlmAdapter {
       options.signal?.removeEventListener('abort', forwardAbort)
     }
 
-    const attemptUsage = finalUsage === undefined ? undefined : mapAgyUsage(finalUsage)
-    if (attemptUsage !== undefined) telemetry.usage = addUsage(telemetry.usage, attemptUsage)
+    const selectedUsage = latestStepUsage ?? fallbackUsage ?? resultUsage
+    const usageSource: AgyUsageSource | undefined = latestStepUsage !== undefined
+      ? 'step'
+      : selectedUsage === undefined ? undefined : 'result-fallback'
+    const attemptUsage = selectedUsage === undefined ? undefined : mapAgyUsage(selectedUsage)
+    if (attemptUsage !== undefined) recordUsageTelemetry(telemetry, attemptUsage, usageSource!, resultUsage)
 
     if (conversationMismatch) return { retryWithFullPrompt: true }
     if (permissionRequested) {
@@ -1130,7 +1824,11 @@ export class AgyAdapter extends LlmAdapter {
       )
     }
 
-    const failure = result === undefined ? new LlmError('AGY process did not return a result', 'AGY_PROCESS') : processFailure(result)
+    const failure = carrierResponseAccepted
+      ? undefined
+      : result === undefined
+        ? new LlmError('AGY process did not return a result', 'AGY_PROCESS')
+        : processFailure(result)
     if (failure !== undefined) throw failure
     if (resultSeen && !isSuccessStatus(finalStatus)) {
       const detail = [finalStatus, finalErrorDetail].filter(value => value !== undefined).join(' ')
@@ -1146,7 +1844,24 @@ export class AgyAdapter extends LlmAdapter {
       if (finalResponse === undefined) {
         throw new ToolProtocolError(TOOL_PROTOCOL_RESPONSE_INVALID_CODE, 'missing final response')
       }
-      const envelope = parseStructuredEnvelope(finalResponse, toolProtocol)
+      let envelope: ReturnType<typeof parseStructuredEnvelope>
+      try {
+          envelope = parseAgyToolEnvelope(
+          finalResponse,
+          toolProtocol,
+          route.model,
+          this.toolProtocolPlainTextFallback === 'final-message'
+            && /^claude-/i.test(route.model),
+          {
+            onCompatibilityApplied: compatibility => {
+              telemetry.protocolCompatibilityApplied = compatibility
+            },
+          },
+        )
+      } catch (error) {
+        recordProtocolFailure(telemetry, finalResponse, error)
+        throw error
+      }
       if (envelope.kind === 'message') {
         telemetry.bridgeOutcome = 'dsh-message'
         yield { type: 'block-start', index: 0, blockType: 'text' }

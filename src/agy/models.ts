@@ -127,7 +127,12 @@ export function parseAgyModels(output: string): ModelConfig[] {
     seen.add(id)
     baseSeen.add(baseId.toLowerCase())
     // Preserve display but normalize id to base for DSH reasoningEffort split
-    const normalized: ModelConfig = display.length === 0 ? { id: baseId } : { id: baseId, name: display.replace(/(?:\s+|-)(?:low|medium|high)$/i, '').trim() }
+    // Handle displays like "Gemini 3.1 Pro (High)" or "Gemini 3.7 Flash - High"
+    const strippedDisplay = display
+      .replace(/\s*[\(\[]\s*(?:low|medium|high)\s*[\)\]]\s*$/i, '')
+      .replace(/(?:\s+|-)(?:low|medium|high)\s*$/i, '')
+      .trim()
+    const normalized: ModelConfig = display.length === 0 ? { id: baseId } : { id: baseId, name: strippedDisplay.length === 0 ? baseId : strippedDisplay }
     models.push(normalized)
   }
   return models
@@ -181,6 +186,7 @@ export class AgyModelDiscovery {
         timeoutMs: this.timeoutMs,
         maxStdoutBytes: this.maxOutputBytes,
         maxStderrBytes: this.maxOutputBytes,
+        windowsNoConsole: true,
       }
       const result = await this.runCommand(request)
       if (!isSuccessful(result)) {

@@ -164,7 +164,7 @@ test('resolveDshContext preserves the DSH-selected permission and approval mode'
   }
 })
 
-test('resolveDshContext rejects a workspace that does not account for the session', async () => {
+test('resolveDshContext tolerates a new-session registry lag when canonical cwd matches', async () => {
   const { context } = await trustedContext()
   const services = {
     get(name) {
@@ -176,10 +176,9 @@ test('resolveDshContext rejects a workspace that does not account for the sessio
     },
   }
 
-  await assert.rejects(
-    () => resolveDshContext(services, { sessionId: 'session-1', toolSchemaCount: 1 }),
-    error => error instanceof DshContextError && error.code === 'DSH_WORKSPACE_MISMATCH',
-  )
+  const snapshot = await resolveDshContext(services, { sessionId: 'session-1', toolSchemaCount: 1 })
+  assert.equal(snapshot.workspaceState, 'trusted')
+  assert.equal(snapshot.sessionState, 'trusted')
 })
 
 test('diagnoseDshContext returns only allowlisted capability labels', async () => {

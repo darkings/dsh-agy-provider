@@ -37,6 +37,8 @@ export interface PreparedAgyPrompts {
   /** Precomputed only when image placeholders are present; text-only keeps the old lazy path. */
   turnPrompt: string | undefined
   imageDirectory: string | undefined
+  /** Exact staged files used to validate the dedicated image Agent's internal view_file events. */
+  imagePaths: readonly string[]
   cleanup: () => Promise<void>
 }
 
@@ -214,6 +216,7 @@ export async function prepareAgyPrompts(
       fullPrompt: serializeAgyPrompt(options),
       turnPrompt: undefined,
       imageDirectory: undefined,
+      imagePaths: [],
       cleanup: async () => undefined,
     }
   }
@@ -222,12 +225,13 @@ export async function prepareAgyPrompts(
       fullPrompt: serializeAgyPrompt(options),
       turnPrompt: undefined,
       imageDirectory: undefined,
+      imagePaths: [],
       cleanup: async () => undefined,
     }
   }
   if (!bridgeOptions.agentCanViewFile) {
     throw new AgyImageBridgeError(
-      'Experimental image input requires the read-only or workspace-write Agent preset with view_file',
+      'Experimental image input requires the bundled image-view Agent with view_file',
       'IMAGE_AGENT_UNSUPPORTED',
     )
   }
@@ -242,6 +246,7 @@ export async function prepareAgyPrompts(
       }),
       turnPrompt: serializeAgyTurnPrompt({ messages }),
       imageDirectory: staged.directory,
+      imagePaths: [...staged.images.values()].map(image => image.path),
       cleanup: staged.cleanup,
     }
   } catch (error) {

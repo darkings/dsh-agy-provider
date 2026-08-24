@@ -402,8 +402,8 @@ test('doctor v3 flags unsafe effective Agent combinations without modifying the 
       }),
     })
     assert.equal(imageOnlyResult.effective.agentCapability.viewFile, false)
-    assert.equal(imageOnlyResult.issues.some(issue => issue.code === 'PROFILE_IMAGE_AGENT_UNSUPPORTED'), true)
-    assert.equal(imageOnlyResult.repairSuggestions.some(value => value.includes('agents install read-only')), true)
+    assert.deepEqual(imageOnlyResult.effective.modelCapability.inputModalities, ['text', 'image'])
+    assert.equal(imageOnlyResult.issues.some(issue => issue.code === 'PROFILE_IMAGE_AGENT_UNSUPPORTED'), false)
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }

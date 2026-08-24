@@ -57,11 +57,27 @@ export function encodeAgyStreamInput(message: unknown, maxFrameBytes = 256 * 102
   const encoded = `${line}\n`
   if (byteLength(encoded) > maxFrameBytes) {
     throw new AgyStreamProtocolError(
-      'AGY stream-json input exceeds the configured frame limit',
+      `AGY stream-json input exceeds the configured frame limit (${byteLength(encoded)} > ${maxFrameBytes} bytes)`,
       'FRAME_TOO_LARGE',
     )
   }
   return encoded
+}
+
+function userMessagePayload(text: string): AgyStreamUserMessage {
+  return {
+    event: 'user',
+    message: { role: 'user', content: [{ type: 'text', text }] },
+  }
+}
+
+/** Return the exact UTF-8 size of one encoded AGY user frame. */
+export function getAgyUserMessageByteLength(text: string): number {
+  if (typeof text !== 'string' || text.length === 0) {
+    throw new AgyStreamProtocolError('AGY stream-json user text must be a non-empty string', 'INVALID_INPUT')
+  }
+  const line = JSON.stringify(userMessagePayload(text))
+  return byteLength(`${line}\n`)
 }
 
 /** Encode one AGY stream-json user turn with the factual V8-M1 envelope. */
@@ -69,10 +85,7 @@ export function encodeAgyUserMessage(text: string, maxFrameBytes = 256 * 1024): 
   if (typeof text !== "string" || text.length === 0) {
     throw new AgyStreamProtocolError("AGY stream-json user text must be a non-empty string", "INVALID_INPUT");
   }
-  const payload: AgyStreamUserMessage = {
-    event: "user",
-    message: { role: "user", content: [{ type: "text", text }] },
-  };
+  const payload = userMessagePayload(text)
   return encodeAgyStreamInput(payload, maxFrameBytes);
 }
 

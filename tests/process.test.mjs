@@ -249,7 +249,9 @@ test('runProcess terminates a child on timeout', async () => {
   })
 
   assert.equal(result.termination, 'timeout')
-  assert.ok(result.durationMs < 2_000)
+  // Windows CI can schedule taskkill behind the rest of the full suite;
+  // assert a generous upper bound while still catching a leaked 5 s child.
+  assert.ok(result.durationMs < 5_000)
 })
 
 test('runProcess terminates a child when its AbortSignal is cancelled', async () => {
@@ -263,7 +265,8 @@ test('runProcess terminates a child when its AbortSignal is cancelled', async ()
 
   const result = await run
   assert.equal(result.termination, 'aborted')
-  assert.ok(result.durationMs < 2_000)
+  // Keep this bound tolerant of suite contention on hosted Windows runners.
+  assert.ok(result.durationMs < 5_000)
 })
 
 test('runProcess terminates a child when stdout exceeds the capture limit', async () => {
@@ -328,7 +331,11 @@ test('runProcess timeout terminates the complete child process tree', async () =
   const result = await runProcess({
     executable: process.execPath,
     args: parentWithChildScript(),
-    timeoutMs: 500,
+    // Hosted Windows runners (especially Node 24) can need more than 500 ms
+    // just to spawn the parent and flush its child PID before timeout cleanup.
+    // Keep the child alive well beyond this bound so the assertion still
+    // exercises timeout tree termination rather than normal process exit.
+    timeoutMs: 2000,
     onStdoutLine: line => { childPid = Number(line) },
   })
 

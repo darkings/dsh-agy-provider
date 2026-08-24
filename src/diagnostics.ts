@@ -45,7 +45,7 @@ export interface DiagnosticModel {
   id: string
   name: string
   description: string | null
-  inputModalities: readonly ['text']
+  inputModalities: readonly ('text' | 'image')[]
   contextWindow: number | null
 }
 
@@ -113,12 +113,12 @@ export interface ProviderDiagnosticResult {
   errors: readonly DiagnosticIssue[]
 }
 
-function modelDiagnostic(model: ModelConfig): DiagnosticModel {
+function modelDiagnostic(model: ModelConfig, imageInput: Config['imageInput']): DiagnosticModel {
   return {
     id: model.id,
     name: model.name ?? model.id,
     description: model.description ?? null,
-    inputModalities: ['text'],
+    inputModalities: imageInput === 'experimental' ? ['text', 'image'] : ['text'],
     contextWindow: model.contextWindow ?? null,
   }
 }
@@ -174,11 +174,11 @@ export async function diagnoseProvider(
   } = discovery === undefined
     ? { models: configuredCatalog, source: 'static' as const, stale: false }
     : await discovery.discover(configuredCatalog)
-  const models = modelCatalog.models.map(modelDiagnostic)
+  const models = modelCatalog.models.map(model => modelDiagnostic(model, config.imageInput))
   const agyOptions: AgyDiagnosticOptions = {
     ...(executable === undefined || executable.trim().length === 0 ? {} : { executable }),
     expectedAgent: config.agent ?? 'deepseek-proxy',
-    minimumVersion: config.minimumAgyVersion ?? '1.1.13',
+    minimumVersion: config.minimumAgyVersion ?? '1.1.15',
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     ...(options.runCommand === undefined ? {} : { runCommand: options.runCommand }),
   }

@@ -421,11 +421,12 @@ export async function resolveDshContext(
   } catch {
     throw new DshContextError(DSH_WORKSPACE_MISMATCH_CODE)
   }
-  if (canonicalWorkspacePath !== canonicalCwd
-    || !Array.isArray(workspace.sessionIds)
-    || !workspace.sessionIds.includes(requestedSessionId)) {
+  if (canonicalWorkspacePath !== canonicalCwd) {
     throw new DshContextError(DSH_WORKSPACE_MISMATCH_CODE)
   }
+  // The canonical session cwd is the trust binding. workspace.sessionIds is
+  // eventually consistent for a newly-created session and must not turn an
+  // otherwise matching workspace into a transient mismatch.
   if (workspace.status !== undefined) {
     let status: string
     try {

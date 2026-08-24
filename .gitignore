@@ -11,8 +11,11 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Native launcher build output (the distributable lives under /bin).
+native/windows-launcher/bin/
+native/windows-launcher/obj/
+
 # Local planning and progress notes (0.8.0: 跟踪 V8 规划，允许入仓留痕)
 # /findings.md
 # /progress.md
 # /task_plan.md
-

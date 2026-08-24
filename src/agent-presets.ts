@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 
-export const AGENT_PRESET_IDS = ['tool-free', 'read-only', 'workspace-write'] as const
+export const AGENT_PRESET_IDS = ['tool-free', 'image-view', 'read-only', 'workspace-write'] as const
 export type AgentPresetId = typeof AGENT_PRESET_IDS[number]
 export type AgentExecutionMode = 'plan' | 'accept-edits'
 
@@ -23,6 +23,15 @@ const PRESETS: Readonly<Record<AgentPresetId, AgentPreset>> = Object.freeze({
     tools: Object.freeze([]),
     writeAccess: false,
     mode: undefined,
+  }),
+  'image-view': Object.freeze({
+    id: 'image-view',
+    agentName: 'dsh-agy-image-view',
+    fileName: 'dsh-agy-image-view.md',
+    description: 'Per-request image inspection with only view_file enabled.',
+    tools: Object.freeze(['view_file']),
+    writeAccess: false,
+    mode: 'plan',
   }),
   'read-only': Object.freeze({
     id: 'read-only',

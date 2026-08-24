@@ -83,7 +83,7 @@ export async function runAgentsCli(
 
   const preset = args.shift()
   if (preset === undefined) {
-    stderr('Missing Agent preset. Expected one of: tool-free, read-only, workspace-write\n')
+    stderr(`Missing Agent preset. Expected one of: ${AGENT_PRESET_IDS.join(', ')}\n`)
     return 2
   }
 

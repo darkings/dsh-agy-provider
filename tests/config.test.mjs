@@ -9,20 +9,25 @@ import {
 
 test('Config applies safe M7 defaults and rejects invalid concurrency values', () => {
   const config = Config({})
-  assert.equal(config.minimumAgyVersion, '1.1.13')
+  assert.equal(config.minimumAgyVersion, '1.1.15')
   assert.equal(config.maxConcurrent, 4)
   assert.equal(config.maxQueue, 32)
   assert.equal(config.queueTimeoutMs, 30_000)
   assert.equal(config.maxOutputBytes, 8 * 1024 * 1024)
   assert.equal(config.maxEventLineLength, 1_048_576)
+  assert.equal(config.inputFrameLimitBytes, 256 * 1024)
+  assert.equal(config.maxSingleToolResultBytes, 32 * 1024)
+  assert.equal(config.maxHistoricalToolResultBytes, 96 * 1024)
+  assert.equal(config.toolProtocolRepairRetries, 1)
+  assert.equal(config.toolProtocolPlainTextFallback, 'final-message')
   assert.equal(config.modelDiscovery, 'auto')
   assert.equal(config.modelDiscoveryTtlMs, 300_000)
   assert.equal(config.modelDiscoveryTimeoutMs, 10_000)
   assert.equal(config.toolPolicy, 'reject')
   assert.equal(config.agentPreset, undefined)
   assert.deepEqual(config.retryPolicy, {
-    maxRetries: 0,
-    retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'],
+    maxRetries: 5,
+    retryableCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
   })
   assert.throws(() => Config({ maxConcurrent: 0 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ minimumAgyVersion: 'latest' }), error => error.name === 'ValidationError')
@@ -30,21 +35,26 @@ test('Config applies safe M7 defaults and rejects invalid concurrency values', (
   assert.throws(() => Config({ modelDiscoveryTtlMs: 999 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ modelDiscoveryTimeoutMs: 99 }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ toolPolicy: 'bridge' }), error => error.name === 'ValidationError')
-  assert.throws(() => Config({ retryPolicy: { maxRetries: 3 } }), error => error.name === 'ValidationError')
-  assert.throws(() => Config({ retryPolicy: { retryableCodes: ['TIMEOUT'] } }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ retryPolicy: { maxRetries: 6 } }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ retryPolicy: { retryableCodes: ['UNKNOWN'] } }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ agentPreset: 'full-access' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ workspaceRoot: '   ' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ imageInput: 'always' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ transport: 'turbo' }), error => error.name === 'ValidationError')
   assert.throws(() => Config({ persistentFallback: 'always' }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ inputFrameLimitBytes: 127 }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ maxSingleToolResultBytes: 512 }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ maxHistoricalToolResultBytes: 512 }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ toolProtocolRepairRetries: 2 }), error => error.name === 'ValidationError')
+  assert.throws(() => Config({ toolProtocolPlainTextFallback: 'always' }), error => error.name === 'ValidationError')
 })
 
 test('Config accepts only bounded transient retry policy overrides', () => {
   assert.deepEqual(Config({
-    retryPolicy: { maxRetries: 2, retryableCodes: ['RATE_LIMIT'] },
+    retryPolicy: { maxRetries: 5, retryableCodes: ['TIMEOUT'] },
   }).retryPolicy, {
-    maxRetries: 2,
-    retryableCodes: ['RATE_LIMIT'],
+    maxRetries: 5,
+    retryableCodes: ['TIMEOUT'],
   })
 })
 
@@ -74,6 +84,29 @@ test('Config provides zh-CN/en i18n descriptions for settings panel', () => {
   assert.equal(Config({}).visibleModels.length, 0)
   assert.doesNotThrow(() => Config({ visibleModels: ['gemini-3.7-flash', 'gemini-3.1-pro'] }))
   assert.throws(() => Config({ visibleModels: ['   '] }), err => err.name === 'ValidationError')
+})
+
+test('Config hides YAML-only fields and exposes the settings editor note', () => {
+  const schema = Config
+  const serialized = schema.toJSON()
+  const transformed = serialized.refs[String(serialized.uid)]
+  const root = serialized.refs[String(transformed.inner)]
+  const fieldMeta = key => serialized.refs[String(root.dict[key])].meta
+
+  assert.equal(schema.meta.comment, '其余字段在 cordis.patch.yml 中，请直接编辑对应段。 (dsh-agy-provider)')
+  assert.equal(fieldMeta('model').hidden, undefined)
+  assert.equal(fieldMeta('visibleModels').hidden, undefined)
+  assert.equal(fieldMeta('provider').hidden, true)
+  assert.equal(fieldMeta('models').hidden, true)
+  assert.equal(fieldMeta('agyPath').hidden, true)
+  assert.equal(fieldMeta('transport').hidden, true)
+  assert.equal(fieldMeta('retryPolicy').hidden, true)
+  assert.equal(fieldMeta('purposeRoutes').hidden, true)
+  assert.equal(fieldMeta('inputFrameLimitBytes').hidden, true)
+  assert.equal(fieldMeta('maxSingleToolResultBytes').hidden, true)
+  assert.equal(fieldMeta('maxHistoricalToolResultBytes').hidden, true)
+  assert.equal(fieldMeta('toolProtocolRepairRetries').hidden, true)
+  assert.equal(fieldMeta('toolProtocolPlainTextFallback').hidden, true)
 })
 
 test('Config accepts optional purpose-specific route overrides', () => {
@@ -124,7 +157,7 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
     agyPath: '',
     timeoutMs: 120_000,
     sessionMode: 'full',
-    minimumAgyVersion: '1.1.13',
+    minimumAgyVersion: '1.1.15',
     maxConcurrent: 4,
     maxQueue: 32,
     queueTimeoutMs: 30_000,
@@ -134,7 +167,12 @@ test('Config accepts explicit Agent capability presets and workspace roots', () 
     persistentReadyTimeoutMs: 10_000,
     persistentFallback: 'before-accept',
     maxEventLineLength: 1_048_576,
-    retryPolicy: { maxRetries: 0, retryableCodes: ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] },
+    inputFrameLimitBytes: 256 * 1024,
+    maxSingleToolResultBytes: 32 * 1024,
+    maxHistoricalToolResultBytes: 96 * 1024,
+    toolProtocolRepairRetries: 1,
+    toolProtocolPlainTextFallback: 'final-message',
+    retryPolicy: { maxRetries: 5, retryableCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'] },
     purposeRoutes: { compaction: {}, sessionTitle: {} },
     response: 'AGY mock provider is ready.',
     delayMs: 0,

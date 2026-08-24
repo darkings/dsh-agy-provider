@@ -1,5 +1,10 @@
 import z from '@deepseek-ai/schemastery'
 import { AGENT_PRESET_IDS, type AgentPresetId } from '../agent-presets.js'
+import {
+  DEFAULT_INPUT_FRAME_LIMIT_BYTES,
+  DEFAULT_MAX_HISTORICAL_TOOL_RESULT_BYTES,
+  DEFAULT_MAX_SINGLE_TOOL_RESULT_BYTES,
+} from './prompt-budget.js'
 
 export interface Config {
   /** Keep the bundle inert until explicitly enabled. */
@@ -44,7 +49,17 @@ export interface Config {
   maxOutputBytes?: number
   /** Maximum length of one AGY stream-json line. */
   maxEventLineLength?: number
-  /** Provider-owned bounded retry policy; omission defaults to zero retries. */
+  /** Maximum UTF-8 bytes allowed for one encoded AGY stream-json input frame. */
+  inputFrameLimitBytes?: number
+  /** Maximum UTF-8 bytes retained for one serialized DSH tool result. */
+  maxSingleToolResultBytes?: number
+  /** Maximum UTF-8 bytes retained across serialized historical DSH tool results. */
+  maxHistoricalToolResultBytes?: number
+  /** Number of one-shot JSON-format repair attempts for DSH-owned tools. */
+  toolProtocolRepairRetries?: number
+  /** Safe final-message fallback after a failed JSON repair. */
+  toolProtocolPlainTextFallback?: 'off' | 'final-message'
+  /** Provider-owned bounded retry policy; omission follows DSH normal defaults. */
   retryPolicy?: AgyRetryPolicyConfig
   /** Optional model/Agent/effort overrides for DSH auxiliary call purposes. */
   purposeRoutes?: PurposeRoutesConfig
@@ -56,7 +71,7 @@ export interface Config {
   persistentReadyTimeoutMs?: number
   /** Fallback policy when persistent cannot start: never or before-accept only. */
   persistentFallback?: PersistentFallbackMode
-  /** Experimental AttachmentStore-to-file bridge; omitted/off preserves text-only behavior. */
+  /** AttachmentStore-to-AGY image bridge; omitted/off preserves text-only behavior. */
   imageInput?: 'off' | 'experimental'
   /** Deterministic response used only by the M1 mock route. */
   response?: string
@@ -68,11 +83,14 @@ export type ToolPolicy = 'reject' | 'agy-owned' | 'dsh-owned'
 export type TransportMode = 'one-shot' | 'persistent'
 export type PersistentFallbackMode = 'never' | 'before-accept'
 
-export const AGY_RETRYABLE_CODES = ['RATE_LIMIT', 'SERVER', 'TRANSPORT'] as const
+// Keep the default route policy aligned with @deepseek-ai/dsh-llm.
+// The DSH retry executor owns the retry loop; this list only declares which
+// stable provider failures are eligible for that executor.
+export const AGY_RETRYABLE_CODES = ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'] as const
 export type AgyRetryableCode = typeof AGY_RETRYABLE_CODES[number]
 
 export interface AgyRetryPolicyConfig {
-  /** Eligible retries after the first AGY process; hard capped at 2. */
+  /** Eligible retries after the first AGY process; hard capped at DSH's default of 5. */
   maxRetries?: number
   /** Stable transient codes allowed to consume another AGY attempt. */
   retryableCodes?: AgyRetryableCode[]
@@ -110,12 +128,13 @@ export const DEFAULT_MODEL = 'gemini-3.1-pro'
 const ModelConfig = z.object({
   id: z.string().pattern(/^\S(?:.*\S)?$/).required(),
   name: z.string().pattern(/^\S(?:.*\S)?$/),
-  description: z.string(),
+  // Kept for YAML/API compatibility; the selector intentionally does not render it.
+  description: z.string().hidden(),
   contextWindow: z.natural().min(1).max(10_000_000),
 }) as unknown as z<ModelConfig>
 
 const RetryPolicyConfig = z.object({
-  maxRetries: z.natural().max(2).default(0),
+  maxRetries: z.natural().max(5).default(5),
   retryableCodes: z.array(z.union(AGY_RETRYABLE_CODES)).default([...AGY_RETRYABLE_CODES]),
 }) as unknown as z<AgyRetryPolicyConfig>
 
@@ -139,38 +158,45 @@ export function createConfigSchema(defaults: {
 
   const schemaBase = z.object({
     enabled: z.boolean().default(defaultEnabled).description('Enable AGY provider'),
-    provider: z.string().default('agy').description('Provider route id'),
+    // The route is fixed by this plugin and is not a user-facing setting.
+    provider: z.string().default('agy').description('Provider route id').hidden(),
     model: z.string().default(DEFAULT_MODEL).description('Default model id (base, without -high/-medium/-low suffix)'),
-    models: z.array(ModelConfig).default([]).description('Explicit model catalog; entries are base ids'),
+    // Explicit catalogs are an advanced YAML escape hatch; the normal UI uses discovery.
+    models: z.array(ModelConfig).default([]).description('Explicit model catalog; entries are base ids').hidden(),
     visibleModels: z.array(z.string().pattern(/^\S(?:.*\S)?$/)).default([]).description('Visible models filter; empty shows all discovered models, non-empty only shows checked base ids'),
     modelDiscovery: z.union(['auto', 'off'] as const).default('auto').description('Discover models via agy models'),
-    modelDiscoveryTtlMs: z.number().min(1_000).max(3_600_000).default(300_000).description('Discovery cache TTL ms'),
-    modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000).description('Discovery timeout ms'),
+    modelDiscoveryTtlMs: z.number().min(1_000).max(3_600_000).default(300_000).description('Discovery cache TTL ms').hidden(),
+    modelDiscoveryTimeoutMs: z.number().min(100).max(30_000).default(10_000).description('Discovery timeout ms').hidden(),
     toolPolicy: z.union(['reject', 'agy-owned', 'dsh-owned'] as const).default(defaultToolPolicy).description('Tool ownership policy'),
     agent: z.string().default('deepseek-proxy').description('AGY agent profile'),
     agentPreset: z.union(AGENT_PRESET_IDS).description('Optional agent preset'),
-    workspaceRoot: z.string().pattern(/^\S(?:.*\S)?$/).description('Deprecated: use DSH session workspace').deprecated(),
-    agyPath: z.string().default('').description('AGY executable path'),
-    timeoutMs: z.number().min(1).max(3_600_000).default(120_000).description('Per-request timeout ms'),
+    workspaceRoot: z.string().pattern(/^\S(?:.*\S)?$/).description('Deprecated: use DSH session workspace').deprecated().hidden(),
+    agyPath: z.string().default('').description('AGY executable path').hidden(),
+    timeoutMs: z.number().min(1).max(3_600_000).default(120_000).description('Per-request timeout ms').hidden(),
     sessionMode: z.union(['resume', 'full'] as const).default('full').description('Session mode'),
-    minimumAgyVersion: z.string().pattern(/^\d+\.\d+\.\d+$/).default('1.1.13').description('Minimum AGY version'),
-    maxConcurrent: z.natural().min(1).max(64).default(4).description('Max concurrent AGY processes'),
-    maxQueue: z.natural().max(256).default(32).description('Max queue length'),
-    queueTimeoutMs: z.natural().max(3_600_000).default(30_000).description('Queue timeout ms'),
-    transport: z.union(['one-shot', 'persistent'] as const).default('one-shot').description('Transport mode'),
-    persistentIdleTtlMs: z.number().min(0).max(3_600_000).default(30_000).description('Persistent idle TTL ms'),
-    persistentReadyTimeoutMs: z.number().min(1).max(60_000).default(10_000).description('Persistent ready timeout ms'),
-    persistentFallback: z.union(['never', 'before-accept'] as const).default('before-accept').description('Persistent fallback policy'),
-    maxOutputBytes: z.natural().min(1_024).max(64 * 1024 * 1024).default(8 * 1024 * 1024).description('Max output bytes'),
-    maxEventLineLength: z.natural().min(1_024).max(8 * 1024 * 1024).default(1_048_576).description('Max event line length'),
+    minimumAgyVersion: z.string().pattern(/^\d+\.\d+\.\d+$/).default('1.1.15').description('Minimum AGY version').hidden(),
+    maxConcurrent: z.natural().min(1).max(64).default(4).description('Max concurrent AGY processes').hidden(),
+    maxQueue: z.natural().max(256).default(32).description('Max queue length').hidden(),
+    queueTimeoutMs: z.natural().max(3_600_000).default(30_000).description('Queue timeout ms').hidden(),
+    transport: z.union(['one-shot', 'persistent'] as const).default('one-shot').description('Transport mode').hidden(),
+    persistentIdleTtlMs: z.number().min(0).max(3_600_000).default(30_000).description('Persistent idle TTL ms').hidden(),
+    persistentReadyTimeoutMs: z.number().min(1).max(60_000).default(10_000).description('Persistent ready timeout ms').hidden(),
+    persistentFallback: z.union(['never', 'before-accept'] as const).default('before-accept').description('Persistent fallback policy').hidden(),
+    maxOutputBytes: z.natural().min(1_024).max(64 * 1024 * 1024).default(8 * 1024 * 1024).description('Max output bytes').hidden(),
+    maxEventLineLength: z.natural().min(1_024).max(8 * 1024 * 1024).default(1_048_576).description('Max event line length').hidden(),
+    inputFrameLimitBytes: z.natural().min(128).max(16 * 1024 * 1024).default(DEFAULT_INPUT_FRAME_LIMIT_BYTES).description('AGY input frame limit bytes').hidden(),
+    maxSingleToolResultBytes: z.natural().min(1_024).max(512 * 1024).default(DEFAULT_MAX_SINGLE_TOOL_RESULT_BYTES).description('Maximum serialized tool result bytes').hidden(),
+    maxHistoricalToolResultBytes: z.natural().min(1_024).max(2 * 1024 * 1024).default(DEFAULT_MAX_HISTORICAL_TOOL_RESULT_BYTES).description('Maximum historical tool result bytes').hidden(),
+    toolProtocolRepairRetries: z.natural().max(1).default(1).description('Structured tool protocol repair retries').hidden(),
+    toolProtocolPlainTextFallback: z.union(['off', 'final-message'] as const).default('final-message').description('Plain text fallback after structured protocol repair').hidden(),
     retryPolicy: RetryPolicyConfig.default({
-      maxRetries: 0,
+      maxRetries: 5,
       retryableCodes: [...AGY_RETRYABLE_CODES],
-    }),
-    purposeRoutes: PurposeRoutes.description('Purpose-specific overrides'),
+    }).hidden(),
+    purposeRoutes: PurposeRoutes.description('Purpose-specific overrides').hidden(),
     imageInput: z.union(['off', 'experimental'] as const).description('Image input mode'),
-    response: z.string().default('AGY mock provider is ready.').description('Mock response'),
-    delayMs: z.number().min(0).max(60_000).default(0).description('Mock delay ms'),
+    response: z.string().default('AGY mock provider is ready.').description('Mock response').hidden(),
+    delayMs: z.number().min(0).max(60_000).default(0).description('Mock delay ms').hidden(),
   })
 
   const schema = (z as any).transform(schemaBase, (data: any) => ({
@@ -179,7 +205,7 @@ export function createConfigSchema(defaults: {
     models: Array.isArray(data.models) ? (data.models as any[]).map((m: any) => ({ ...m, id: typeof m.id === 'string' ? (m.id as string).replace(/-(?:low|medium|high)$/i, '') : m.id })) : data.models,
     visibleModels: Array.isArray(data.visibleModels) ? (data.visibleModels as any[]).map((v: any) => typeof v === 'string' ? (v as string).replace(/-(?:low|medium|high)$/i, '') : v) : data.visibleModels,
   }))
-  return (schema as any).i18n({
+  const localized = (schema as any).i18n({
     'zh-CN': {
       enabled: { $description: '是否启用 AGY 提供方' },
       provider: { $description: '提供方路由 ID（固定为 agy）' },
@@ -206,8 +232,13 @@ export function createConfigSchema(defaults: {
       persistentFallback: { $description: '持久失败回退策略' },
       maxOutputBytes: { $description: '单次 AGY 输出最大字节' },
       maxEventLineLength: { $description: '单行事件最大长度' },
+      inputFrameLimitBytes: { $description: 'AGY 单次输入帧上限（字节）；超长工具结果会先裁剪' },
+      maxSingleToolResultBytes: { $description: '单个历史工具结果保留上限（字节）' },
+      maxHistoricalToolResultBytes: { $description: '所有历史工具结果合计保留上限（字节）' },
+      toolProtocolRepairRetries: { $description: 'DSH 工具协议返回非 JSON 时的修复重试次数' },
+      toolProtocolPlainTextFallback: { $description: '修复仍失败时是否将普通文本安全降级为最终消息' },
       purposeRoutes: { $description: '按用途（压缩/标题）的模型覆盖' },
-      imageInput: { $description: '图片输入：off=关闭, experimental=实验性' },
+      imageInput: { $description: '图片输入：off=关闭, experimental=通过最小 view_file Agent 处理附件' },
     },
     en: {
       enabled: { $description: 'Enable AGY provider' },
@@ -235,10 +266,17 @@ export function createConfigSchema(defaults: {
       persistentFallback: { $description: 'Persistent fallback policy' },
       maxOutputBytes: { $description: 'Max output bytes per AGY process' },
       maxEventLineLength: { $description: 'Max event line length' },
+      inputFrameLimitBytes: { $description: 'AGY input frame limit in bytes; oversized tool results are compacted first' },
+      maxSingleToolResultBytes: { $description: 'Maximum retained bytes for one historical tool result' },
+      maxHistoricalToolResultBytes: { $description: 'Maximum combined retained bytes for historical tool results' },
+      toolProtocolRepairRetries: { $description: 'Repair retries when a DSH tool response is not JSON' },
+      toolProtocolPlainTextFallback: { $description: 'Safely treat plain text as a final message after repair' },
       purposeRoutes: { $description: 'Purpose-specific model overrides' },
-      imageInput: { $description: 'Image input: off or experimental' },
+      imageInput: { $description: 'Image input: off, or experimental through the minimal view_file Agent' },
     },
-  }) as unknown as z<Config>
+  })
+  return localized
+    .comment('其余字段在 cordis.patch.yml 中，请直接编辑对应段。 (dsh-agy-provider)') as unknown as z<Config>
 }
 
 /** Programmatic library default: enabled=false, toolPolicy=reject */

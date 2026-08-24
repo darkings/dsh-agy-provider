@@ -147,7 +147,7 @@ export interface EffectiveProfileConfig {
   modelEffortSplit: { baseModel: string | null; suffixDetected: boolean; normalized: boolean }
   imageInput: string | null
   modelCapability: {
-    inputModalities: readonly ['text']
+    inputModalities: readonly ('text' | 'image')[]
     imageBridge: 'off' | 'experimental' | 'unknown'
   }
   agentCapability: {
@@ -531,7 +531,7 @@ function effectiveFromDump(
     modelEffortSplit: { baseModel, suffixDetected, normalized: suffixDetected ? baseModel !== rawModel : false },
     imageInput,
     modelCapability: {
-      inputModalities: ['text'],
+      inputModalities: imageInput === 'experimental' ? ['text', 'image'] : ['text'],
       imageBridge: imageInput === 'off' ? 'off' : imageInput === 'experimental' ? 'experimental' : 'unknown',
     },
     agentCapability: emptyEffective(dumpStatus).agentCapability,
@@ -901,14 +901,6 @@ export async function diagnoseProfile(
               })
               addSuggestion('Set workspaceRoot to an existing project directory before enabling workspace-write')
             }
-            if (effective.imageInput === 'experimental' && effective.agentCapability.viewFile !== true) {
-              issues.push({
-                component: 'profile',
-                code: 'PROFILE_IMAGE_AGENT_UNSUPPORTED',
-                message: 'Experimental image input requires a verified Agent with the view_file tool',
-              })
-              addSuggestion('Use agentPreset: read-only or workspace-write and install it with: npx dsh-agy-provider agents install read-only --apply')
-            }
             for (const purpose of ['compaction', 'sessionTitle'] as const) {
               const route = effective.purposeRoutes[purpose]
               if (route?.complete === false) {
@@ -921,13 +913,13 @@ export async function diagnoseProfile(
               }
             }
             if (effective.retryPolicy !== null
-              && (effective.retryPolicy.maxRetries === null || effective.retryPolicy.maxRetries > 2)) {
+              && (effective.retryPolicy.maxRetries === null || effective.retryPolicy.maxRetries > 5)) {
               issues.push({
                 component: 'profile',
                 code: 'PROFILE_RETRY_POLICY_INVALID',
-                message: 'retryPolicy.maxRetries must be an integer from 0 through 2',
+                message: 'retryPolicy.maxRetries must be an integer from 0 through 5',
               })
-              addSuggestion('Set retryPolicy.maxRetries to 0, 1, or 2 in the profile configuration')
+              addSuggestion('Set retryPolicy.maxRetries to an integer from 0 through 5 in the profile configuration')
             }
           }
         }

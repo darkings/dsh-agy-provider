@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.10.0] - 2026-08-24
+
+### Added
+
+- 上下文安全预算：DSH-owned 工具请求采用 56 KiB fail-closed 上限，超限返回稳定的 `AGY_INPUT_TOO_LARGE`，并支持压缩后的可恢复请求。
+- optimized full 提示词路径：稳定前缀、canonical 工具 schema、确定性工具结果淘汰和脱敏诊断指标，提升上游缓存资格且不改变 full 默认生命周期。
+- Windows AGY 启动路径统一为无控制台窗口的原生 launcher；one-shot 输入继续通过 stdin `stream-json` 传输，避免长 argv 溢出。
+
+### Changed
+
+- usage 以当前物理轮 `step_update.usage` 为主，`result.usage` 仅作为累计遥测，避免跨轮重复计费统计。
+- 诊断中的 session/conversation 标识改为单向 fingerprint；不记录 Prompt、响应、路径、命令或工具参数正文。
+- 默认仍为 `sessionMode: full`；persistence/hybrid 不在本版本默认启用。
+
+### Fixed
+
+- 修复长工具契约导致的 Windows `ENAMETOOLONG`、协议修复后的内部工具越权、历史工具结果预算漂移及取消/失败后的会话恢复问题。
+
 ## [0.9.0] - 2026-08-21
 
 ### Added
@@ -15,6 +33,10 @@
 
 - `Config.model/models` 语义收口为 base id，`AgyAdapter` 的 `listModels/resolveModel/stream` 统一走 base + reasoningEffort。
 - `doctor` 与 `smoke` 兼容 `profileSchemaVersion 3/4`，迁移文档与发布清单按 7 层重组。
+
+### Fixed
+
+- Provider 重试策略恢复与 DSH normal 默认一致：默认最多重试 5 次，`TIMEOUT` 纳入可重试错误；超时后清理不完整的 AGY conversation，确保后续尝试使用完整 DSH 历史。
 
 ## [0.8.0] - 2026-08-20
 

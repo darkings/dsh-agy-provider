@@ -1,6 +1,9 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
+import { AgyStreamProtocolError, encodeAgyUserMessage } from './stream-protocol.js'
+import { buildWindowsNoConsoleLaunch } from './windows-launcher.js'
 
 export type ProcessTermination = 'completed' | 'non-zero' | 'signaled' | 'aborted' | 'timeout' | 'output-limit'
 
@@ -23,17 +26,104 @@ export function isAgyExecutionMode(value: unknown): value is AgyExecutionMode {
 export class AgyProcessError extends Error {
   constructor(
     message: string,
-    readonly code: 'ABORTED' | 'SPAWN_FAILED' | 'OUTPUT_HANDLER_FAILED' | 'OUTPUT_LIMIT',
+    readonly code: 'ABORTED' | 'SPAWN_FAILED' | 'INPUT_FAILED' | 'INPUT_TOO_LARGE' | 'OUTPUT_HANDLER_FAILED' | 'OUTPUT_LIMIT',
     options?: ErrorOptions,
+    readonly diagnostic?: AgyProcessDiagnostic,
   ) {
     super(message, options)
     this.name = 'AgyProcessError'
   }
 }
 
+export type AgyProcessDiagnosticStage = 'prepare' | 'spawn' | 'stdin' | 'stdout-handler'
+
+/** Safe process-failure metadata; never contains prompt, response, stderr, or paths. */
+export interface AgyProcessDiagnostic {
+  readonly stage: AgyProcessDiagnosticStage
+  readonly errorName?: string
+  readonly errorCode?: string
+  readonly lineNumber?: number
+  readonly lineLength?: number
+  readonly lineHash?: string
+  readonly stdoutLineCount?: number
+  readonly stdoutBytes?: number
+  readonly stderrBytes?: number
+}
+
+function errorNameOf(error: unknown): string | undefined {
+  return error instanceof Error && error.name.length > 0 ? error.name.slice(0, 128) : undefined
+}
+
+function errorCodeOf(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' && code.length > 0 ? code.slice(0, 128) : undefined
+}
+
+function integerFieldOf(error: unknown, key: 'lineNumber'): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined
+  const value = (error as Record<string, unknown>)[key]
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 ? value : undefined
+}
+
+function shortLineHash(line: string): string {
+  return createHash('sha256').update(line, 'utf8').digest('hex').slice(0, 16)
+}
+
+function processDiagnosticFor(
+  error: unknown,
+  stage: AgyProcessDiagnosticStage,
+  details: {
+    line?: string
+    stdoutLineCount?: number
+    stdoutBytes?: number
+    stderrBytes?: number
+  } = {},
+): AgyProcessDiagnostic {
+  const line = details.line
+  const errorName = errorNameOf(error)
+  const errorCode = errorCodeOf(error)
+  const lineNumber = integerFieldOf(error, 'lineNumber')
+  return {
+    stage,
+    ...(errorName === undefined ? {} : { errorName }),
+    ...(errorCode === undefined ? {} : { errorCode }),
+    ...(lineNumber === undefined ? {} : { lineNumber }),
+    ...(line === undefined ? {} : {
+      lineLength: line.length,
+      lineHash: shortLineHash(line),
+    }),
+    ...(details.stdoutLineCount === undefined ? {} : { stdoutLineCount: details.stdoutLineCount }),
+    ...(details.stdoutBytes === undefined ? {} : { stdoutBytes: details.stdoutBytes }),
+    ...(details.stderrBytes === undefined ? {} : { stderrBytes: details.stderrBytes }),
+  }
+}
+
+function diagnosticLabel(diagnostic: AgyProcessDiagnostic | undefined): string {
+  if (diagnostic === undefined) return ''
+  const cause = [diagnostic.errorName, diagnostic.errorCode].filter(Boolean).join(':')
+  const line = diagnostic.lineNumber === undefined ? '' : ` line=${diagnostic.lineNumber}`
+  const length = diagnostic.lineLength === undefined ? '' : ` length=${diagnostic.lineLength}`
+  const stage = `stage=${diagnostic.stage}`
+  return ` (${[cause || undefined, stage, line.trim(), length.trim()].filter(Boolean).join(' ')})`
+}
+
+/** Find process diagnostics through the LlmError -> cause chain. */
+export function agyProcessDiagnosticOf(error: unknown): AgyProcessDiagnostic | undefined {
+  let current: unknown = error
+  for (let depth = 0; depth < 4 && current !== undefined; depth += 1) {
+    if (current instanceof AgyProcessError && current.diagnostic !== undefined) return current.diagnostic
+    if (!(current instanceof Error)) return undefined
+    current = current.cause
+  }
+  return undefined
+}
+
 export interface ProcessRequest {
   executable: string
   args: readonly string[]
+  /** Optional stdin payload written once before the stream is closed. */
+  stdin?: string
   cwd?: string
   env?: NodeJS.ProcessEnv
   timeoutMs?: number
@@ -44,6 +134,8 @@ export interface ProcessRequest {
   signal?: AbortSignal
   /** Called synchronously for each complete stdout line as it arrives. */
   onStdoutLine?: (line: string) => void
+  /** Use the Windows no-console bridge for a console-subsystem executable. */
+  windowsNoConsole?: boolean
 }
 
 export interface ProcessResult {
@@ -70,6 +162,8 @@ export interface AgyRequest extends Omit<ProcessRequest, 'executable' | 'args'> 
   disableSlashCommands?: boolean
   /** Absolute temporary JSON Schema path passed to AGY's final-result validator. */
   jsonSchemaPath?: string
+  /** Maximum UTF-8 bytes allowed for one encoded stream-json user frame. */
+  maxInputFrameBytes?: number
 }
 
 export function defaultAgyCommand(): 'agy.exe' | 'agy' {
@@ -127,7 +221,7 @@ export function resolveAgyExecutable(explicit?: string): string {
   return command
 }
 
-/** Build AGY's print-mode argv without invoking a shell. */
+/** Build AGY's stdin stream-json argv without invoking a shell. */
 export function buildAgyArgs(
   request: Pick<
     AgyRequest,
@@ -155,7 +249,7 @@ export function buildAgyArgs(
     throw new TypeError('AGY json-schema path must be non-empty')
   }
   return [
-    '-p', request.prompt,
+    '-p', '',
     ...(request.agent === undefined ? [] : ['--agent', request.agent]),
     ...(request.model === undefined ? [] : ['--model', request.model]),
     ...(request.conversation === undefined ? [] : ['--conversation', request.conversation]),
@@ -164,6 +258,7 @@ export function buildAgyArgs(
     ...(request.mode === undefined ? [] : ['--mode', request.mode]),
     ...(request.disableSlashCommands === true ? ['--disable-slash-commands'] : []),
     ...(request.jsonSchemaPath === undefined ? [] : ['--json-schema', request.jsonSchemaPath]),
+    '--input-format', 'stream-json',
     '--output-format', 'stream-json',
   ]
 }
@@ -193,14 +288,45 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
   }
 
   const startedAt = Date.now()
-  const child = spawn(request.executable, [...request.args], {
-    cwd: request.cwd,
-    env: request.env === undefined ? process.env : { ...process.env, ...request.env },
-    shell: false,
-    detached: process.platform !== 'win32',
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  let launch: { executable: string; args: readonly string[] }
+  try {
+    launch = request.windowsNoConsole === true
+      ? buildWindowsNoConsoleLaunch(request.executable, request.args)
+      : { executable: request.executable, args: request.args }
+    if (process.platform === 'win32' && request.windowsNoConsole === true && !existsSync(launch.executable)) {
+      throw new Error('Bundled Windows AGY launcher is missing')
+    }
+  } catch (error) {
+    const cause = error instanceof Error ? error : new Error(String(error))
+    const diagnostic = processDiagnosticFor(cause, 'prepare')
+    return Promise.reject(new AgyProcessError(
+      `Unable to prepare AGY launcher: ${cause.message}${diagnosticLabel(diagnostic)}`,
+      'SPAWN_FAILED',
+      { cause },
+      diagnostic,
+    ))
+  }
+  let child: ChildProcessWithoutNullStreams
+  try {
+    child = spawn(launch.executable, [...launch.args], {
+      cwd: request.cwd,
+      env: request.env === undefined ? process.env : { ...process.env, ...request.env },
+      shell: false,
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    const cause = error instanceof Error ? error : new Error(String(error))
+    const code = (cause as NodeJS.ErrnoException).code ?? 'unknown'
+    const diagnostic = processDiagnosticFor(cause, 'spawn')
+    return Promise.reject(new AgyProcessError(
+      `Unable to start AGY executable (${code})${diagnosticLabel(diagnostic)}`,
+      'SPAWN_FAILED',
+      { cause },
+      diagnostic,
+    ))
+  }
 
   return new Promise<ProcessResult>((resolveResult, rejectResult) => {
     let stdoutBuffer = ''
@@ -210,6 +336,8 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
     const stdoutLines: string[] = []
     let termination: ProcessTermination | undefined
     let outputHandlerError: unknown
+    let outputHandlerDiagnostic: AgyProcessDiagnostic | undefined
+    let inputError: unknown
     let settled = false
 
     const deliver = (line: string): void => {
@@ -219,6 +347,12 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
         request.onStdoutLine(line)
       } catch (error) {
         outputHandlerError = error
+        outputHandlerDiagnostic = processDiagnosticFor(error, 'stdout-handler', {
+          line,
+          stdoutLineCount: stdoutLines.length,
+          stdoutBytes,
+          stderrBytes,
+        })
         termination = 'aborted'
         terminateProcessTree(child)
       }
@@ -265,15 +399,23 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       }
       stderr += chunk
     })
+    if (request.stdin !== undefined) {
+      child.stdin.once('error', error => {
+        if (settled || inputError !== undefined) return
+        inputError = error
+        kill('aborted')
+      })
+    }
     child.once('error', (error: NodeJS.ErrnoException) => {
       if (settled) return
       settled = true
       if (timeout !== undefined) clearTimeout(timeout)
       request.signal?.removeEventListener('abort', abortListener)
       rejectResult(new AgyProcessError(
-        `Unable to start AGY executable (${error.code ?? 'unknown'})`,
+        `Unable to start AGY executable (${error.code ?? 'unknown'})${diagnosticLabel(processDiagnosticFor(error, 'spawn'))}`,
         'SPAWN_FAILED',
         { cause: error },
+        processDiagnosticFor(error, 'spawn'),
       ))
     })
     child.once('close', (exitCode, signal) => {
@@ -284,9 +426,24 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       if (termination !== 'output-limit') flushStdout(true)
       if (outputHandlerError !== undefined) {
         rejectResult(new AgyProcessError(
-          'AGY stdout handler failed',
+          `AGY stdout handler failed${diagnosticLabel(outputHandlerDiagnostic)}`,
           'OUTPUT_HANDLER_FAILED',
           { cause: outputHandlerError },
+          outputHandlerDiagnostic,
+        ))
+        return
+      }
+      if (inputError !== undefined) {
+        const diagnostic = processDiagnosticFor(inputError, 'stdin', {
+          stdoutLineCount: stdoutLines.length,
+          stdoutBytes,
+          stderrBytes,
+        })
+        rejectResult(new AgyProcessError(
+          `Unable to write AGY stream-json input${diagnosticLabel(diagnostic)}`,
+          'INPUT_FAILED',
+          { cause: inputError instanceof Error ? inputError : new Error(String(inputError)) },
+          diagnostic,
         ))
         return
       }
@@ -301,14 +458,28 @@ export function runProcess(request: ProcessRequest): Promise<ProcessResult> {
         durationMs: Date.now() - startedAt,
       })
     })
+    child.stdin.end(request.stdin)
   })
 }
 
 export function runAgyProcess(request: AgyRequest): Promise<ProcessResult> {
   const executable = resolveAgyExecutable(request.executable)
+  let stdin: string
+  try {
+    stdin = encodeAgyUserMessage(request.prompt, request.maxInputFrameBytes)
+  } catch (error) {
+    const tooLarge = error instanceof AgyStreamProtocolError && error.code === 'FRAME_TOO_LARGE'
+    return Promise.reject(new AgyProcessError(
+      error instanceof Error ? error.message : 'Unable to encode AGY stream-json input',
+      tooLarge ? 'INPUT_TOO_LARGE' : 'INPUT_FAILED',
+      { cause: error instanceof Error ? error : new Error(String(error)) },
+    ))
+  }
   return runProcess({
     ...request,
     executable,
     args: buildAgyArgs(request),
+    stdin,
+    windowsNoConsole: true,
   })
 }

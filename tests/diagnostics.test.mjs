@@ -90,7 +90,8 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
         { id: 'gemini-flash', name: 'Flash', description: 'Fast text model', contextWindow: 1_000_000 },
       ],
       agent: 'deepseek-proxy',
-      minimumAgyVersion: '1.1.13',
+      imageInput: 'experimental',
+      minimumAgyVersion: '1.1.15',
     },
     executable: 'agy.exe',
     nodeVersion: '24.18.0',
@@ -99,7 +100,7 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
     dshLlmVersion: '0.1.0-rc.7',
     bundlePatchPresent: true,
     runCommand: async request => request.args[0] === '--version'
-      ? result(['agy 1.1.14'])
+      ? result(['agy 1.1.15'])
       : request.args[0] === 'models'
         ? result([])
         : result(['deepseek-proxy']),
@@ -118,6 +119,7 @@ test('diagnoseProvider returns a stable safe schema with model capabilities', as
   assert.equal(resultValue.modelCatalog.warning, 'AGY model discovery returned no usable models')
   assert.equal(resultValue.modelCatalog.warningCode, 'MODEL_DISCOVERY_EMPTY')
   assert.equal(resultValue.models[0]?.contextWindow, 1_000_000)
+  assert.deepEqual(resultValue.models[0]?.inputModalities, ['text', 'image'])
   assert.equal(resultValue.agy.executable, 'explicit')
   assert.equal(resultValue.agy.executableSource, 'explicit')
   assert.doesNotMatch(JSON.stringify(resultValue), /C:\\Users\\|access_token|refresh_token|super-secret/)
@@ -150,7 +152,7 @@ test('diagnoseProvider reports static catalog mode without discovery', async () 
     config: { model: 'static-model', modelDiscovery: 'off' },
     bundlePatchPresent: true,
     runCommand: async request => request.args[0] === '--version'
-      ? result(['agy 1.1.14'])
+      ? result(['agy 1.1.15'])
       : result(['deepseek-proxy']),
   })
 

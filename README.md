@@ -8,20 +8,22 @@
 
 ## 项目状态
 
-0.6.1 已公开发布，是 0.6.0 的兼容性修复版，修复 DSH profile 缺少 `AttachmentStore` 时的插件启动错误；0.6.0 的能力与配置保持不变。`v0.6.1`、GitHub Actions CI 和 npm Trusted Publishing 均已通过。
+**0.10.0 已完成开发，正在发布到 npm。** 0.10.0 在 0.9.0 的设置面板、工作区无感化和模型/推理强度分离基础上，加入 **optimized full 上下文预算、确定性工具结果淘汰、脱敏诊断和 Windows 无控制台 launcher**；默认仍为 `sessionMode: full`。
 
-0.8.0 已完成开发（`0.7.0` 仍为 `latest`，`0.8.0` 待发布），在保留 `dsh-owned` 的前提下新增 `transport: persistent` opt-in（AGY 1.1.15 stream-json，一 Session 一 worker，warm-turn 79% 改善，`145/145`）；`0.7.0` 已公开发布，`latest=0.7.0`，`dsh-owned` 由 DSH Session/ToolRuntime/sandbox/approval 控制。
+**0.7.0 / 0.8.0 已合并**：`v0.7.0 → b94fa32`（`latest=0.7.0` 已发布）、`v0.8.0 → b7c9a45` 已合入主线。0.7.0 起 `dsh-owned` 为 bundle 默认（DSH Session/ToolRuntime/sandbox/approval 接管项目与权限）。
 
-0.6.0 的公开能力重点是：
+0.10.0 的公开能力重点是：
 
-- 稳定的 AGY 子进程与 stream-json 文本流适配。
-- DSH Session 与 AGY Conversation 的安全映射。
-- agy models 动态模型发现、缓存和静态 fallback。
-- low/medium/high reasoning effort 显式映射。
-- DSH-owned 工具桥接、Agent capability presets 和 doctor v3；0.6.1 的 AGY-owned 路径保留为 legacy 兼容模式。
-- 默认零自动重试、quota-free 诊断和跨平台测试门禁。
+- 上下文与工具安全：DSH-owned structured prompt 固定 56 KiB fail-closed 上限，超限返回 `AGY_INPUT_TOO_LARGE`；压缩后可恢复，工具结果按整段淘汰，避免历史前缀漂移。
+- 性能与观测：稳定前缀、canonical tool schema、step usage 口径和 fingerprint 诊断提升缓存资格与可观测性；不把后端 `cacheRead` 命中率当作保证。
 
-图片输入已经有受限的 experimental bridge，但公开模型目录仍然只声明 inputModalities: ['text']。在 DSH Web 的 AttachmentStore、AGY view_file 和真实像素答案闭环被验证前，项目不会把它宣传为正式识图能力。
+- DSH 设置面板：`Config` 全量 `zh-CN/en` i18n（schemastery `.i18n`），`registerConfigurableProviders(settingsNs dsh-agy-provider)` + `registerModelDiscovery`，模型为多选勾选列表，推理强度为独立下拉。
+- 工作区无感：`dsh-owned` 下废弃 `workspaceRoot`（`.deprecated()`，面板隐藏，`resolveAgyAgentRuntime` 强制 `undefined`），工具请求走 DSH Session `header.cwd + workspaceRegistry + sandboxPolicy` 自动校验；纯文本无需 workspace，工具无 workspace 时返回 `DSH_WORKSPACE_MISMATCH` 可操作错误。
+- 模型与推理强度分离：`gemini-3.7-flash` 为 base，`reasoningEffort: low|medium|high` 独立选择；`listModels` 仅返回 base 并带 `reasoning.efforts`，旧 `-high/-medium/-low` 后缀自动兼容并 `DEPRECATED_MODEL_EFFORT_SUFFIX` 警告。
+- 模型可见性：`visibleModels: string[]` 空=全部，非空仅显示勾选的 base，未勾选显式请求仍兼容。
+- 保持 0.7.0 的 DSH-owned 工具桥、Agent presets、doctor v5（`profileSchemaVersion: 4`）、零重试、quota-free 诊断与跨平台门禁；`imageInput: experimental` 已打通受限多模态闭环。
+
+图片输入为受限 experimental bridge：开启后公开 `inputModalities: ['text', 'image']`，通过独立 `dsh-agy-image-view` Agent 读取临时暂存图片。已在 DSH Desktop 完成真实像素回答、同会话追问、失败格式和清理验证；它仍不是无条件的生产级图片能力。
 
 ## 工作方式
 
@@ -52,7 +54,7 @@ Provider 使用 spawn(executable, args) 启动 AGY，不经过 shell 拼接命�
 - 将 DSH system prompt/messages 确定性序列化为 AGY Prompt。
 - 将 step_update.text_delta 和 result.response 映射为 DSH 文本流。
 - 支持超时、取消、退出码、解析错误、输出上限和进程树清理。
-- 日志只保留 request/session/usage/事件计数等白名单字段，不记录 Prompt、stderr 原文、凭据或完整本机路径。
+- 日志只保留 request/session/usage/事件计数等白名单字段；失败时可追加启动阶段、稳定错误码、输出行号/长度和短哈希，不记录 Prompt、响应正文、stderr 原文、凭据或完整本机路径。
 
 ### 2. Session、模型和 reasoning effort
 
@@ -115,13 +117,14 @@ imageInput: experimental 已支持：
 - 通过可选 DSH AttachmentStore 读取图片。
 - 对 PNG/JPEG/WebP/GIF 做 MIME、字节数和数量限制。
 - 每个请求使用随机临时 staging 目录，并在成功、失败和取消时清理。
-- 只允许内置 read-only/workspace-write Agent 进入 bridge；不满足 view_file 能力时返回 IMAGE_AGENT_UNSUPPORTED。
+- 图片请求强制使用独立 `dsh-agy-image-view` Agent，并且只允许 `view_file` 读取本次请求精确暂存的图片路径。
+- 图片请求使用 one-shot；AGY 的内部 `view_file` 生命周期只在上述窄白名单内放行，DSH 工具仍由 DSH ToolRuntime 所有。
 
-这只是协议实验，不是公开图片模型能力。当前 listModels() 仍只返回文本输入能力，deepseek-proxy 和未知 custom Agent 不会被错误宣传为识图 Agent。
+开启 `imageInput: experimental` 后 `listModels()` 返回文本+图片输入能力；关闭时仍为纯文本。未知 custom Agent 不会获得图片读取权限。
 
 ### 7. 质量门禁
 
-- npm run verify：typecheck、141 个测试和 pack dry-run。
+- npm run verify：typecheck、158 个测试和 pack dry-run。
 - npm run benchmark：Parser、serializer、limiter 的无额度基线。
 - npm run smoke:dsh:self-contained：隔离 DSH Web/headless plugin-add、doctor 和 Mock response。
 - GitHub Actions：Provider Node.js 20/22/24 × Windows/Ubuntu/macOS，DSH 原生 Node 22/24 × Windows/Ubuntu/macOS，并包含 self-contained smoke。
@@ -134,14 +137,17 @@ imageInput: experimental 已支持：
 | DSH 文本对话 | 已实现 | 开启（profile bundle） |
 | AGY 额度/认证 | 已实现 | 由本机 AGY 管理 |
 | 动态模型发现 | 已实现 | modelDiscovery: auto |
-| reasoning effort | 已实现 | 不设置隐式 effort |
+| reasoning effort | 已实现 | `low/medium/high` 不设隐式值，DSH 独立选择 |
+| 模型可见性 | 0.9.0 已实现 | `visibleModels: []` 空=全部，非空仅显示勾选 base |
+| DSH 设置面板 | 0.9.0 已实现 | `zh-CN/en` i18n，`visibleModels` 多选 + base/推理强度分离 |
+| 工作区无感 | 0.9.0 已实现 | `dsh-owned` 下 `workspaceRoot` 已废弃，走 DSH Session cwd |
 | AGY 自有工具 | 已实现（0.6.1 legacy） | 0.6.1 profile 为 agy-owned |
-| DSH tool-call bridge | 0.7.0 已实现并通过跨平台门禁 | 0.7.0 bundle 为 dsh-owned |
+| DSH tool-call bridge | 0.7.0 已实现并通过跨平台门禁 | 0.7.0 起 bundle 为 dsh-owned |
 | read-only Agent | 已实现 | 显式安装/配置 |
-| workspace-write Agent | 已实现 | 必须显式 workspaceRoot |
-| 图片 staging bridge | experimental | imageInput: off |
-| 公开 image modality | 未实现 | 仍为 text-only |
-| persistent stream transport | fixture prototype | 正式路径仍为 one-shot |
+| workspace-write Agent | 已实现 | 0.9.0 `dsh-owned` 下无需手配 `workspaceRoot`，legacy `agy-owned` 仍需显式目录 |
+| 图片 staging bridge | 0.9.0 experimental，桌面闭环已验证 | imageInput: experimental（bundle） |
+| image modality | 受限公开 | experimental 时 text+image，off 时 text-only |
+| persistent stream transport | 0.8.0 已实现 opt-in | 默认 `one-shot`，显式 `transport: persistent` 才复用 worker |
 
 ## 安装与使用
 
@@ -156,62 +162,82 @@ imageInput: experimental 已支持：
 普通 npm install 只安装 Node.js 包，不会把 Provider 写入 DSH profile。DSH Web/headless 应使用原生 plugin manager：
 
 ~~~powershell
-npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.7.0
-npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.7.0
+npx @deepseek-ai/dsh plugin --profile web add dsh-agy-provider@0.10.0
+npx @deepseek-ai/dsh plugin --profile headless add dsh-agy-provider@0.10.0
 ~~~
 
-0.7.0 已发布包的 profile bundle 默认相当于：
+0.9.0 bundle 默认（`cordis.patch.yml`）相当于：
 
 ~~~yaml
 enabled: true
 provider: agy
+model: gemini-3.1-pro
 agent: deepseek-proxy
 toolPolicy: dsh-owned
 sessionMode: full
 imageInput: off
 ~~~
 
-直接使用库的 Config({}) 则保持 enabled: false、toolPolicy: reject，不会因为 import 包而修改用户 DSH profile。
+直接使用库的 `Config({})` 仍保持 `enabled: false、toolPolicy: reject`，不会因 import 而修改 profile；`BundleConfig` 为显式 `enabled: true / dsh-owned`。
 
-0.6.1 的 `toolPolicy: agy-owned` 仍可作为 legacy 回滚路径，但 doctor 会给出迁移 warning；0.7.0 不要求重复配置 `workspaceRoot`，项目目录、read/write、shell、网络、MCP 和 approval 均由 DSH 当前 Session 与 ToolRuntime 控制。
+0.6.1 的 `toolPolicy: agy-owned` 仍可作为 legacy 回滚路径，但 doctor 会报 `PROFILE_TOOL_POLICY_DEPRECATED`；**0.9.0 `dsh-owned` 下无需再配 `workspaceRoot`**，项目目录、read/write、shell、网络、MCP 和 approval 均由 DSH 当前 Session 与 ToolRuntime 自动接管（`DSH_WORKSPACE_MISMATCH` 可操作错误）。
 
 ### Agent preset 配置
 
-只读配置：
+只读配置（`dsh-owned` 无需 `workspaceRoot`）：
 
 ~~~yaml
 agentPreset: read-only
+toolPolicy: dsh-owned
+# 无需 workspaceRoot，打开文件夹的 DSH Session 即项目
 ~~~
 
-工作区写入配置：
+工作区写入（`dsh-owned` 仍无需手配目录，权限由 DSH 切换）：
 
 ~~~yaml
 agentPreset: workspace-write
+toolPolicy: dsh-owned
+# dsh-owned 下 workspaceRoot 已废弃，DSH 的 workspace-write / danger-full-access 决定可写边界
+~~~
+
+legacy `agy-owned` 如需显式目录（不推荐）：
+
+~~~yaml
+agentPreset: workspace-write
+toolPolicy: agy-owned
 workspaceRoot: C:\work\my-project
 ~~~
 
-写入能力只在显式 preset、显式工作区和 Agent 白名单同时满足时生效。
+写入能力由 DSH 权限 preset 与 sandbox 强制执行，Provider 不绕过。
 
-### 配置示例
+### 配置示例（0.9.0 推荐）
 
 ~~~yaml
 enabled: true
 provider: agy
 agent: deepseek-proxy
-model: gemini-3.7-flash-high
+model: gemini-3.7-flash            # base 名称，推理强度在 DSH 会话中选 low/medium/high
+visibleModels:                      # 设置面板勾选要显示的模型，空=全部
+  - gemini-3.7-flash
+  - gemini-3.1-pro
 models:
-  - id: gemini-3.7-flash-high
-    name: Gemini 3.7 Flash High
+  - id: gemini-3.7-flash
+    name: Gemini 3.7 Flash
+  - id: gemini-3.1-pro
+    name: Gemini 3.1 Pro
 toolPolicy: dsh-owned
+transport: one-shot                 # 或 persistent（opt-in，一 Session 一 worker）
 sessionMode: full
 modelDiscovery: auto
 retryPolicy:
-  maxRetries: 0
-  retryableCodes: [RATE_LIMIT, SERVER, TRANSPORT]
+  maxRetries: 5
+  retryableCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT]
 imageInput: off
 ~~~
 
-重试默认关闭，避免一次 DSH 请求被放大为多次 AGY 额度调用；显式 opt-in 也有最大次数和错误码白名单限制。
+> 兼容：旧 `model: gemini-3.7-flash-high` 仍可解析为 `base + high` 并 warning，建议改为 base + 会话级 `reasoningEffort`。
+
+重试默认遵循 DSH normal 策略：首次请求失败后最多重试 5 次；`TIMEOUT` 会进入重试，最终总计最多 6 次 AGY 请求。可通过 `retryPolicy` 在 `settings.yaml` 中收窄次数和错误码白名单。
 
 ## 诊断与开发
 
@@ -232,7 +258,7 @@ npm run benchmark
 npm run smoke:dsh:self-contained
 ~~~
 
-需要真实 AGY 的实验不会自动运行。图片实验受独立额度闸门控制，且当前 0.6.0 识图证据不足，不应在没有明确授权时重复执行。
+需要真实 AGY 的实验不会自动运行。0.9.0 多模态闭环已在用户授权额度下完成；后续仍不应在无明确授权时重复消耗真实模型额度。
 
 ## 未来规划
 
@@ -246,23 +272,30 @@ npm run smoke:dsh:self-contained
 - 保持 sandbox、approval、MCP 凭据和实际副作用位于 DSH；Provider 不传 `--dangerously-skip-permissions`。
 - 详细范围、安全门禁、额度预算和里程碑见 [0.7.0 开发计划](docs/v0.7.0-development-plan.md)。
 
-### 0.8.0：Persistent transport 与 DSH next 兼容（已规划）
+### 0.8.0：Persistent transport 与 DSH next 兼容（已实现）
 
-- 以 AGY 1.1.15 正式 `stream-json` 输入协议为基础，将一 Session 一 worker 的 persistent transport 做成稳定 opt-in；0.8.0 仍保持 one-shot 默认。
-- 同时验证 DSH rc.7 stable 与 rc.8 next，不以升级 next 为代价破坏现有用户。
-- 图片 modality 只作为条件性交付：像素盲测、DSH Web、工具所有权和清理门禁全部通过才公开，否则继续 text-only。
+- 以 AGY 1.1.15 正式 `stream-json` 输入协议为基础，一 Session 一 worker 的 persistent transport 已做成稳定 opt-in；默认仍 `one-shot`（`transport: persistent` 显式启用）。
+- 同时验证 DSH rc.7 stable 与 rc.8 next 隔离 lane，不以升级 next 为代价破坏现有用户；warm-turn 实测 79% 改善，`145/145` 通过。
+- 图片 modality 作为 0.9.0 受限 experimental 能力交付，Desktop 像素回答、追问、失败格式与清理均已验证。
 - 详细范围、go/no-go、额度预算和发布门禁见 [0.8.0 开发计划](docs/v0.8.0-development-plan.md)。
+
+### 0.9.0：设置面板 + 工作区无感 + 模型平权（已实现）
+
+- DSH 设置面板：`Config` i18n（`zh-CN/en`）+ `registerConfigurableProviders` + `registerModelDiscovery`，`visibleModels` 多选与 `base + reasoningEffort` 分离。
+- 工作区无感：`dsh-owned` 废弃 `workspaceRoot`，项目目录由 DSH Session 自动接管，纯文本无需 workspace。
+- 完整 7 层测试（L1 单元 160+ / L2 集成 / L3 自包含 / L4 权限矩阵 / L5 设置面板 / L6 跨平台 / L7 真实抽样）与 `doctor v5`（`profileSchemaVersion 4`）。
+- 详细范围与发布门禁见 [0.9.0 开发计划](docs/v0.9.0-development-plan.md) 与 [0.9.0 迁移说明](docs/migration-0.9.0.md)。
 
 ### 后续版本：图片与工具体验加固
 
-- 完成 DSH Web AttachmentStore → AGY 模型像素答案的端到端证据后，再考虑公开 image modality。
+- 继续加固 DSH Web AttachmentStore → AGY 像素答案路径的性能、更多格式与跨平台证据。
 - 继续完善 workspace-write 的冲突处理、备份、回滚和 tool-call 展示体验。
 - 不会因为工具目录中存在 write 就绕过 DSH 权限；实际写入始终服从会话 permission preset 和项目边界。
 
 ### 后续版本：传输与成本优化
 
-- 只有持久 transport 在真实 AGY 协议、串线、崩溃恢复、进程清理和 token 成本闸门上证明收益后，才考虑进入正式配置。
-- 继续完善 purpose-aware 的 compaction/session-title 路由和 usage 可观测性。
+- 0.8.0 的持久 transport 已在真实 AGY 协议、串线、崩溃恢复、进程清理和 token 成本闸门上证明收益（`V8-M4 go`），0.9.0 保持 opt-in。
+- 继续完善 purpose-aware 的 compaction/session-title 路由、usage 可观测性与 `transport: persistent` 的默认策略评估。
 - 保持公共 CI、doctor、解析器和 Mock smoke 的零额度原则。
 
 ## 明确不支持的能力
@@ -271,7 +304,7 @@ npm run smoke:dsh:self-contained
 - DSH 与 AGY 的双重工具执行 loop。
 - 未验证的 glob、shell、网络、MCP、subagent 或自动权限批准。
 - 默认写入用户工作区。
-- 公开 image modality、temperature、stop、maxTokens 和未经验证的 reasoning-delta 输出。
+- 无限制生产级 image modality、temperature、stop、maxTokens 和未经验证的 reasoning-delta 输出。
 - 未经成本和可靠性验证的生产级 persistent stream transport。
 
 ## 项目结构
@@ -280,13 +313,14 @@ npm run smoke:dsh:self-contained
 dsh-agy-provider/
 ├─ src/
 │  ├─ provider/       # DSH Adapter、配置、序列化、图片 bridge
-│  ├─ agy/            # 子进程、argv、stream-json、模型发现、脱敏
+│  ├─ agy/            # 子进程、argv、stream-json、模型发现、脱敏（含 persistent-transport）
 │  ├─ session/        # DSH Session 与 AGY Conversation 映射
-│  ├─ doctor.ts       # profile-aware doctor v3
+│  ├─ doctor.ts       # profile-aware doctor v5 (profileSchemaVersion 4)
+│  ├─ dsh/context.ts  # DSH Session/workspace/sandbox/approval 无感校验
 │  └─ agent-*.ts      # preset、安装器和 agents CLI
 ├─ agents/            # tool-free/read-only/workspace-write 模板
 ├─ scripts/           # verify、benchmark、diagnose、DSH smoke
-├─ tests/
+├─ tests/             # L1 单元 + L2 集成（visibleModels/归一化/i18n）
 ├─ docs/
 ├─ cordis.patch.yml
 └─ package.json
@@ -294,17 +328,15 @@ dsh-agy-provider/
 
 ## 文档
 
-- [安装文档](docs/installation.md)
-- [0.6.0 迁移说明](docs/migration-0.6.0.md)
+- [安装文档](docs/installation.md)（0.9.0 工作区无感与 `visibleModels`）
+- [0.9.0 迁移说明](docs/migration-0.9.0.md)（模型 base+effort / 可见性 / 废弃 workspaceRoot）
+- [0.9.0 开发计划](docs/v0.9.0-development-plan.md)（设置面板/工作区/模型平权/7层测试）
+- [0.9.0 发布检查清单](docs/v0.9.0-release-checklist.md)（L1~L7 门禁）
 - [工具能力矩阵](docs/tool-capability-matrix.md)
 - [兼容性矩阵](docs/compatibility-matrix.md)
-- [发布检查清单](docs/release-checklist.md)
-- [CHANGELOG](CHANGELOG.md)
-- [0.7.0 开发计划](docs/v0.7.0-development-plan.md)
-- [0.7.0 迁移说明](docs/migration-0.7.0.md)
-- [0.7.0 release checklist](docs/v0.7.0-release-checklist.md)
-- [0.6.0 开发计划](docs/v0.6.0-development-plan.md)
 - [DSH Provider 契约](docs/dsh-provider-contract.md)
+- [0.8.0 / 0.7.0 开发计划与迁移说明](docs/v0.8.0-development-plan.md)（历史）
+- [CHANGELOG](CHANGELOG.md)
 - [性能基线](docs/performance-baseline.md)
 
 ## License

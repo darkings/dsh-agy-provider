@@ -22,10 +22,10 @@
 | AGY models | `agy models` plain text + 归一化 base | 通过 | V3-M1/V9-M2 解析、去重、显式目录合并和 fallback；0.9.0 `normalizeModelId/extractEffort` 按 base 去重，`filterVisibleModels` |
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
 | Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
-| npm registry | `dsh-agy-provider@0.9.0`, `latest` 待发布 | 通过（待验证） | 0.9.0 `npm pack --dry-run` 63-file；`v0.9.0 → 14ed413` 待 `npm publish` Trusted Publishing 2422 |
-| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.7.0` → `b94fa32`（run `32286511205`）；`v0.9.0` → `14ed413` 待触发 |
+| npm registry | `dsh-agy-provider@0.10.0`, `latest=0.10.0` | 通过 | 0.10.0 69-file pack；线上 tarball/integrity/shasum 已核验，`dsh.bundle.patch` 可读取 |
+| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.7.0` → `b94fa32`（run `32286511205`）；0.10.0 npm public publish 已完成，release tag/CI 仍待收口 |
 
-0.9.0 发布证据（待 registry 确认后更新）：`main@14ed413` + 本地 `v0.9.0`，`npm run build/typecheck` 通过，L1/L2 设计完成（L1 160+ cases、L2 visibleModels/归一化/旧后缀/workspace 无感），L3/L4 self-contained 与 permission-matrix 门禁仍有效，`quotaUsed=false`。0.7.0 发布证据：release commit `b94fa32` 的 PR run `32286276907` 为 17/17，Trusted Publishing run `32286511205` 成功；registry `0.7.0` 的 Web/headless smoke 与 15/15 permission/tool matrix 通过，`quotaUsed=false`、cleanup completed。0.6.1 legacy 证据保留。
+0.10.0 发布证据：release commit `6f67748` 的本地 `npm run verify` 为 219/219，69-file pack 已发布，registry `latest=0.10.0`、tarball/integrity/shasum 与 `repository` 已核验；Desktop optimized full、上下文/工具/隐私回归通过。0.7.0 发布证据：release commit `b94fa32` 的 PR run `32286276907` 为 17/17，Trusted Publishing run `32286511205` 成功；registry `0.7.0` 的 Web/headless smoke 与 15/15 permission/tool matrix 通过，`quotaUsed=false`、cleanup completed。0.6.1 legacy 证据保留。
 
 ## 版本策略
 

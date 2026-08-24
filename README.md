@@ -8,7 +8,7 @@
 
 ## 项目状态
 
-**0.10.0 已完成开发，正在发布到 npm。** 0.10.0 在 0.9.0 的设置面板、工作区无感化和模型/推理强度分离基础上，加入 **optimized full 上下文预算、确定性工具结果淘汰、脱敏诊断和 Windows 无控制台 launcher**；默认仍为 `sessionMode: full`。
+**0.10.0 已发布到 npm，`latest=0.10.0`。** 0.10.0 在 0.9.0 的设置面板、工作区无感化和模型/推理强度分离基础上，加入 **optimized full 上下文预算、确定性工具结果淘汰、脱敏诊断和 Windows 无控制台 launcher**；默认仍为 `sessionMode: full`。
 
 **0.7.0 / 0.8.0 已合并**：`v0.7.0 → b94fa32`（`latest=0.7.0` 已发布）、`v0.8.0 → b7c9a45` 已合入主线。0.7.0 起 `dsh-owned` 为 bundle 默认（DSH Session/ToolRuntime/sandbox/approval 接管项目与权限）。
 

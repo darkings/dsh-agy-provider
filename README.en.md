@@ -8,7 +8,7 @@ The project lets DSH use the models and quota available to the user's AGY accoun
 
 ## Project status
 
-**0.10.0 is complete and is being published to npm.** Building on 0.9.0's settings panel, workspace auto-detection, and model/effort separation, 0.10.0 adds **optimized-full context budgets, deterministic tool-result eviction, privacy-safe diagnostics, and a Windows no-console launcher**; `sessionMode: full` remains the default.
+**0.10.0 is published to npm with `latest=0.10.0`.** Building on 0.9.0's settings panel, workspace auto-detection, and model/effort separation, 0.10.0 adds **optimized-full context budgets, deterministic tool-result eviction, privacy-safe diagnostics, and a Windows no-console launcher**; `sessionMode: full` remains the default.
 
 **0.7.0 / 0.8.0 merged:** `v0.7.0 → b94fa32` (`latest=0.7.0` released), `v0.8.0 → b7c9a45` merged to main. Since 0.7.0 the bundle defaults to `dsh-owned` (DSH Session/ToolRuntime/sandbox/approval own the project and permissions).
 

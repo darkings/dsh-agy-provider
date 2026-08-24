@@ -23,9 +23,9 @@
 | AGY Agent | `deepseek-proxy` | 通过 | `agy agents` 与 Provider 默认配置 |
 | Diagnostic catalog | `static`/`discovered`/`merged`/`cache`/`fallback` | 通过无额度验证 | V3-M5 machine schema、warning code 和 `quotaUsed=false` 测试 |
 | npm registry | `dsh-agy-provider@0.10.0`, `latest=0.10.0` | 通过 | 0.10.0 69-file pack；线上 tarball/integrity/shasum 已核验，`dsh.bundle.patch` 可读取 |
-| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.7.0` → `b94fa32`（run `32286511205`）；0.10.0 npm public publish 已完成，release tag/CI 仍待收口 |
+| Publish workflow | `v*.*.*` tag + package version match + npm Trusted Publishing | 通过 | `v0.10.0` → merge `ab68e83`（PR #2，CI run `32714261279`：17/17）；npm public publish 与 GitHub Release 已完成 |
 
-0.10.0 发布证据：release commit `6f67748` 的本地 `npm run verify` 为 219/219，69-file pack 已发布，registry `latest=0.10.0`、tarball/integrity/shasum 与 `repository` 已核验；Desktop optimized full、上下文/工具/隐私回归通过。0.7.0 发布证据：release commit `b94fa32` 的 PR run `32286276907` 为 17/17，Trusted Publishing run `32286511205` 成功；registry `0.7.0` 的 Web/headless smoke 与 15/15 permission/tool matrix 通过，`quotaUsed=false`、cleanup completed。0.6.1 legacy 证据保留。
+0.10.0 发布证据：release merge `ab68e83`（PR #2）的 CI run `32714261279` 为 17/17，本地 `npm run verify` 为 219/219，self-contained DSH smoke 与 native capability matrix 均通过；`v0.10.0` tag/GitHub Release 已创建，69-file pack 已发布，registry `latest=0.10.0`、tarball/integrity/shasum 与 `repository` 已核验；Desktop optimized full、上下文/工具/隐私回归通过。0.7.0 发布证据：release commit `b94fa32` 的 PR run `32286276907` 为 17/17，Trusted Publishing run `32286511205` 成功；registry `0.7.0` 的 Web/headless smoke 与 15/15 permission/tool matrix 通过，`quotaUsed=false`、cleanup completed。0.6.1 legacy 证据保留。
 
 ## 版本策略
 

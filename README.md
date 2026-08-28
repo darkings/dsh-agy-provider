@@ -4,7 +4,7 @@
 
 把本机已经登录的 **AGY CLI** 暴露为 [DSH](https://github.com/darkings/dsh) 的模型 Provider。
 
-它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；认证和模型选择由本机 agy 负责，0.6.x legacy 工具由 AGY 执行，0.7.0 DSH-owned bridge 的实际工具执行由 DSH ToolRuntime 负责。
+它的核心用途是：让 DSH 继续使用 AGY 账号中的模型和额度，同时保留 DSH 的对话、Session、Web/headless 运行方式。Provider 不直接调用 Google Gemini API，也不保存 OAuth 凭据；认证和模型选择由本机 agy 负责，工具执行由 DSH ToolRuntime 负责。
 
 ## 项目状态
 
@@ -47,89 +47,6 @@
 
 Provider 使用 spawn(executable, args) 启动 AGY，不经过 shell 拼接命令。AGY 输出按行增量解析，再转换为 DSH 的文本、usage、finish 和稳定错误事件。
 
-## 0.6.0 已实现
-
-### 1. 文本 Provider 与进程边界
-
-- 将 DSH system prompt/messages 确定性序列化为 AGY Prompt。
-- 将 step_update.text_delta 和 result.response 映射为 DSH 文本流。
-- 支持超时、取消、退出码、解析错误、输出上限和进程树清理。
-- 日志只保留 request/session/usage/事件计数等白名单字段；失败时可追加启动阶段、稳定错误码、输出行号/长度和短哈希，不记录 Prompt、响应正文、stderr 原文、凭据或完整本机路径。
-
-### 2. Session、模型和 reasoning effort
-
-- 默认 sessionMode: full：每轮发送完整 DSH 历史，行为最容易审计。
-- 可选 sessionMode: resume：使用 AGY conversation_id 发送增量消息；恢复失败会降级为完整历史。
-- 同一 DSH Session 串行，不同 Session 可以并发。
-- 默认通过 agy models 做 quota-free 动态发现，支持 TTL、single-flight、缓存和静态 fallback。
-- 请求级 reasoningEffort 支持 low、medium、high，以独立 --effort 参数传给 AGY；未指定时不设置隐式值。
-
-### 3. 工具所有权与权限边界
-
-项目明确只允许一个工具执行者：
-
-- 程序化 Provider 默认 toolPolicy: reject，收到 DSH tool schema 时返回 UNSUPPORTED_TOOLS。
-- 已发布的 0.6.1 DSH bundle 默认使用 toolPolicy: agy-owned；0.7.0 开发分支已切换为 toolPolicy: dsh-owned，DSH schema 经过 bounded contract 交给 AGY 生成调用，实际执行仍由 DSH ToolRuntime 完成。
-- 发生权限请求时返回 PERMISSION_REQUIRED 并终止请求，不自动批准，不使用 --dangerously-skip-permissions。
-
-### 4. Agent capability presets 与读写能力
-
-随包提供三档 Agent 模板：
-
-| preset | 已允许能力 | 默认行为 |
-|---|---|---|
-| tool-free | 纯文本推理 | 不访问工作区 |
-| read-only | find_by_name、grep_search、view_file、list_dir | 只读工作区 |
-| workspace-write | 上述只读工具 + multi_replace_file_content、replace_file_content、write_to_file | 仅显式工作区内写入 |
-
-workspace-write 已经实现，但必须同时配置一个存在且非文件系统根目录的 workspaceRoot。它不包含 shell、网络、浏览器、MCP、subagent 或权限跳过。
-
-项目不会把未验证的 glob 工具名写进公开契约。需要文件搜索时使用 AGY 已验证的 find_by_name、grep_search 和 list_dir。
-
-模板安装默认只预览，不写入文件：
-
-~~~powershell
-npx dsh-agy-provider agents list
-npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents"
-npx dsh-agy-provider agents install read-only --dir "$HOME/.gemini/config/agents" --apply
-~~~
-
-已有模板默认拒绝覆盖；需要保留旧文件时显式增加 --backup。
-
-### 5. Doctor v3 与安全诊断（0.7.0）
-
-发布包提供 profile-aware doctor：
-
-~~~powershell
-npx dsh-agy-provider doctor --profile web --json
-~~~
-
-0.7.0 源码中的 doctor 输出 `profileSchemaVersion: 3`，审计 provider、model、Agent、retry、purpose route、workspace、image、DSH context probe 状态和 DSH-owned bridge capability。它会区分 dump timeout、非零退出和解析失败，并对 `agy-owned` 输出 deprecated warning；profile doctor 只读，不把静态 dump 伪装成 live Session。
-
-运行时 API `diagnoseDshContext()` 会只返回 session/workspace/sandbox/permission/approval 的可用性、allowlisted 权限模式和稳定 issue code，例如 `DSH_SESSION_UNKNOWN`、`DSH_WORKSPACE_MISMATCH`，不会返回路径、Session ID、Prompt 或工具参数。telemetry 只保留 `permissionPreset`、`sandboxMode`、`approvalPolicy`、`toolSchemaCount`、`toolCallCount` 和 bridge outcome。
-
-doctor 只执行 agy --version、agy agents、agy models 和 DSH config dump，不发送模型 Prompt，不执行工具，quotaUsed 固定为 false。
-
-### 6. 图片输入实验边界
-
-imageInput: experimental 已支持：
-
-- 通过可选 DSH AttachmentStore 读取图片。
-- 对 PNG/JPEG/WebP/GIF 做 MIME、字节数和数量限制。
-- 每个请求使用随机临时 staging 目录，并在成功、失败和取消时清理。
-- 图片请求强制使用独立 `dsh-agy-image-view` Agent，并且只允许 `view_file` 读取本次请求精确暂存的图片路径。
-- 图片请求使用 one-shot；AGY 的内部 `view_file` 生命周期只在上述窄白名单内放行，DSH 工具仍由 DSH ToolRuntime 所有。
-
-开启 `imageInput: experimental` 后 `listModels()` 返回文本+图片输入能力；关闭时仍为纯文本。未知 custom Agent 不会获得图片读取权限。
-
-### 7. 质量门禁
-
-- npm run verify：typecheck、158 个测试和 pack dry-run。
-- npm run benchmark：Parser、serializer、limiter 的无额度基线。
-- npm run smoke:dsh:self-contained：隔离 DSH Web/headless plugin-add、doctor 和 Mock response。
-- GitHub Actions：Provider Node.js 20/22/24 × Windows/Ubuntu/macOS，DSH 原生 Node 22/24 × Windows/Ubuntu/macOS，并包含 self-contained smoke。
-- 公共 CI、doctor、benchmark 和 Mock smoke 均不调用真实 AGY 模型。
-
 ## 当前能力矩阵
 
 | 能力 | 当前状态 | 默认值 |
@@ -141,7 +58,6 @@ imageInput: experimental 已支持：
 | 模型可见性 | 0.9.0 已实现 | `visibleModels: []` 空=全部，非空仅显示勾选 base |
 | DSH 设置面板 | 0.9.0 已实现 | `zh-CN/en` i18n，`visibleModels` 多选 + base/推理强度分离 |
 | 工作区无感 | 0.9.0 已实现 | `dsh-owned` 下 `workspaceRoot` 已废弃，走 DSH Session cwd |
-| AGY 自有工具 | 已实现（0.6.1 legacy） | 0.6.1 profile 为 agy-owned |
 | DSH tool-call bridge | 0.7.0 已实现并通过跨平台门禁 | 0.7.0 起 bundle 为 dsh-owned |
 | read-only Agent | 已实现 | 显式安装/配置 |
 | workspace-write Agent | 已实现 | 0.9.0 `dsh-owned` 下无需手配 `workspaceRoot`，legacy `agy-owned` 仍需显式目录 |
@@ -179,8 +95,6 @@ imageInput: off
 ~~~
 
 直接使用库的 `Config({})` 仍保持 `enabled: false、toolPolicy: reject`，不会因 import 而修改 profile；`BundleConfig` 为显式 `enabled: true / dsh-owned`。
-
-0.6.1 的 `toolPolicy: agy-owned` 仍可作为 legacy 回滚路径，但 doctor 会报 `PROFILE_TOOL_POLICY_DEPRECATED`；**0.9.0 `dsh-owned` 下无需再配 `workspaceRoot`**，项目目录、read/write、shell、网络、MCP 和 approval 均由 DSH 当前 Session 与 ToolRuntime 自动接管（`DSH_WORKSPACE_MISMATCH` 可操作错误）。
 
 ### Agent preset 配置
 
